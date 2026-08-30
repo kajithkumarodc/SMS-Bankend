@@ -1,0 +1,31 @@
+# Build outputs
+/target/
+**/target/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+
+# Maven wrapper (optional)
+.mvn/
+!/.mvn/wrapper/maven-wrapper.properties
+mvnw
+mvnw.cmd
+
+# Local database files
+*.sqlite
+*.db
