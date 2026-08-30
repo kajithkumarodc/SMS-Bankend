@@ -1,11 +1,22 @@
 spring:
   config:
     import: optional:file:.env[.properties]
+  # Runtime pool connects as the restricted app role, exactly like production,
+  # so the integration tests exercise RLS against the real runtime identity.
   datasource:
     url: ${DB_TEST_URL:jdbc:postgresql://localhost:5433/sms_db_test}
-    username: ${DB_TEST_USERNAME:${DB_USERNAME:postgres}}
-    password: ${DB_TEST_PASSWORD:${DB_PASSWORD:1234}}
+    username: ${DB_TEST_APP_USERNAME:app_user_test}
+    password: ${DB_TEST_APP_PASSWORD:app_pass}
   flyway:
+    url: ${DB_TEST_URL:jdbc:postgresql://localhost:5433/sms_db_test}
+    user: ${DB_TEST_USERNAME:${DB_USERNAME:postgres}}
+    password: ${DB_TEST_PASSWORD:${DB_PASSWORD:1234}}
+    # PostgreSQL roles are cluster-wide, so the test runtime role is named
+    # distinctly from the dev/prod `app_user` to avoid the two databases fighting
+    # over one role's password.
+    placeholders:
+      app_user_name: ${DB_TEST_APP_USERNAME:app_user_test}
+      app_user_password: ${DB_TEST_APP_PASSWORD:app_pass}
     enabled: true
     clean-disabled: false
 

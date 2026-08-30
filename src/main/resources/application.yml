@@ -5,10 +5,12 @@ spring:
   application:
     name: sms-backend
 
+  # Runtime connection pool (HikariCP): restricted, non-superuser role. RLS is
+  # enforced against this role. Never point this at a superuser account.
   datasource:
     url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    username: ${DB_APP_USERNAME}
+    password: ${DB_APP_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -20,10 +22,19 @@ spring:
         format_sql: true
     show-sql: false
 
+  # Flyway runs as the elevated migration user (schema DDL + CREATE ROLE). This is
+  # a separate connection from the runtime pool above and is the ONLY place a
+  # privileged database account is used.
   flyway:
     enabled: true
     baseline-on-migrate: true
     locations: classpath:db/migration
+    url: ${DB_MIGRATION_URL:${DB_URL}}
+    user: ${DB_MIGRATION_USERNAME:${DB_USERNAME}}
+    password: ${DB_MIGRATION_PASSWORD:${DB_PASSWORD}}
+    placeholders:
+      app_user_name: ${DB_APP_USERNAME}
+      app_user_password: ${DB_APP_PASSWORD}
 
   security:
     oauth2:
