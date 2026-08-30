@@ -4,6 +4,7 @@
 
 # IDE files
 .idea/
+.env
 .vscode/
 *.iml
 *.ipr

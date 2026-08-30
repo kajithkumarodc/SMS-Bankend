@@ -6,43 +6,68 @@ This project is the Spring Boot backend for a multi-tenant School Management Saa
 
 - Java 21
 - Maven 3.9+
-- PostgreSQL 14+ running locally
+- PostgreSQL 17 running natively on Windows at `localhost:5433`
+- Docker Desktop with Docker Compose (for Redis, RabbitMQ, and MinIO)
 
 ## Local setup
 
-1. Start PostgreSQL and create the database and user:
+1. Ensure the native PostgreSQL 17 instance is running on port `5433` and that the `sms_db` database exists. Port `5432` belongs to a separate PostgreSQL 18 instance and is not used by this application.
 
-   ```sql
-   CREATE DATABASE sms_db;
-   CREATE USER sms_user WITH PASSWORD 'change-me';
-   GRANT ALL PRIVILEGES ON DATABASE sms_db TO sms_user;
+2. Create the local environment file if it does not already exist:
+
+   ```powershell
+   Copy-Item .env.example .env
    ```
 
-2. Set environment variables:
+   Spring Boot automatically loads the root `.env` file. The current local values should point to the native PostgreSQL 17 instance with `DB_URL=jdbc:postgresql://localhost:5433/sms_db`. Keep `.env` private; it is excluded by `.gitignore`.
+
+3. Start the local supporting infrastructure stack:
 
    ```bash
-   export POSTGRES_DB=sms_db
-   export POSTGRES_USER=sms_user
-   export POSTGRES_PASSWORD=change-me
+   docker compose up -d
+   ```
+
+   PostgreSQL is provided by the native Windows installation on `localhost:5433`. Docker Compose provides Redis at `localhost:6379`, RabbitMQ at `localhost:5672` with management UI at `http://localhost:15672`, and MinIO at `http://localhost:9000` with console at `http://localhost:9001`.
+
+4. Check Docker service status:
+
+   ```bash
+   docker compose ps
+   ```
+
+5. Stop the local supporting infrastructure stack:
+
+   ```bash
+   docker compose down
+   ```
+
+   Named volumes preserve data between restarts. To remove the persisted data too, run `docker compose down -v`.
+
+6. Set application environment variables if needed:
+
+   ```bash
+   export DB_URL=jdbc:postgresql://localhost:5433/sms_db
+   export DB_USERNAME=sms_user
+   export DB_PASSWORD=sms_pass
    export JWT_ISSUER_URI=http://localhost:8080
    ```
 
    On Windows PowerShell:
 
    ```powershell
-   $env:POSTGRES_DB = "sms_db"
-   $env:POSTGRES_USER = "sms_user"
-   $env:POSTGRES_PASSWORD = "change-me"
+   $env:DB_URL = "jdbc:postgresql://localhost:5433/sms_db"
+   $env:DB_USERNAME = "sms_user"
+   $env:DB_PASSWORD = "sms_pass"
    $env:JWT_ISSUER_URI = "http://localhost:8080"
    ```
 
-3. Run the application:
+7. Run the application:
 
    ```bash
    mvn clean spring-boot:run
    ```
 
-4. Open the API docs:
+8. Open the API docs:
 
    - Swagger UI: http://localhost:8080/swagger-ui.html
    - OpenAPI JSON: http://localhost:8080/v3/api-docs
