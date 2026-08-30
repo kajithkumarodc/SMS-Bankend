@@ -14,13 +14,17 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import jakarta.servlet.http.Cookie;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
@@ -41,6 +45,9 @@ class PhaseOneIntegrationTest {
 
     @Autowired
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+    private static final String SCHOOL_A = "school-a";
+    private static final String SCHOOL_B = "school-b";
 
     private UUID tenantA;
     private UUID tenantB;
@@ -65,8 +72,9 @@ class PhaseOneIntegrationTest {
             statement.execute("DO $$ BEGIN CREATE ROLE app_user LOGIN PASSWORD 'app_pass'; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
             statement.execute("GRANT USAGE ON SCHEMA public TO app_user");
             statement.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user");
-            statement.execute("INSERT INTO tenants (id, name, identifier) VALUES ('" + tenantA + "', 'Tenant A', '" + tenantA + "')");
-            statement.execute("INSERT INTO tenants (id, name, identifier) VALUES ('" + tenantB + "', 'Tenant B', '" + tenantB + "')");
+            statement.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles CASCADE");
+            statement.execute("INSERT INTO tenants (id, name, identifier) VALUES ('" + tenantA + "', 'Tenant A', '" + SCHOOL_A + "')");
+            statement.execute("INSERT INTO tenants (id, name, identifier) VALUES ('" + tenantB + "', 'Tenant B', '" + SCHOOL_B + "')");
             statement.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('" + UUID.randomUUID() + "', '" + tenantA + "', 'School A')");
             statement.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('" + UUID.randomUUID() + "', '" + tenantB + "', 'School B')");
             statement.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('" + userA + "', '" + tenantA + "', 'admin@example.com', '" + passwordEncoder.encode("secret") + "', 'Admin A')");
@@ -77,28 +85,56 @@ class PhaseOneIntegrationTest {
     }
 
     @Test
-    void validLoginReturnsWorkingJwtAndMeIsProtected() throws Exception {
-        String response = mockMvc.perform(post("/api/v1/auth/login")
+    void validLoginSetsHttpOnlyCookieAndTokenAuthenticatesViaCookieAndHeader() throws Exception {
+        var loginResult = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType("application/json")
-                        .content("{\"tenantId\":\"" + tenantA + "\",\"email\":\"admin@example.com\",\"password\":\"secret\"}"))
+                        .content("{\"schoolIdentifier\":\"" + SCHOOL_A + "\",\"email\":\"admin@example.com\",\"password\":\"secret\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").isString())
-                .andReturn().getResponse().getContentAsString();
+                .andExpect(jsonPath("$.user.id").value(userA.toString()))
+                .andExpect(jsonPath("$.user.name").value("Admin A"))
+                .andExpect(jsonPath("$.user.tenantId").value(tenantA.toString()))
+                .andExpect(jsonPath("$.user.roles[0]").value("SCHOOL_ADMIN"))
+                .andExpect(cookie().exists("access_token"))
+                .andExpect(cookie().httpOnly("access_token", true))
+                .andExpect(cookie().secure("access_token", true))
+                .andExpect(cookie().path("access_token", "/"))
+                .andExpect(cookie().maxAge("access_token", 3600))
+                .andExpect(header().string("Set-Cookie", containsString("SameSite=Strict")))
+                .andReturn();
+
+        Cookie authCookie = loginResult.getResponse().getCookie("access_token");
+        assertThat(authCookie).isNotNull();
 
         String token = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
-                .readTree(response).get("token").asText();
+                .readTree(loginResult.getResponse().getContentAsString()).get("token").asText();
 
-        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + token))
+        // Cookie alone authenticates (no Authorization header).
+        mockMvc.perform(get("/api/v1/me").cookie(authCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(userA.toString()))
                 .andExpect(jsonPath("$.tenantId").value(tenantA.toString()));
+
+        // Authorization header still works.
+        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(userA.toString()));
+    }
+
+    @Test
+    void logoutClearsAuthCookie() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().value("access_token", ""))
+                .andExpect(cookie().maxAge("access_token", 0))
+                .andExpect(header().string("Set-Cookie", containsString("SameSite=Strict")));
     }
 
     @Test
     void invalidPasswordIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType("application/json")
-                        .content("{\"tenantId\":\"" + tenantA + "\",\"email\":\"admin@example.com\",\"password\":\"wrong\"}"))
+                        .content("{\"schoolIdentifier\":\"" + SCHOOL_A + "\",\"email\":\"admin@example.com\",\"password\":\"wrong\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
