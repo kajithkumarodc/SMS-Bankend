@@ -1,0 +1,13 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${DB_TEST_URL:jdbc:postgresql://localhost:5433/sms_db_test}
+    username: ${DB_TEST_USERNAME:${DB_USERNAME:postgres}}
+    password: ${DB_TEST_PASSWORD:${DB_PASSWORD:1234}}
+  flyway:
+    enabled: true
+    clean-disabled: false
+
+server:
+  port: 0

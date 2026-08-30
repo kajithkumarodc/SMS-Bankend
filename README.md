@@ -78,6 +78,22 @@ This project is the Spring Boot backend for a multi-tenant School Management Saa
 mvn clean install
 ```
 
+## Phase 1 tests
+
+The integration suite temporarily uses the isolated native PostgreSQL 17 test database `sms_db_test` on port `5433`, never the development database `sms_db`. Create it once as a PostgreSQL administrator:
+
+```sql
+CREATE DATABASE sms_db_test;
+```
+
+The test profile runs Flyway against this database. The test base is intentionally kept easy to switch back to Testcontainers when Docker is available; Testcontainers provides cleaner isolation for team environments.
+
+Run all checks with:
+
+```bash
+mvn clean test
+```
+
 ## Project structure
 
 - `src/main/java/com/smsapp` – application code
