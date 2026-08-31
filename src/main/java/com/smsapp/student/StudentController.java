@@ -1,11 +1,13 @@
 package com.smsapp.student;
 
+import com.smsapp.student.StudentDtos.AssignSectionRequest;
 import com.smsapp.student.StudentDtos.ChangeStudentStatusRequest;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
 import com.smsapp.student.StudentDtos.StudentResponse;
 import com.smsapp.student.StudentDtos.UpdateStudentRequest;
 import com.smsapp.user.Roles;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedModel;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -47,10 +50,19 @@ public class StudentController {
         return ResponseEntity.created(location).body(StudentResponse.from(student));
     }
 
-    /** Lists students for the caller's tenant, paginated. */
+    /**
+     * Lists students for the caller's tenant, paginated. Optionally filtered to one
+     * section via {@code ?sectionId=} -- still tenant-scoped underneath.
+     */
     @GetMapping
-    PagedModel<StudentResponse> list(@PageableDefault(size = 20) Pageable pageable, Authentication authentication) {
-        return new PagedModel<>(studentService.list(tenantId(authentication), pageable).map(StudentResponse::from));
+    PagedModel<StudentResponse> list(@RequestParam(required = false) UUID sectionId,
+                                     @PageableDefault(size = 20) Pageable pageable,
+                                     Authentication authentication) {
+        UUID tenantId = tenantId(authentication);
+        Page<Student> students = sectionId == null
+                ? studentService.list(tenantId, pageable)
+                : studentService.listBySection(tenantId, sectionId, pageable);
+        return new PagedModel<>(students.map(StudentResponse::from));
     }
 
     /** Returns 404 (not 403) when the student belongs to another tenant -- no existence leak. */
@@ -82,6 +94,19 @@ public class StudentController {
                                         @Valid @RequestBody ChangeStudentStatusRequest request,
                                         Authentication authentication) {
         return StudentResponse.from(studentService.changeStatus(tenantId(authentication), id, request.status()));
+    }
+
+    /**
+     * Assign / reassign a student to a section. SCHOOL_ADMIN only; a TEACHER gets 403.
+     * 404 if the student or the section is not in the caller's tenant.
+     */
+    @PatchMapping("/{id}/section")
+    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    public StudentResponse assignSection(@PathVariable UUID id,
+                                         @Valid @RequestBody AssignSectionRequest request,
+                                         Authentication authentication) {
+        return StudentResponse.from(
+                studentService.assignSection(tenantId(authentication), id, request.sectionId()));
     }
 
     private static UUID tenantId(Authentication authentication) {

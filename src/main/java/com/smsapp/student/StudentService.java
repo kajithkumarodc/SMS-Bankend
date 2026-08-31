@@ -1,5 +1,6 @@
 package com.smsapp.student;
 
+import com.smsapp.academics.SectionRepository;
 import com.smsapp.common.ApiException;
 import com.smsapp.school.SchoolRepository;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
@@ -18,10 +19,13 @@ public class StudentService {
 
     private final StudentRepository studentRepository;
     private final SchoolRepository schoolRepository;
+    private final SectionRepository sectionRepository;
 
-    public StudentService(StudentRepository studentRepository, SchoolRepository schoolRepository) {
+    public StudentService(StudentRepository studentRepository, SchoolRepository schoolRepository,
+                          SectionRepository sectionRepository) {
         this.studentRepository = studentRepository;
         this.schoolRepository = schoolRepository;
+        this.sectionRepository = sectionRepository;
     }
 
     /**
@@ -64,6 +68,29 @@ public class StudentService {
     @Transactional(readOnly = true)
     public Page<Student> list(UUID tenantId, Pageable pageable) {
         return studentRepository.findByTenantId(tenantId, pageable);
+    }
+
+    /** Lists students in one section, still tenant-scoped underneath. */
+    @Transactional(readOnly = true)
+    public Page<Student> listBySection(UUID tenantId, UUID sectionId, Pageable pageable) {
+        return studentRepository.findByTenantIdAndSectionId(tenantId, sectionId, pageable);
+    }
+
+    /**
+     * Assigns (or reassigns) a student to a section. SCHOOL_ADMIN only.
+     *
+     * @throws ApiException 404 if the student is not in the caller's tenant, or if the
+     *         section is not in the caller's tenant (another tenant's section must not
+     *         be observable -- reported as missing, never forbidden).
+     */
+    @Transactional
+    public Student assignSection(UUID tenantId, UUID studentId, UUID sectionId) {
+        Student student = requireStudent(tenantId, studentId);
+        if (!sectionRepository.existsByIdAndTenantId(sectionId, tenantId)) {
+            throw new ApiException("Section not found", HttpStatus.NOT_FOUND);
+        }
+        student.setSectionId(sectionId);
+        return studentRepository.save(student);
     }
 
     /**

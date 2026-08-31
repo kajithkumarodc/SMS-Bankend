@@ -15,6 +15,8 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
 
     Page<Student> findByTenantId(UUID tenantId, Pageable pageable);
 
+    Page<Student> findByTenantIdAndSectionId(UUID tenantId, UUID sectionId, Pageable pageable);
+
     Optional<Student> findByIdAndTenantId(UUID id, UUID tenantId);
 
     boolean existsByTenantIdAndAdmissionNumber(UUID tenantId, String admissionNumber);

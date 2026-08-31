@@ -40,6 +40,11 @@ final class StudentDtos {
             @NotBlank String status) {
     }
 
+    /** Body for {@code PATCH /api/v1/students/{id}/section} -- assign / reassign a student to a section. */
+    record AssignSectionRequest(
+            @NotNull UUID sectionId) {
+    }
+
     record StudentResponse(
             UUID id,
             UUID schoolId,
@@ -49,6 +54,7 @@ final class StudentDtos {
             String guardianName,
             String guardianContact,
             String status,
+            UUID sectionId,
             OffsetDateTime createdAt) {
 
         static StudentResponse from(Student student) {
@@ -61,6 +67,7 @@ final class StudentDtos {
                     student.getGuardianName(),
                     student.getGuardianContact(),
                     student.getStatus(),
+                    student.getSectionId(),
                     student.getCreatedAt());
         }
     }

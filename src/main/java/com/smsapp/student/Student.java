@@ -41,6 +41,10 @@ public class Student extends TenantScopedEntity {
     @Column(nullable = false, length = 30)
     private String status;
 
+    /** Section the student is assigned to, or null if not assigned yet. */
+    @Column(name = "section_id")
+    private UUID sectionId;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

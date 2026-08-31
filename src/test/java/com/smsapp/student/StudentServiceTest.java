@@ -1,5 +1,6 @@
 package com.smsapp.student;
 
+import com.smsapp.academics.SectionRepository;
 import com.smsapp.common.ApiException;
 import com.smsapp.school.SchoolRepository;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
@@ -32,11 +33,14 @@ class StudentServiceTest {
     @Mock
     private SchoolRepository schoolRepository;
 
+    @Mock
+    private SectionRepository sectionRepository;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID schoolId = UUID.randomUUID();
 
     private StudentService service() {
-        return new StudentService(studentRepository, schoolRepository);
+        return new StudentService(studentRepository, schoolRepository, sectionRepository);
     }
 
     private CreateStudentRequest request(String fullName, String admissionNumber) {
@@ -180,6 +184,44 @@ class StudentServiceTest {
         when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().changeStatus(tenantId, studentId, StudentStatus.INACTIVE))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void assignSectionSetsSectionIdWhenBothStudentAndSectionAreInTenant() {
+        UUID studentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        Student student = existing(studentId);
+        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
+        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(true);
+        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Student result = service().assignSection(tenantId, studentId, sectionId);
+
+        assertThat(result.getSectionId()).isEqualTo(sectionId);
+    }
+
+    @Test
+    void assignSectionReportsAnotherTenantsSectionAs404() {
+        UUID studentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(existing(studentId)));
+        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service().assignSection(tenantId, studentId, sectionId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(studentRepository, never()).save(any());
+    }
+
+    @Test
+    void assignSectionReportsMissingStudentAs404() {
+        UUID studentId = UUID.randomUUID();
+        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().assignSection(tenantId, studentId, UUID.randomUUID()))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
