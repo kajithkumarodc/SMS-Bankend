@@ -128,6 +128,19 @@ class PhaseOneIntegrationTest {
     }
 
     @Test
+    void loginSucceedsEvenWhenAStaleAccessTokenCookieIsPresent() throws Exception {
+        // A browser re-sends the (possibly expired) access_token cookie with the
+        // login request; that must not turn a valid sign-in into a 401.
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType("application/json")
+                        .cookie(new Cookie("access_token", "stale.invalid.token"))
+                        .content("{\"schoolIdentifier\":\"" + SCHOOL_A + "\",\"email\":\"admin@example.com\","
+                                + "\"password\":\"secret\"}"))
+                .andExpect(status().isOk())
+                .andExpect(cookie().exists("access_token"));
+    }
+
+    @Test
     void logoutClearsAuthCookie() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout"))
                 .andExpect(status().isNoContent())

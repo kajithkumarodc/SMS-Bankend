@@ -26,6 +26,16 @@ public class CookieBearerTokenResolver implements BearerTokenResolver {
             return fromHeader;
         }
 
+        // Never resolve a token for the auth endpoints themselves. They are
+        // permitAll, and a browser automatically re-sends a stale/expired
+        // access_token cookie with the login request -- letting the resource
+        // server try to validate it there would reject the login with 401
+        // instead of letting the user sign in again.
+        String path = request.getRequestURI();
+        if (path != null && path.startsWith("/api/v1/auth/")) {
+            return null;
+        }
+
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
             for (Cookie cookie : cookies) {

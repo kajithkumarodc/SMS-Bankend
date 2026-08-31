@@ -80,7 +80,13 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(allowedOrigins);
+        // Treated as patterns (setAllowedOriginPatterns, not setAllowedOrigins) so a
+        // dev entry like "http://localhost:5173" also covers the equivalent
+        // "http://127.0.0.1:5173" when configured, and wildcards such as
+        // "http://localhost:*" are allowed. A mismatched Origin is rejected by the
+        // CorsFilter with 403 ("Invalid CORS request") BEFORE the security rules run,
+        // which looks exactly like an auth failure on an otherwise-permitAll endpoint.
+        configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
