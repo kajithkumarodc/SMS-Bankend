@@ -39,6 +39,8 @@ class ExamIntegrationTest {
     private static final String SCHOOL_B = "exam-school-b";
     private static final String ADMIN_A = "admin@tenant-a.example";
     private static final String TEACHER_A = "teacher@tenant-a.example";
+    private static final String STUDENT_A = "student@tenant-a.example";
+    private static final String PARENT_A = "parent@tenant-a.example";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Autowired
@@ -89,6 +91,8 @@ class ExamIntegrationTest {
 
             seedUser(st, tenantA, ADMIN_A, "SCHOOL_ADMIN");
             seedUser(st, tenantA, TEACHER_A, "TEACHER");
+            seedUser(st, tenantA, STUDENT_A, "STUDENT");
+            seedUser(st, tenantA, PARENT_A, "PARENT");
             seedUser(st, tenantB, "admin@tenant-b.example", "SCHOOL_ADMIN");
 
             // Tenant B already owns an exam -- tenant A must never see or use it.
@@ -197,6 +201,27 @@ class ExamIntegrationTest {
         // Tenant A cannot list a tenant-B class's exams.
         mockMvc.perform(get("/api/v1/exams").param("classId", classB.toString()).cookie(admin))
                 .andExpect(status().isNotFound());
+    }
+
+    // --- Role gating: staff-only read endpoints -------------------
+
+    @Test
+    void studentsAndParentsCannotReachStaffExamReadEndpoints() throws Exception {
+        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        UUID exam = createExamA(admin, "Mid-term 2026", "100");
+
+        for (String email : new String[] {STUDENT_A, PARENT_A}) {
+            Cookie session = login(SCHOOL_A, email);
+            // Exam list for a class -- staff only; portal uses /me/... results.
+            mockMvc.perform(get("/api/v1/exams").param("classId", classA.toString()).cookie(session))
+                    .andExpect(status().isForbidden());
+            // Whole gradebook (every student's marks) -- staff only.
+            mockMvc.perform(get("/api/v1/exams/" + exam + "/marks").cookie(session))
+                    .andExpect(status().isForbidden());
+            // Raw per-student results -- staff only, even for the caller's own id.
+            mockMvc.perform(get("/api/v1/exams/student/" + studentA).cookie(session))
+                    .andExpect(status().isForbidden());
+        }
     }
 
     // --- Recording marks ------------------------------------------

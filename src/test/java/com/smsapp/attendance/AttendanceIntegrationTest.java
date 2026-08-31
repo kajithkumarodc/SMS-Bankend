@@ -39,6 +39,8 @@ class AttendanceIntegrationTest {
     private static final String SCHOOL_B = "att-school-b";
     private static final String ADMIN_A = "admin@tenant-a.example";
     private static final String TEACHER_A = "teacher@tenant-a.example";
+    private static final String STUDENT_A = "student@tenant-a.example";
+    private static final String PARENT_A = "parent@tenant-a.example";
     private static final String TODAY = LocalDate.now().toString();
 
     @Autowired
@@ -85,6 +87,8 @@ class AttendanceIntegrationTest {
 
             seedUser(st, tenantA, ADMIN_A, "Admin A", "SCHOOL_ADMIN");
             seedUser(st, tenantA, TEACHER_A, "Teacher A", "TEACHER");
+            seedUser(st, tenantA, STUDENT_A, "Student User A", "STUDENT");
+            seedUser(st, tenantA, PARENT_A, "Parent User A", "PARENT");
             UUID adminB = seedUser(st, tenantB, "admin@tenant-b.example", "Admin B", "SCHOOL_ADMIN");
 
             seedSection(st, tenantA, schoolA, classA, sectionA, "Grade 5", "A");
@@ -296,5 +300,27 @@ class AttendanceIntegrationTest {
                         .param("date", TODAY)
                         .cookie(login(SCHOOL_A, ADMIN_A)))
                 .andExpect(status().isNotFound());
+    }
+
+    // --- Role gating: staff-only read endpoints -------------------
+
+    @Test
+    void studentsAndParentsCannotReachStaffAttendanceReadEndpoints() throws Exception {
+        for (String email : new String[] {STUDENT_A, PARENT_A}) {
+            Cookie session = login(SCHOOL_A, email);
+            // Daily roster for the whole tenant -- staff only.
+            mockMvc.perform(get("/api/v1/attendance").param("date", TODAY).cookie(session))
+                    .andExpect(status().isForbidden());
+            // Section roster's attendance -- staff only.
+            mockMvc.perform(get("/api/v1/attendance").param("sectionId", sectionA.toString())
+                            .param("date", TODAY).cookie(session))
+                    .andExpect(status().isForbidden());
+            // One student's history -- staff only; portal uses /me/... .
+            mockMvc.perform(get("/api/v1/attendance/student/" + studentA).cookie(session))
+                    .andExpect(status().isForbidden());
+            // Section student roster -- staff only (marking/gradebook screens).
+            mockMvc.perform(get("/api/v1/sections/" + sectionA + "/students").cookie(session))
+                    .andExpect(status().isForbidden());
+        }
     }
 }

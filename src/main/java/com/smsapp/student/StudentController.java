@@ -65,8 +65,14 @@ public class StudentController {
         return new PagedModel<>(students.map(StudentResponse::from));
     }
 
-    /** Returns 404 (not 403) when the student belongs to another tenant -- no existence leak. */
+    /**
+     * SCHOOL_ADMIN or TEACHER only -- this exposes a student's full record (guardian
+     * contact included), so a student or parent must use {@code /api/v1/me/student}
+     * or {@code /api/v1/me/children}. Returns 404 (not 403) when the student belongs
+     * to another tenant -- no existence leak.
+     */
     @GetMapping("/{id}")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     StudentResponse get(@PathVariable UUID id, Authentication authentication) {
         return StudentResponse.from(studentService.get(tenantId(authentication), id));
     }

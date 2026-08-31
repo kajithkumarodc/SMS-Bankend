@@ -59,6 +59,7 @@ public class AttendanceController {
      * the whole tenant's roster for the day, paginated.
      */
     @GetMapping
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     PagedModel<AttendanceResponse> list(
             @RequestParam(required = false) UUID sectionId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -74,8 +75,14 @@ public class AttendanceController {
                 .map(AttendanceResponse::from));
     }
 
-    /** One student's attendance history (most recent first). 404 if the student is not in the caller's tenant. */
+    /**
+     * One student's attendance history (most recent first). SCHOOL_ADMIN or TEACHER
+     * only -- a student or parent reads their own via {@code /api/v1/me/student/attendance}
+     * or {@code /api/v1/me/children/{studentId}/attendance}. 404 if the student is not
+     * in the caller's tenant.
+     */
     @GetMapping("/student/{studentId}")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     PagedModel<AttendanceResponse> studentHistory(@PathVariable UUID studentId,
                                                   @PageableDefault(size = 50) Pageable pageable,
                                                   Authentication authentication) {

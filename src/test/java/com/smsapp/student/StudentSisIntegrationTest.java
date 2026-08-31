@@ -42,6 +42,8 @@ class StudentSisIntegrationTest {
     private static final String SCHOOL_B = "sis-school-b";
     private static final String ADMIN_A = "admin@tenant-a.example";
     private static final String TEACHER_A = "teacher@tenant-a.example";
+    private static final String STUDENT_A = "student@tenant-a.example";
+    private static final String PARENT_A = "parent@tenant-a.example";
     private static final String PASSWORD = "secret";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -87,6 +89,8 @@ class StudentSisIntegrationTest {
             // Tenant A users: one SCHOOL_ADMIN, one TEACHER.
             seedUser(st, tenantA, ADMIN_A, PASSWORD, "Admin A", "SCHOOL_ADMIN");
             seedUser(st, tenantA, TEACHER_A, PASSWORD, "Teacher A", "TEACHER");
+            seedUser(st, tenantA, STUDENT_A, PASSWORD, "Student User A", "STUDENT");
+            seedUser(st, tenantA, PARENT_A, PASSWORD, "Parent User A", "PARENT");
             // Tenant B user: a SCHOOL_ADMIN (unused for auth here, kept for realism).
             seedUser(st, tenantB, "admin@tenant-b.example", PASSWORD, "Admin B", "SCHOOL_ADMIN");
 
@@ -221,6 +225,23 @@ class StudentSisIntegrationTest {
         mockMvc.perform(get("/api/v1/students").cookie(login(SCHOOL_A, TEACHER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1));
+    }
+
+    @Test
+    void teacherCanStillGetASingleStudentById() throws Exception {
+        mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(SCHOOL_A, TEACHER_A)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Existing A"));
+    }
+
+    @Test
+    void studentsAndParentsCannotGetAStudentRecordDirectlyAndGet403() throws Exception {
+        // The full student record (guardian contact included) is staff-only; a
+        // student or parent must use /api/v1/me/student or /api/v1/me/children.
+        for (String email : new String[] {STUDENT_A, PARENT_A}) {
+            mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(SCHOOL_A, email)))
+                    .andExpect(status().isForbidden());
+        }
     }
 
     @Test

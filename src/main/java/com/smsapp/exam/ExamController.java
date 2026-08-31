@@ -46,8 +46,13 @@ public class ExamController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ExamResponse.from(created));
     }
 
-    /** Exams for one class (most recent first). 404 if the class is not in the caller's tenant. */
+    /**
+     * Exams for one class (most recent first). SCHOOL_ADMIN or TEACHER only -- a student
+     * or parent reads results through the ownership-scoped {@code /api/v1/me/...} endpoints.
+     * 404 if the class is not in the caller's tenant.
+     */
     @GetMapping
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     List<ExamResponse> listForClass(@RequestParam UUID classId, Authentication authentication) {
         return examService.listForClass(tenantId(authentication), classId).stream()
                 .map(ExamResponse::from).toList();
@@ -68,8 +73,14 @@ public class ExamController {
                 .body(ExamMarkResponse.from(result.mark()));
     }
 
-    /** The gradebook: every recorded mark for an exam. 404 if the exam is not in the caller's tenant. */
+    /**
+     * The gradebook: every recorded mark for an exam. SCHOOL_ADMIN or TEACHER only --
+     * this returns every student's marks, so a student or parent must use the
+     * ownership-scoped {@code /api/v1/me/...} results endpoints. 404 if the exam is
+     * not in the caller's tenant.
+     */
     @GetMapping("/{examId}/marks")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     List<ExamMarkResponse> gradebook(@PathVariable UUID examId, Authentication authentication) {
         return examService.gradebook(tenantId(authentication), examId).stream()
                 .map(ExamMarkResponse::from).toList();
