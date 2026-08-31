@@ -2,6 +2,8 @@ package com.smsapp.attendance;
 
 import com.smsapp.academics.SectionRepository;
 import com.smsapp.attendance.AttendanceDtos.MarkAttendanceRequest;
+import com.smsapp.audit.AuditActions;
+import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
 import com.smsapp.student.StudentRepository;
 import org.springframework.data.domain.Page;
@@ -12,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -20,16 +23,18 @@ public class AttendanceService {
     private final AttendanceRepository attendanceRepository;
     private final StudentRepository studentRepository;
     private final SectionRepository sectionRepository;
+    private final AuditService auditService;
 
     public AttendanceService(AttendanceRepository attendanceRepository, StudentRepository studentRepository,
-                             SectionRepository sectionRepository) {
+                             SectionRepository sectionRepository, AuditService auditService) {
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
         this.sectionRepository = sectionRepository;
+        this.auditService = auditService;
     }
 
-    /** True when {@code record} was newly created; false when an existing record was updated. */
-    public record MarkResult(AttendanceRecord record, boolean created) {
+    /** {@code created} is true when the record was newly inserted, false when an existing one was updated. */
+    public record MarkResult(AttendanceRecord entry, boolean created) {
     }
 
     /**
@@ -52,19 +57,26 @@ public class AttendanceService {
         }
         requireStudent(tenantId, request.studentId());
 
-        AttendanceRecord record = attendanceRepository
+        AttendanceRecord entry = attendanceRepository
                 .findByTenantIdAndStudentIdAndDate(tenantId, request.studentId(), request.date())
                 .orElse(null);
-        boolean created = record == null;
+        boolean created = entry == null;
         if (created) {
-            record = new AttendanceRecord();
-            record.setTenantId(tenantId);
-            record.setStudentId(request.studentId());
-            record.setDate(request.date());
+            entry = new AttendanceRecord();
+            entry.setTenantId(tenantId);
+            entry.setStudentId(request.studentId());
+            entry.setDate(request.date());
         }
-        record.setStatus(status);
-        record.setMarkedBy(markedBy);
-        return new MarkResult(attendanceRepository.save(record), created);
+        entry.setStatus(status);
+        entry.setMarkedBy(markedBy);
+        AttendanceRecord saved = attendanceRepository.save(entry);
+
+        auditService.log(created ? AuditActions.ATTENDANCE_MARKED : AuditActions.ATTENDANCE_CHANGED,
+                AuditActions.ATTENDANCE_RECORD, saved.getId(),
+                Map.of("studentId", saved.getStudentId().toString(),
+                        "date", saved.getDate().toString(),
+                        "status", saved.getStatus()));
+        return new MarkResult(saved, created);
     }
 
     @Transactional(readOnly = true)

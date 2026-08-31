@@ -1,6 +1,8 @@
 package com.smsapp.student;
 
 import com.smsapp.academics.SectionRepository;
+import com.smsapp.audit.AuditActions;
+import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
 import com.smsapp.school.SchoolRepository;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
@@ -12,6 +14,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -20,12 +24,14 @@ public class StudentService {
     private final StudentRepository studentRepository;
     private final SchoolRepository schoolRepository;
     private final SectionRepository sectionRepository;
+    private final AuditService auditService;
 
     public StudentService(StudentRepository studentRepository, SchoolRepository schoolRepository,
-                          SectionRepository sectionRepository) {
+                          SectionRepository sectionRepository, AuditService auditService) {
         this.studentRepository = studentRepository;
         this.schoolRepository = schoolRepository;
         this.sectionRepository = sectionRepository;
+        this.auditService = auditService;
     }
 
     /**
@@ -57,12 +63,17 @@ public class StudentService {
         student.setGuardianContact(request.guardianContact());
         student.setStatus(StudentStatus.ACTIVE);
 
+        Student saved;
         try {
-            return studentRepository.saveAndFlush(student);
+            saved = studentRepository.saveAndFlush(student);
         } catch (DataIntegrityViolationException ex) {
             // Lost the race against a concurrent insert of the same admission number.
             throw admissionConflict(admissionNumber);
         }
+
+        auditService.log(AuditActions.STUDENT_CREATED, AuditActions.STUDENT, saved.getId(),
+                Map.of("admissionNumber", saved.getAdmissionNumber(), "fullName", saved.getFullName()));
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -103,8 +114,14 @@ public class StudentService {
         if (!sectionRepository.existsByIdAndTenantId(sectionId, tenantId)) {
             throw new ApiException("Section not found", HttpStatus.NOT_FOUND);
         }
+        UUID previousSectionId = student.getSectionId();
         student.setSectionId(sectionId);
-        return studentRepository.save(student);
+        Student saved = studentRepository.save(student);
+
+        auditService.log(AuditActions.SECTION_ASSIGNED, AuditActions.STUDENT, studentId, details(
+                "from", previousSectionId == null ? null : previousSectionId.toString(),
+                "to", sectionId.toString()));
+        return saved;
     }
 
     /**
@@ -134,11 +151,26 @@ public class StudentService {
     @Transactional
     public Student update(UUID tenantId, UUID id, UpdateStudentRequest request) {
         Student student = requireStudent(tenantId, id);
+        Map<String, Object> before = editableSnapshot(student);
+
         student.setFullName(request.fullName().trim());
         student.setGuardianName(blankToNull(request.guardianName()));
         student.setGuardianContact(blankToNull(request.guardianContact()));
         student.setStatus(requireValidStatus(request.status()));
-        return studentRepository.save(student);
+        Student saved = studentRepository.save(student);
+
+        auditService.log(AuditActions.STUDENT_UPDATED, AuditActions.STUDENT, id,
+                Map.of("old", before, "new", editableSnapshot(saved)));
+        return saved;
+    }
+
+    /** The editable fields of a student, for before/after audit context. */
+    private static Map<String, Object> editableSnapshot(Student student) {
+        return details(
+                "fullName", student.getFullName(),
+                "guardianName", student.getGuardianName(),
+                "guardianContact", student.getGuardianContact(),
+                "status", student.getStatus());
     }
 
     /**
@@ -151,8 +183,13 @@ public class StudentService {
     @Transactional
     public Student changeStatus(UUID tenantId, UUID id, String status) {
         Student student = requireStudent(tenantId, id);
+        String previousStatus = student.getStatus();
         student.setStatus(requireValidStatus(status));
-        return studentRepository.save(student);
+        Student saved = studentRepository.save(student);
+
+        auditService.log(AuditActions.STUDENT_STATUS_CHANGED, AuditActions.STUDENT, id,
+                details("from", previousStatus, "to", saved.getStatus()));
+        return saved;
     }
 
     private Student requireStudent(UUID tenantId, UUID id) {
@@ -174,6 +211,15 @@ public class StudentService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /** Null-tolerant map builder ({@link Map#of} rejects null values). Keys/values alternate. */
+    private static Map<String, Object> details(Object... keyValues) {
+        Map<String, Object> map = new HashMap<>();
+        for (int i = 0; i < keyValues.length; i += 2) {
+            map.put((String) keyValues[i], keyValues[i + 1]);
+        }
+        return map;
     }
 
     private static ApiException admissionConflict(String admissionNumber) {

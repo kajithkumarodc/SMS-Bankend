@@ -1,6 +1,7 @@
 package com.smsapp.student;
 
 import com.smsapp.academics.SectionRepository;
+import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
 import com.smsapp.school.SchoolRepository;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
@@ -36,11 +37,14 @@ class StudentServiceTest {
     @Mock
     private SectionRepository sectionRepository;
 
+    @Mock
+    private AuditService auditService;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID schoolId = UUID.randomUUID();
 
     private StudentService service() {
-        return new StudentService(studentRepository, schoolRepository, sectionRepository);
+        return new StudentService(studentRepository, schoolRepository, sectionRepository, auditService);
     }
 
     private CreateStudentRequest request(String fullName, String admissionNumber) {

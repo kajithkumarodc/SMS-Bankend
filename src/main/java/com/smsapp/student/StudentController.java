@@ -41,7 +41,7 @@ public class StudentController {
 
     /** Only SCHOOL_ADMIN may enroll a student (plan section 2). A TEACHER gets 403. */
     @PostMapping
-    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public ResponseEntity<StudentResponse> create(@Valid @RequestBody CreateStudentRequest request,
                                            Authentication authentication,
                                            UriComponentsBuilder uriBuilder) {
@@ -77,7 +77,7 @@ public class StudentController {
      * not editable (see {@link StudentService#update}).
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public StudentResponse update(@PathVariable UUID id,
                                   @Valid @RequestBody UpdateStudentRequest request,
                                   Authentication authentication) {
@@ -89,7 +89,7 @@ public class StudentController {
      * gets 403. No row is deleted -- the student stays in the historical record.
      */
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public StudentResponse changeStatus(@PathVariable UUID id,
                                         @Valid @RequestBody ChangeStudentStatusRequest request,
                                         Authentication authentication) {
@@ -101,7 +101,7 @@ public class StudentController {
      * 404 if the student or the section is not in the caller's tenant.
      */
     @PatchMapping("/{id}/section")
-    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public StudentResponse assignSection(@PathVariable UUID id,
                                          @Valid @RequestBody AssignSectionRequest request,
                                          Authentication authentication) {

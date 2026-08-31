@@ -1,5 +1,6 @@
 package com.smsapp.auth;
 
+import com.smsapp.audit.AuditService;
 import com.smsapp.tenant.Tenant;
 import com.smsapp.tenant.TenantRepository;
 import com.smsapp.user.RoleRepository;
@@ -52,6 +53,9 @@ class AuthServiceTest {
     @Mock
     private Query nativeQuery;
 
+    @Mock
+    private AuditService auditService;
+
     private Tenant tenant(UUID tenantId) {
         Tenant tenant = new Tenant();
         tenant.setId(tenantId);
@@ -62,7 +66,7 @@ class AuthServiceTest {
 
     private AuthService newService() {
         return new AuthService(tenantRepository, userRepository, roleRepository, passwordEncoder, jwtEncoder,
-                entityManager);
+                entityManager, auditService);
     }
 
     @Test

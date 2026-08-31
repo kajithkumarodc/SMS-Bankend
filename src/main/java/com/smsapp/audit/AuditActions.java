@@ -1,0 +1,30 @@
+package com.smsapp.audit;
+
+/**
+ * Well-known audit action + entity-type identifiers. Keeps these strings out of
+ * scattered literals in the services (plan section 7.3).
+ */
+public final class AuditActions {
+
+    // actions
+    public static final String LOGIN_SUCCESS = "LOGIN_SUCCESS";
+    public static final String LOGIN_FAILED = "LOGIN_FAILED";
+    public static final String STUDENT_CREATED = "STUDENT_CREATED";
+    public static final String STUDENT_UPDATED = "STUDENT_UPDATED";
+    public static final String STUDENT_STATUS_CHANGED = "STUDENT_STATUS_CHANGED";
+    public static final String SECTION_ASSIGNED = "SECTION_ASSIGNED";
+    public static final String CLASS_CREATED = "CLASS_CREATED";
+    public static final String SECTION_CREATED = "SECTION_CREATED";
+    public static final String ATTENDANCE_MARKED = "ATTENDANCE_MARKED";
+    public static final String ATTENDANCE_CHANGED = "ATTENDANCE_CHANGED";
+
+    // entity types
+    public static final String USER = "USER";
+    public static final String STUDENT = "STUDENT";
+    public static final String CLASS = "CLASS";
+    public static final String SECTION = "SECTION";
+    public static final String ATTENDANCE_RECORD = "ATTENDANCE_RECORD";
+
+    private AuditActions() {
+    }
+}

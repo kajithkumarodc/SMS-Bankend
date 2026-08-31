@@ -44,11 +44,11 @@ public class AttendanceController {
      * existing record (200) rather than failing; a first mark returns 201.
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('" + Roles.SCHOOL_ADMIN + "', '" + Roles.TEACHER + "')")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     public ResponseEntity<AttendanceResponse> mark(@Valid @RequestBody MarkAttendanceRequest request,
                                                    Authentication authentication) {
         MarkResult result = attendanceService.mark(tenantId(authentication), userId(authentication), request);
-        AttendanceResponse body = AttendanceResponse.from(result.record());
+        AttendanceResponse body = AttendanceResponse.from(result.entry());
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(body);
     }
 

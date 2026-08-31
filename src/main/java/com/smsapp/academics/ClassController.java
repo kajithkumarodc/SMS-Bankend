@@ -33,7 +33,7 @@ public class ClassController {
 
     /** Create a class. SCHOOL_ADMIN only; a TEACHER gets 403. */
     @PostMapping
-    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public ResponseEntity<ClassResponse> createClass(@Valid @RequestBody CreateClassRequest request,
                                                      Authentication authentication) {
         SchoolClass created = classService.createClass(tenantId(authentication), request);
@@ -49,7 +49,7 @@ public class ClassController {
 
     /** Create a section under a class. SCHOOL_ADMIN only; a TEACHER gets 403. 404 if the class is another tenant's. */
     @PostMapping("/{classId}/sections")
-    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public ResponseEntity<SectionResponse> createSection(@PathVariable UUID classId,
                                                          @Valid @RequestBody CreateSectionRequest request,
                                                          Authentication authentication) {

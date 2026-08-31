@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -63,7 +64,7 @@ class SchoolDirectoryIntegrationTest {
     @Test
     void listsOnlyCallersTenantSchoolsOrderedByName() throws Exception {
         Cookie session = mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolIdentifier\":\"dir-a\",\"email\":\"admin@dir-a.example\",\"password\":\"secret\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");

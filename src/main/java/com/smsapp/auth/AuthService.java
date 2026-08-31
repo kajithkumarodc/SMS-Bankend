@@ -1,5 +1,7 @@
 package com.smsapp.auth;
 
+import com.smsapp.audit.AuditActions;
+import com.smsapp.audit.AuditService;
 import com.smsapp.tenant.Tenant;
 import com.smsapp.tenant.TenantContext;
 import com.smsapp.tenant.TenantRepository;
@@ -19,10 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class AuthService {
+
+    private static final String INVALID_CREDENTIALS = "Invalid credentials";
+    private static final String DETAIL_EMAIL = "email";
 
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
@@ -30,15 +36,18 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
     private final EntityManager entityManager;
+    private final AuditService auditService;
 
     public AuthService(TenantRepository tenantRepository, UserRepository userRepository, RoleRepository roleRepository,
-                       PasswordEncoder passwordEncoder, JwtEncoder jwtEncoder, EntityManager entityManager) {
+                       PasswordEncoder passwordEncoder, JwtEncoder jwtEncoder, EntityManager entityManager,
+                       AuditService auditService) {
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtEncoder = jwtEncoder;
         this.entityManager = entityManager;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -47,7 +56,7 @@ public class AuthService {
         // tenant context exists. `tenants` is a control-plane table and is not under
         // tenant RLS (see migration V3).
         Tenant tenant = tenantRepository.findByIdentifier(request.schoolIdentifier())
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+                .orElseThrow(() -> new BadCredentialsException(INVALID_CREDENTIALS));
         UUID tenantId = tenant.getId();
 
         TenantContext.setCurrentTenant(tenantId.toString());
@@ -55,11 +64,15 @@ public class AuthService {
             .setParameter("tenantId", tenantId.toString())
             .getSingleResult();
 
-        User user = userRepository.findByTenantIdAndEmail(tenantId, request.email())
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+        User user = userRepository.findByTenantIdAndEmail(tenantId, request.email()).orElse(null);
+        if (user == null) {
+            auditLoginFailed(tenantId, null, request.email(), "user_not_found");
+            throw new BadCredentialsException(INVALID_CREDENTIALS);
+        }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new BadCredentialsException("Invalid credentials");
+            auditLoginFailed(tenantId, user.getId(), request.email(), "bad_password");
+            throw new BadCredentialsException(INVALID_CREDENTIALS);
         }
 
         List<String> roles = roleRepository.findNamesByUserId(user.getId());
@@ -75,8 +88,16 @@ public class AuthService {
         String token = jwtEncoder.encode(JwtEncoderParameters.from(
                 JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
 
+        auditService.logAs(tenantId, user.getId(), AuditActions.LOGIN_SUCCESS, AuditActions.USER, user.getId(),
+                Map.of(DETAIL_EMAIL, request.email()));
+
         return new LoginResponse(token,
                 new AuthenticatedUser(user.getId().toString(), user.getFullName(), tenantId.toString(), roles));
+    }
+
+    private void auditLoginFailed(UUID tenantId, UUID userId, String email, String reason) {
+        auditService.logAs(tenantId, userId, AuditActions.LOGIN_FAILED, AuditActions.USER, userId,
+                Map.of(DETAIL_EMAIL, email, "reason", reason));
     }
 
     public record LoginRequest(String schoolIdentifier, String email, String password) {

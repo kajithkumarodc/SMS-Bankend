@@ -1,6 +1,7 @@
 package com.smsapp.attendance;
 
 import com.smsapp.academics.SectionRepository;
+import com.smsapp.audit.AuditService;
 import com.smsapp.attendance.AttendanceDtos.MarkAttendanceRequest;
 import com.smsapp.attendance.AttendanceService.MarkResult;
 import com.smsapp.common.ApiException;
@@ -36,12 +37,15 @@ class AttendanceServiceTest {
     @Mock
     private SectionRepository sectionRepository;
 
+    @Mock
+    private AuditService auditService;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
     private final UUID teacherId = UUID.randomUUID();
 
     private AttendanceService service() {
-        return new AttendanceService(attendanceRepository, studentRepository, sectionRepository);
+        return new AttendanceService(attendanceRepository, studentRepository, sectionRepository, auditService);
     }
 
     private void studentExists() {
@@ -64,11 +68,11 @@ class AttendanceServiceTest {
         MarkResult result = service().mark(tenantId, teacherId, request(today, "present"));
 
         assertThat(result.created()).isTrue();
-        assertThat(result.record().getTenantId()).isEqualTo(tenantId);
-        assertThat(result.record().getStudentId()).isEqualTo(studentId);
-        assertThat(result.record().getDate()).isEqualTo(today);
-        assertThat(result.record().getStatus()).isEqualTo(AttendanceStatus.PRESENT);
-        assertThat(result.record().getMarkedBy()).isEqualTo(teacherId);
+        assertThat(result.entry().getTenantId()).isEqualTo(tenantId);
+        assertThat(result.entry().getStudentId()).isEqualTo(studentId);
+        assertThat(result.entry().getDate()).isEqualTo(today);
+        assertThat(result.entry().getStatus()).isEqualTo(AttendanceStatus.PRESENT);
+        assertThat(result.entry().getMarkedBy()).isEqualTo(teacherId);
     }
 
     @Test
@@ -89,9 +93,9 @@ class AttendanceServiceTest {
         MarkResult result = service().mark(tenantId, teacherId, request(today, "LATE"));
 
         assertThat(result.created()).isFalse();
-        assertThat(result.record().getId()).isEqualTo(existing.getId());
-        assertThat(result.record().getStatus()).isEqualTo(AttendanceStatus.LATE);
-        assertThat(result.record().getMarkedBy()).isEqualTo(teacherId);
+        assertThat(result.entry().getId()).isEqualTo(existing.getId());
+        assertThat(result.entry().getStatus()).isEqualTo(AttendanceStatus.LATE);
+        assertThat(result.entry().getMarkedBy()).isEqualTo(teacherId);
     }
 
     @Test

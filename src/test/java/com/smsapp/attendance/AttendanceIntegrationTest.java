@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -36,6 +37,8 @@ class AttendanceIntegrationTest {
 
     private static final String SCHOOL_A = "att-school-a";
     private static final String SCHOOL_B = "att-school-b";
+    private static final String ADMIN_A = "admin@tenant-a.example";
+    private static final String TEACHER_A = "teacher@tenant-a.example";
     private static final String TODAY = LocalDate.now().toString();
 
     @Autowired
@@ -80,8 +83,8 @@ class AttendanceIntegrationTest {
             seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolA);
             seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolB);
 
-            seedUser(st, tenantA, "admin@tenant-a.example", "Admin A", "SCHOOL_ADMIN");
-            seedUser(st, tenantA, "teacher@tenant-a.example", "Teacher A", "TEACHER");
+            seedUser(st, tenantA, ADMIN_A, "Admin A", "SCHOOL_ADMIN");
+            seedUser(st, tenantA, TEACHER_A, "Teacher A", "TEACHER");
             UUID adminB = seedUser(st, tenantB, "admin@tenant-b.example", "Admin B", "SCHOOL_ADMIN");
 
             seedSection(st, tenantA, schoolA, classA, sectionA, "Grade 5", "A");
@@ -136,7 +139,7 @@ class AttendanceIntegrationTest {
 
     private Cookie login(String schoolIdentifier, String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
                                 + "\",\"password\":\"secret\"}"))
                 .andExpect(status().isOk())
@@ -152,8 +155,8 @@ class AttendanceIntegrationTest {
     @Test
     void teacherCanMarkAttendance() throws Exception {
         mockMvc.perform(post("/api/v1/attendance")
-                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example"))
-                        .contentType("application/json")
+                        .cookie(login(SCHOOL_A, TEACHER_A))
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentA, TODAY, "PRESENT")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.studentId").value(studentA.toString()))
@@ -164,8 +167,8 @@ class AttendanceIntegrationTest {
     @Test
     void schoolAdminCanMarkAttendance() throws Exception {
         mockMvc.perform(post("/api/v1/attendance")
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
-                        .contentType("application/json")
+                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentA, TODAY, "ABSENT")))
                 .andExpect(status().isCreated());
     }
@@ -173,7 +176,7 @@ class AttendanceIntegrationTest {
     @Test
     void markingRequiresAuthentication() throws Exception {
         mockMvc.perform(post("/api/v1/attendance")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentA, TODAY, "PRESENT")))
                 .andExpect(status().isUnauthorized());
     }
@@ -182,14 +185,14 @@ class AttendanceIntegrationTest {
 
     @Test
     void reMarkingTheSameStudentAndDateUpdatesInsteadOfDuplicating() throws Exception {
-        Cookie teacher = login(SCHOOL_A, "teacher@tenant-a.example");
+        Cookie teacher = login(SCHOOL_A, TEACHER_A);
 
-        mockMvc.perform(post("/api/v1/attendance").cookie(teacher).contentType("application/json")
+        mockMvc.perform(post("/api/v1/attendance").cookie(teacher).contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentA, TODAY, "PRESENT")))
                 .andExpect(status().isCreated());
 
         // Correction later the same day: not a 409, an update (200).
-        mockMvc.perform(post("/api/v1/attendance").cookie(teacher).contentType("application/json")
+        mockMvc.perform(post("/api/v1/attendance").cookie(teacher).contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentA, TODAY, "LATE")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("LATE"));
@@ -205,8 +208,8 @@ class AttendanceIntegrationTest {
     @Test
     void futureDateIsRejectedWith400() throws Exception {
         mockMvc.perform(post("/api/v1/attendance")
-                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example"))
-                        .contentType("application/json")
+                        .cookie(login(SCHOOL_A, TEACHER_A))
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentA, LocalDate.now().plusDays(1).toString(), "PRESENT")))
                 .andExpect(status().isBadRequest());
     }
@@ -216,16 +219,16 @@ class AttendanceIntegrationTest {
     @Test
     void cannotMarkAttendanceForAnotherTenantsStudent() throws Exception {
         mockMvc.perform(post("/api/v1/attendance")
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
-                        .contentType("application/json")
+                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentB, TODAY, "PRESENT")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void listByDateReturnsOnlyCallersTenantRecords() throws Exception {
-        Cookie adminA = login(SCHOOL_A, "admin@tenant-a.example");
-        mockMvc.perform(post("/api/v1/attendance").cookie(adminA).contentType("application/json")
+        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        mockMvc.perform(post("/api/v1/attendance").cookie(adminA).contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentA, TODAY, "PRESENT")))
                 .andExpect(status().isCreated());
 
@@ -239,7 +242,7 @@ class AttendanceIntegrationTest {
     @Test
     void studentHistoryForAnotherTenantsStudentReturns404() throws Exception {
         mockMvc.perform(get("/api/v1/attendance/student/" + studentB)
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example")))
+                        .cookie(login(SCHOOL_A, ADMIN_A)))
                 .andExpect(status().isNotFound());
     }
 
@@ -248,7 +251,7 @@ class AttendanceIntegrationTest {
     @Test
     void sectionRosterListsThatSectionsStudentsTenantScoped() throws Exception {
         mockMvc.perform(get("/api/v1/sections/" + sectionA + "/students")
-                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example")))
+                        .cookie(login(SCHOOL_A, TEACHER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].id").value(studentA.toString()));
@@ -257,7 +260,7 @@ class AttendanceIntegrationTest {
     @Test
     void sectionRosterForAnotherTenantsSectionReturns404() throws Exception {
         mockMvc.perform(get("/api/v1/sections/" + sectionB + "/students")
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example")))
+                        .cookie(login(SCHOOL_A, ADMIN_A)))
                 .andExpect(status().isNotFound());
     }
 
@@ -265,7 +268,7 @@ class AttendanceIntegrationTest {
 
     @Test
     void attendanceBySectionIsEmptyBeforeMarkingThenReflectsMarks() throws Exception {
-        Cookie teacher = login(SCHOOL_A, "teacher@tenant-a.example");
+        Cookie teacher = login(SCHOOL_A, TEACHER_A);
 
         // Nothing marked yet -> empty, but 200 (partial roster is normal).
         mockMvc.perform(get("/api/v1/attendance").param("sectionId", sectionA.toString())
@@ -273,7 +276,7 @@ class AttendanceIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(0)));
 
-        mockMvc.perform(post("/api/v1/attendance").cookie(teacher).contentType("application/json")
+        mockMvc.perform(post("/api/v1/attendance").cookie(teacher).contentType(MediaType.APPLICATION_JSON)
                         .content(markBody(studentA, TODAY, "PRESENT")))
                 .andExpect(status().isCreated());
 
@@ -291,7 +294,7 @@ class AttendanceIntegrationTest {
         // tenant A asking by that section id must get 404, not a leak.
         mockMvc.perform(get("/api/v1/attendance").param("sectionId", sectionB.toString())
                         .param("date", TODAY)
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example")))
+                        .cookie(login(SCHOOL_A, ADMIN_A)))
                 .andExpect(status().isNotFound());
     }
 }

@@ -4,6 +4,8 @@ import com.smsapp.academics.AcademicsDtos.ClassResponse;
 import com.smsapp.academics.AcademicsDtos.CreateClassRequest;
 import com.smsapp.academics.AcademicsDtos.CreateSectionRequest;
 import com.smsapp.academics.AcademicsDtos.SectionResponse;
+import com.smsapp.audit.AuditActions;
+import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
 import com.smsapp.school.SchoolRepository;
 import org.springframework.http.HttpStatus;
@@ -21,12 +23,14 @@ public class ClassService {
     private final ClassRepository classRepository;
     private final SectionRepository sectionRepository;
     private final SchoolRepository schoolRepository;
+    private final AuditService auditService;
 
     public ClassService(ClassRepository classRepository, SectionRepository sectionRepository,
-                        SchoolRepository schoolRepository) {
+                        SchoolRepository schoolRepository, AuditService auditService) {
         this.classRepository = classRepository;
         this.sectionRepository = sectionRepository;
         this.schoolRepository = schoolRepository;
+        this.auditService = auditService;
     }
 
     /**
@@ -46,7 +50,11 @@ public class ClassService {
         schoolClass.setTenantId(tenantId);
         schoolClass.setSchoolId(request.schoolId());
         schoolClass.setName(name);
-        return classRepository.save(schoolClass);
+        SchoolClass saved = classRepository.save(schoolClass);
+
+        auditService.log(AuditActions.CLASS_CREATED, AuditActions.CLASS, saved.getId(),
+                Map.of("name", saved.getName(), "schoolId", saved.getSchoolId().toString()));
+        return saved;
     }
 
     /**
@@ -66,7 +74,11 @@ public class ClassService {
         section.setTenantId(tenantId);
         section.setClassId(classId);
         section.setName(name);
-        return sectionRepository.save(section);
+        Section saved = sectionRepository.save(section);
+
+        auditService.log(AuditActions.SECTION_CREATED, AuditActions.SECTION, saved.getId(),
+                Map.of("name", saved.getName(), "classId", saved.getClassId().toString()));
+        return saved;
     }
 
     /** Lists the tenant's classes with their sections nested. */

@@ -40,6 +40,14 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http, AuthCookieFactory authCookieFactory) throws Exception {
         http
             .cors(Customizer.withDefaults())
+            // CSRF token protection is intentionally disabled (see ADR
+            // docs/adr/002-csrf-mitigation-strategy.md). This is a stateless
+            // resource server: the access token lives in an httpOnly cookie set
+            // with SameSite=Strict (AuthCookieFactory), so a browser will not
+            // attach it to any cross-site request -- which is exactly the vector
+            // CSRF tokens defend against. There is no server-side session to
+            // ride. Revisit this if a non-browser client (mobile app, server-to
+            // -server) is added, since SameSite is a browser-only guarantee.
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth

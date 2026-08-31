@@ -27,14 +27,14 @@ final class AttendanceDtos {
             UUID markedBy,
             OffsetDateTime createdAt) {
 
-        static AttendanceResponse from(AttendanceRecord record) {
+        static AttendanceResponse from(AttendanceRecord entry) {
             return new AttendanceResponse(
-                    record.getId(),
-                    record.getStudentId(),
-                    record.getDate(),
-                    record.getStatus(),
-                    record.getMarkedBy(),
-                    record.getCreatedAt());
+                    entry.getId(),
+                    entry.getStudentId(),
+                    entry.getDate(),
+                    entry.getStatus(),
+                    entry.getMarkedBy(),
+                    entry.getCreatedAt());
         }
     }
 }

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -36,6 +37,8 @@ class ClassSectionIntegrationTest {
 
     private static final String SCHOOL_A = "cls-school-a";
     private static final String SCHOOL_B = "cls-school-b";
+    private static final String ADMIN_A = "admin@tenant-a.example";
+    private static final String TEACHER_A = "teacher@tenant-a.example";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Autowired
@@ -77,8 +80,8 @@ class ClassSectionIntegrationTest {
             seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolA);
             seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolB);
 
-            seedUser(st, tenantA, "admin@tenant-a.example", "SCHOOL_ADMIN");
-            seedUser(st, tenantA, "teacher@tenant-a.example", "TEACHER");
+            seedUser(st, tenantA, ADMIN_A, "SCHOOL_ADMIN");
+            seedUser(st, tenantA, TEACHER_A, "TEACHER");
             seedUser(st, tenantB, "admin@tenant-b.example", "SCHOOL_ADMIN");
 
             st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status) VALUES ('"
@@ -114,7 +117,7 @@ class ClassSectionIntegrationTest {
 
     private Cookie login(String schoolIdentifier, String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
                                 + "\",\"password\":\"secret\"}"))
                 .andExpect(status().isOk())
@@ -123,7 +126,7 @@ class ClassSectionIntegrationTest {
 
     /** Creates a class for tenant A via the API and returns its id. */
     private UUID createClassA(Cookie admin, String name) throws Exception {
-        var result = mockMvc.perform(post("/api/v1/classes").cookie(admin).contentType("application/json")
+        var result = mockMvc.perform(post("/api/v1/classes").cookie(admin).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolId\":\"" + schoolA + "\",\"name\":\"" + name + "\"}"))
                 .andExpect(status().isCreated())
                 .andReturn();
@@ -135,8 +138,8 @@ class ClassSectionIntegrationTest {
     @Test
     void schoolAdminCanCreateAClass() throws Exception {
         mockMvc.perform(post("/api/v1/classes")
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
-                        .contentType("application/json")
+                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolId\":\"" + schoolA + "\",\"name\":\"Grade 5\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Grade 5"))
@@ -146,26 +149,26 @@ class ClassSectionIntegrationTest {
     @Test
     void teacherCannotCreateAClass() throws Exception {
         mockMvc.perform(post("/api/v1/classes")
-                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example"))
-                        .contentType("application/json")
+                        .cookie(login(SCHOOL_A, TEACHER_A))
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolId\":\"" + schoolA + "\",\"name\":\"Grade 5\"}"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     void schoolAdminCanCreateASectionButTeacherCannot() throws Exception {
-        Cookie admin = login(SCHOOL_A, "admin@tenant-a.example");
+        Cookie admin = login(SCHOOL_A, ADMIN_A);
         UUID classA = createClassA(admin, "Grade 5");
 
         mockMvc.perform(post("/api/v1/classes/" + classA + "/sections").cookie(admin)
-                        .contentType("application/json").content("{\"name\":\"A\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"A\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("A"))
                 .andExpect(jsonPath("$.classId").value(classA.toString()));
 
         mockMvc.perform(post("/api/v1/classes/" + classA + "/sections")
-                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example"))
-                        .contentType("application/json").content("{\"name\":\"B\"}"))
+                        .cookie(login(SCHOOL_A, TEACHER_A))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"B\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -173,10 +176,10 @@ class ClassSectionIntegrationTest {
 
     @Test
     void listClassesNestsSectionsAndIsTenantScoped() throws Exception {
-        Cookie admin = login(SCHOOL_A, "admin@tenant-a.example");
+        Cookie admin = login(SCHOOL_A, ADMIN_A);
         UUID classA = createClassA(admin, "Grade 5");
         mockMvc.perform(post("/api/v1/classes/" + classA + "/sections").cookie(admin)
-                        .contentType("application/json").content("{\"name\":\"A\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"A\"}"))
                 .andExpect(status().isCreated());
 
         // Tenant B has a class "Grade 1" seeded -- it must not appear for tenant A.
@@ -191,18 +194,18 @@ class ClassSectionIntegrationTest {
     @Test
     void cannotCreateSectionUnderAnotherTenantsClass() throws Exception {
         mockMvc.perform(post("/api/v1/classes/" + classB + "/sections")
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
-                        .contentType("application/json").content("{\"name\":\"Y\"}"))
+                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Y\"}"))
                 .andExpect(status().isNotFound());
     }
 
     // --- Student <-> section assignment -----------------------------
 
     private UUID createSectionA() throws Exception {
-        Cookie admin = login(SCHOOL_A, "admin@tenant-a.example");
+        Cookie admin = login(SCHOOL_A, ADMIN_A);
         UUID classA = createClassA(admin, "Grade 5");
         var result = mockMvc.perform(post("/api/v1/classes/" + classA + "/sections").cookie(admin)
-                        .contentType("application/json").content("{\"name\":\"A\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"A\"}"))
                 .andExpect(status().isCreated())
                 .andReturn();
         return UUID.fromString(JSON.readTree(result.getResponse().getContentAsString()).get("id").asText());
@@ -213,8 +216,8 @@ class ClassSectionIntegrationTest {
         UUID sectionA = createSectionA();
 
         mockMvc.perform(patch("/api/v1/students/" + studentA + "/section")
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
-                        .contentType("application/json").content("{\"sectionId\":\"" + sectionA + "\"}"))
+                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"sectionId\":\"" + sectionA + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sectionId").value(sectionA.toString()));
     }
@@ -224,25 +227,25 @@ class ClassSectionIntegrationTest {
         UUID sectionA = createSectionA();
 
         mockMvc.perform(patch("/api/v1/students/" + studentA + "/section")
-                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example"))
-                        .contentType("application/json").content("{\"sectionId\":\"" + sectionA + "\"}"))
+                        .cookie(login(SCHOOL_A, TEACHER_A))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"sectionId\":\"" + sectionA + "\"}"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     void assigningAStudentToAnotherTenantsSectionReturns404() throws Exception {
         mockMvc.perform(patch("/api/v1/students/" + studentA + "/section")
-                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
-                        .contentType("application/json").content("{\"sectionId\":\"" + sectionB + "\"}"))
+                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"sectionId\":\"" + sectionB + "\"}"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void studentsCanBeFilteredBySection() throws Exception {
         UUID sectionA = createSectionA();
-        Cookie admin = login(SCHOOL_A, "admin@tenant-a.example");
+        Cookie admin = login(SCHOOL_A, ADMIN_A);
         mockMvc.perform(patch("/api/v1/students/" + studentA + "/section").cookie(admin)
-                        .contentType("application/json").content("{\"sectionId\":\"" + sectionA + "\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"sectionId\":\"" + sectionA + "\"}"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/students").param("sectionId", sectionA.toString()).cookie(admin))

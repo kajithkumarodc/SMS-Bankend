@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -93,7 +94,7 @@ class PhaseOneIntegrationTest {
     @Test
     void validLoginSetsHttpOnlyCookieAndTokenAuthenticatesViaCookieAndHeader() throws Exception {
         var loginResult = mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolIdentifier\":\"" + SCHOOL_A + "\",\"email\":\"admin@example.com\",\"password\":\"secret\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").isString())
@@ -132,7 +133,7 @@ class PhaseOneIntegrationTest {
         // A browser re-sends the (possibly expired) access_token cookie with the
         // login request; that must not turn a valid sign-in into a 401.
         mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .cookie(new Cookie("access_token", "stale.invalid.token"))
                         .content("{\"schoolIdentifier\":\"" + SCHOOL_A + "\",\"email\":\"admin@example.com\","
                                 + "\"password\":\"secret\"}"))
@@ -152,7 +153,7 @@ class PhaseOneIntegrationTest {
     @Test
     void invalidPasswordIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolIdentifier\":\"" + SCHOOL_A + "\",\"email\":\"admin@example.com\",\"password\":\"wrong\"}"))
                 .andExpect(status().isUnauthorized());
     }
@@ -238,7 +239,7 @@ class PhaseOneIntegrationTest {
 
     private Cookie login() throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolIdentifier\":\"" + SCHOOL_A + "\",\"email\":\"admin@example.com\","
                                 + "\"password\":\"secret\"}"))
                 .andExpect(status().isOk())
