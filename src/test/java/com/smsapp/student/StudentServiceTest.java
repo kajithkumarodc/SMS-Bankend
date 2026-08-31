@@ -225,4 +225,15 @@ class StudentServiceTest {
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    @Test
+    void listInSectionReportsAnotherTenantsSectionAs404() {
+        UUID sectionId = UUID.randomUUID();
+        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service().listInSection(tenantId, sectionId,
+                org.springframework.data.domain.Pageable.unpaged()))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+    }
 }

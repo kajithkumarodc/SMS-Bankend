@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.hasSize;
 
 /**
  * Attendance module against a real PostgreSQL instance with RLS enabled:
@@ -45,6 +46,8 @@ class AttendanceIntegrationTest {
 
     private UUID studentA;
     private UUID studentB;
+    private UUID sectionA;
+    private UUID sectionB;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -60,6 +63,10 @@ class AttendanceIntegrationTest {
         UUID schoolB = UUID.randomUUID();
         studentA = UUID.randomUUID();
         studentB = UUID.randomUUID();
+        sectionA = UUID.randomUUID();
+        sectionB = UUID.randomUUID();
+        UUID classA = UUID.randomUUID();
+        UUID classB = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
@@ -68,7 +75,7 @@ class AttendanceIntegrationTest {
              Statement st = connection.createStatement()) {
 
             st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students, "
-                    + "attendance_records CASCADE");
+                    + "attendance_records, sections, classes CASCADE");
 
             seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolA);
             seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolB);
@@ -77,8 +84,11 @@ class AttendanceIntegrationTest {
             seedUser(st, tenantA, "teacher@tenant-a.example", "Teacher A", "TEACHER");
             UUID adminB = seedUser(st, tenantB, "admin@tenant-b.example", "Admin B", "SCHOOL_ADMIN");
 
-            seedStudent(st, tenantA, schoolA, studentA, "Student A", "ADM-A");
-            seedStudent(st, tenantB, schoolB, studentB, "Student B", "ADM-B");
+            seedSection(st, tenantA, schoolA, classA, sectionA, "Grade 5", "A");
+            seedSection(st, tenantB, schoolB, classB, sectionB, "Grade 5", "B");
+
+            seedStudent(st, tenantA, schoolA, studentA, sectionA, "Student A", "ADM-A");
+            seedStudent(st, tenantB, schoolB, studentB, sectionB, "Student B", "ADM-B");
 
             // Tenant B already has a record for its own student, on the same date the
             // tests use -- a tenant-A query for that date must never see it.
@@ -86,6 +96,14 @@ class AttendanceIntegrationTest {
                     + UUID.randomUUID() + "', '" + tenantB + "', '" + studentB + "', '" + TODAY + "', 'PRESENT', '"
                     + adminB + "')");
         }
+    }
+
+    private static void seedSection(Statement st, UUID tenantId, UUID schoolId, UUID classId, UUID sectionId,
+                                    String className, String sectionName) throws SQLException {
+        st.execute("INSERT INTO classes (id, tenant_id, school_id, name) VALUES ('"
+                + classId + "', '" + tenantId + "', '" + schoolId + "', '" + className + "')");
+        st.execute("INSERT INTO sections (id, tenant_id, class_id, name) VALUES ('"
+                + sectionId + "', '" + tenantId + "', '" + classId + "', '" + sectionName + "')");
     }
 
     private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
@@ -109,11 +127,11 @@ class AttendanceIntegrationTest {
         return userId;
     }
 
-    private static void seedStudent(Statement st, UUID tenantId, UUID schoolId, UUID studentId, String name,
-                                    String admissionNumber) throws SQLException {
-        st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status) VALUES ('"
-                + studentId + "', '" + tenantId + "', '" + schoolId + "', '" + name + "', '" + admissionNumber
-                + "', 'ACTIVE')");
+    private static void seedStudent(Statement st, UUID tenantId, UUID schoolId, UUID studentId, UUID sectionId,
+                                    String name, String admissionNumber) throws SQLException {
+        st.execute("INSERT INTO students (id, tenant_id, school_id, section_id, full_name, admission_number, status) "
+                + "VALUES ('" + studentId + "', '" + tenantId + "', '" + schoolId + "', '" + sectionId + "', '"
+                + name + "', '" + admissionNumber + "', 'ACTIVE')");
     }
 
     private Cookie login(String schoolIdentifier, String email) throws Exception {
@@ -221,6 +239,58 @@ class AttendanceIntegrationTest {
     @Test
     void studentHistoryForAnotherTenantsStudentReturns404() throws Exception {
         mockMvc.perform(get("/api/v1/attendance/student/" + studentB)
+                        .cookie(login(SCHOOL_A, "admin@tenant-a.example")))
+                .andExpect(status().isNotFound());
+    }
+
+    // --- Section roster: GET /api/v1/sections/{id}/students ---------
+
+    @Test
+    void sectionRosterListsThatSectionsStudentsTenantScoped() throws Exception {
+        mockMvc.perform(get("/api/v1/sections/" + sectionA + "/students")
+                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].id").value(studentA.toString()));
+    }
+
+    @Test
+    void sectionRosterForAnotherTenantsSectionReturns404() throws Exception {
+        mockMvc.perform(get("/api/v1/sections/" + sectionB + "/students")
+                        .cookie(login(SCHOOL_A, "admin@tenant-a.example")))
+                .andExpect(status().isNotFound());
+    }
+
+    // --- Section attendance: GET /api/v1/attendance?sectionId=&date= -
+
+    @Test
+    void attendanceBySectionIsEmptyBeforeMarkingThenReflectsMarks() throws Exception {
+        Cookie teacher = login(SCHOOL_A, "teacher@tenant-a.example");
+
+        // Nothing marked yet -> empty, but 200 (partial roster is normal).
+        mockMvc.perform(get("/api/v1/attendance").param("sectionId", sectionA.toString())
+                        .param("date", TODAY).cookie(teacher))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(0)));
+
+        mockMvc.perform(post("/api/v1/attendance").cookie(teacher).contentType("application/json")
+                        .content(markBody(studentA, TODAY, "PRESENT")))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/attendance").param("sectionId", sectionA.toString())
+                        .param("date", TODAY).cookie(teacher))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].studentId").value(studentA.toString()))
+                .andExpect(jsonPath("$.content[0].status").value("PRESENT"));
+    }
+
+    @Test
+    void attendanceForAnotherTenantsSectionReturns404() throws Exception {
+        // Tenant B has an attendance record for studentB/sectionB TODAY (seeded);
+        // tenant A asking by that section id must get 404, not a leak.
+        mockMvc.perform(get("/api/v1/attendance").param("sectionId", sectionB.toString())
+                        .param("date", TODAY)
                         .cookie(login(SCHOOL_A, "admin@tenant-a.example")))
                 .andExpect(status().isNotFound());
     }

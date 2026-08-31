@@ -5,6 +5,7 @@ import com.smsapp.attendance.AttendanceDtos.MarkAttendanceRequest;
 import com.smsapp.attendance.AttendanceService.MarkResult;
 import com.smsapp.user.Roles;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedModel;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -50,13 +52,25 @@ public class AttendanceController {
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(body);
     }
 
-    /** Daily roster: every attendance record for {@code date} in the caller's tenant, paginated. */
+    /**
+     * Attendance records for {@code date} in the caller's tenant. With {@code sectionId}
+     * the result is scoped to that section (the marking roster's current state -- may be
+     * partial or empty); 404 if the section is not in the caller's tenant. Without it,
+     * the whole tenant's roster for the day, paginated.
+     */
     @GetMapping
-    PagedModel<AttendanceResponse> listByDate(
+    PagedModel<AttendanceResponse> list(
+            @RequestParam(required = false) UUID sectionId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @PageableDefault(size = 50) Pageable pageable,
             Authentication authentication) {
-        return new PagedModel<>(attendanceService.listByDate(tenantId(authentication), date, pageable)
+        UUID tenantId = tenantId(authentication);
+        if (sectionId != null) {
+            List<AttendanceResponse> records = attendanceService.listForSectionOnDate(tenantId, sectionId, date)
+                    .stream().map(AttendanceResponse::from).toList();
+            return new PagedModel<>(new PageImpl<>(records));
+        }
+        return new PagedModel<>(attendanceService.listByDate(tenantId, date, pageable)
                 .map(AttendanceResponse::from));
     }
 

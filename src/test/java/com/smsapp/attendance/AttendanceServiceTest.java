@@ -1,5 +1,6 @@
 package com.smsapp.attendance;
 
+import com.smsapp.academics.SectionRepository;
 import com.smsapp.attendance.AttendanceDtos.MarkAttendanceRequest;
 import com.smsapp.attendance.AttendanceService.MarkResult;
 import com.smsapp.common.ApiException;
@@ -32,12 +33,15 @@ class AttendanceServiceTest {
     @Mock
     private StudentRepository studentRepository;
 
+    @Mock
+    private SectionRepository sectionRepository;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
     private final UUID teacherId = UUID.randomUUID();
 
     private AttendanceService service() {
-        return new AttendanceService(attendanceRepository, studentRepository);
+        return new AttendanceService(attendanceRepository, studentRepository, sectionRepository);
     }
 
     private void studentExists() {
@@ -130,5 +134,30 @@ class AttendanceServiceTest {
         assertThatThrownBy(() -> service().studentHistory(tenantId, studentId, org.springframework.data.domain.Pageable.unpaged()))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void listForSectionOnDateReportsAnotherTenantsSectionAs404() {
+        UUID sectionId = UUID.randomUUID();
+        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service().listForSectionOnDate(tenantId, sectionId, LocalDate.now()))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(attendanceRepository, never()).findForSectionOnDate(any(), any(), any());
+    }
+
+    @Test
+    void listForSectionOnDateReturnsTheSectionsRecordsWhenSectionIsInTenant() {
+        UUID sectionId = UUID.randomUUID();
+        AttendanceRecord rec = new AttendanceRecord();
+        rec.setTenantId(tenantId);
+        LocalDate today = LocalDate.now();
+        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(true);
+        when(attendanceRepository.findForSectionOnDate(tenantId, sectionId, today))
+                .thenReturn(java.util.List.of(rec));
+
+        assertThat(service().listForSectionOnDate(tenantId, sectionId, today)).containsExactly(rec);
     }
 }

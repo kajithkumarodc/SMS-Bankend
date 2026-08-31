@@ -1,5 +1,6 @@
 package com.smsapp.attendance;
 
+import com.smsapp.academics.SectionRepository;
 import com.smsapp.attendance.AttendanceDtos.MarkAttendanceRequest;
 import com.smsapp.common.ApiException;
 import com.smsapp.student.StudentRepository;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -17,10 +19,13 @@ public class AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
     private final StudentRepository studentRepository;
+    private final SectionRepository sectionRepository;
 
-    public AttendanceService(AttendanceRepository attendanceRepository, StudentRepository studentRepository) {
+    public AttendanceService(AttendanceRepository attendanceRepository, StudentRepository studentRepository,
+                             SectionRepository sectionRepository) {
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
+        this.sectionRepository = sectionRepository;
     }
 
     /** True when {@code record} was newly created; false when an existing record was updated. */
@@ -65,6 +70,21 @@ public class AttendanceService {
     @Transactional(readOnly = true)
     public Page<AttendanceRecord> listByDate(UUID tenantId, LocalDate date, Pageable pageable) {
         return attendanceRepository.findByTenantIdAndDate(tenantId, date, pageable);
+    }
+
+    /**
+     * Attendance for one section on one date -- the marking roster's current state.
+     * May be partial or empty if the section is not fully marked yet.
+     *
+     * @throws ApiException 404 if the section is not in the caller's tenant
+     *         (another tenant's section must not be observable).
+     */
+    @Transactional(readOnly = true)
+    public List<AttendanceRecord> listForSectionOnDate(UUID tenantId, UUID sectionId, LocalDate date) {
+        if (!sectionRepository.existsByIdAndTenantId(sectionId, tenantId)) {
+            throw new ApiException("Section not found", HttpStatus.NOT_FOUND);
+        }
+        return attendanceRepository.findForSectionOnDate(tenantId, sectionId, date);
     }
 
     /**

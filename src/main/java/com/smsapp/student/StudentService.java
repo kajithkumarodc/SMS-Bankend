@@ -70,9 +70,23 @@ public class StudentService {
         return studentRepository.findByTenantId(tenantId, pageable);
     }
 
-    /** Lists students in one section, still tenant-scoped underneath. */
+    /** Lists students in one section, still tenant-scoped underneath. Used as an optional filter on the list. */
     @Transactional(readOnly = true)
     public Page<Student> listBySection(UUID tenantId, UUID sectionId, Pageable pageable) {
+        return studentRepository.findByTenantIdAndSectionId(tenantId, sectionId, pageable);
+    }
+
+    /**
+     * Lists students in one section for the attendance-marking roster.
+     *
+     * @throws ApiException 404 if the section is not in the caller's tenant
+     *         (another tenant's section must not be observable).
+     */
+    @Transactional(readOnly = true)
+    public Page<Student> listInSection(UUID tenantId, UUID sectionId, Pageable pageable) {
+        if (!sectionRepository.existsByIdAndTenantId(sectionId, tenantId)) {
+            throw new ApiException("Section not found", HttpStatus.NOT_FOUND);
+        }
         return studentRepository.findByTenantIdAndSectionId(tenantId, sectionId, pageable);
     }
 
