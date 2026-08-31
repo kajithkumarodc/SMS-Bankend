@@ -8,6 +8,7 @@ package com.smsapp.user;
 public final class Roles {
 
     public static final String SCHOOL_ADMIN = "SCHOOL_ADMIN";
+    public static final String TEACHER = "TEACHER";
 
     private Roles() {
     }
