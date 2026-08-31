@@ -34,4 +34,15 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, UU
     List<AttendanceRecord> findForSectionOnDate(@Param("tenantId") UUID tenantId,
                                                 @Param("sectionId") UUID sectionId,
                                                 @Param("date") LocalDate date);
+
+    /** Portal dashboard: one student's attendance tallied by status. */
+    @Query("select a.status as status, count(a) as total from AttendanceRecord a "
+            + "where a.tenantId = :tenantId and a.studentId = :studentId group by a.status")
+    List<StatusTally> tallyByStatus(@Param("tenantId") UUID tenantId, @Param("studentId") UUID studentId);
+
+    interface StatusTally {
+        String getStatus();
+
+        long getTotal();
+    }
 }

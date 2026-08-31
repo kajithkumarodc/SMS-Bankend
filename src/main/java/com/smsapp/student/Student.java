@@ -45,6 +45,14 @@ public class Student extends TenantScopedEntity {
     @Column(name = "section_id")
     private UUID sectionId;
 
+    /** The PARENT user account linked as this student's guardian, or null. */
+    @Column(name = "guardian_user_id")
+    private UUID guardianUserId;
+
+    /** This student's own STUDENT-role login, or null if they have none. */
+    @Column(name = "student_user_id")
+    private UUID studentUserId;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

@@ -1,0 +1,82 @@
+package com.smsapp.portal;
+
+import com.smsapp.portal.PortalDtos.AttendanceEntryView;
+import com.smsapp.portal.PortalDtos.StudentView;
+import com.smsapp.user.Roles;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.data.web.PagedModel;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Student and parent self-service views under {@code /api/v1/me}. Ownership is
+ * enforced in {@link PortalService} by the queries themselves; a mismatched id
+ * returns 404, never 403.
+ */
+@RestController
+@RequestMapping("/api/v1/me")
+public class PortalController {
+
+    private final PortalService portalService;
+
+    public PortalController(PortalService portalService) {
+        this.portalService = portalService;
+    }
+
+    /** STUDENT: their own student record. 404 if no record is linked yet. */
+    @GetMapping("/student")
+    @PreAuthorize(Roles.HAS_STUDENT)
+    public StudentView ownStudent(Authentication authentication) {
+        return StudentView.from(portalService.ownStudent(tenantId(authentication), userId(authentication)));
+    }
+
+    /** STUDENT: their own attendance history only. */
+    @GetMapping("/student/attendance")
+    @PreAuthorize(Roles.HAS_STUDENT)
+    public PagedModel<AttendanceEntryView> ownAttendance(@PageableDefault(size = 50) Pageable pageable,
+                                                         Authentication authentication) {
+        return new PagedModel<>(portalService
+                .ownAttendance(tenantId(authentication), userId(authentication), pageable)
+                .map(AttendanceEntryView::from));
+    }
+
+    /** PARENT: every student linked to this account (supports multiple children; may be empty). */
+    @GetMapping("/children")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public List<StudentView> children(Authentication authentication) {
+        return portalService.children(tenantId(authentication), userId(authentication))
+                .stream().map(StudentView::from).toList();
+    }
+
+    /** PARENT: one of their own children's attendance. 404 if the student is not this parent's child. */
+    @GetMapping("/children/{studentId}/attendance")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public PagedModel<AttendanceEntryView> childAttendance(@PathVariable UUID studentId,
+                                                           @PageableDefault(size = 50) Pageable pageable,
+                                                           Authentication authentication) {
+        return new PagedModel<>(portalService
+                .childAttendance(tenantId(authentication), userId(authentication), studentId, pageable)
+                .map(AttendanceEntryView::from));
+    }
+
+    private static UUID tenantId(Authentication authentication) {
+        return UUID.fromString(jwt(authentication).getClaimAsString("tenant_id"));
+    }
+
+    private static UUID userId(Authentication authentication) {
+        return UUID.fromString(jwt(authentication).getSubject());
+    }
+
+    private static Jwt jwt(Authentication authentication) {
+        return (Jwt) authentication.getPrincipal();
+    }
+}
