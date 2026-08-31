@@ -32,4 +32,21 @@ final class AcademicsDtos {
 
     record ClassResponse(UUID id, UUID schoolId, String name, List<SectionResponse> sections) {
     }
+
+    record CreateSubjectRequest(
+            @NotNull UUID schoolId,
+            @NotBlank @Size(max = 100) String name) {
+    }
+
+    /** {@code classId} comes from the path; {@code subjectId} identifies the subject to assign. */
+    record AssignSubjectRequest(
+            @NotNull UUID subjectId) {
+    }
+
+    record SubjectResponse(UUID id, UUID schoolId, String name) {
+
+        static SubjectResponse from(Subject subject) {
+            return new SubjectResponse(subject.getId(), subject.getSchoolId(), subject.getName());
+        }
+    }
 }

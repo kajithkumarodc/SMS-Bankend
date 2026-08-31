@@ -15,6 +15,8 @@ public final class AuditActions {
     public static final String SECTION_ASSIGNED = "SECTION_ASSIGNED";
     public static final String CLASS_CREATED = "CLASS_CREATED";
     public static final String SECTION_CREATED = "SECTION_CREATED";
+    public static final String SUBJECT_CREATED = "SUBJECT_CREATED";
+    public static final String CLASS_SUBJECT_ASSIGNED = "CLASS_SUBJECT_ASSIGNED";
     public static final String ATTENDANCE_MARKED = "ATTENDANCE_MARKED";
     public static final String ATTENDANCE_CHANGED = "ATTENDANCE_CHANGED";
 
@@ -23,6 +25,8 @@ public final class AuditActions {
     public static final String STUDENT = "STUDENT";
     public static final String CLASS = "CLASS";
     public static final String SECTION = "SECTION";
+    public static final String SUBJECT = "SUBJECT";
+    public static final String CLASS_SUBJECT = "CLASS_SUBJECT";
     public static final String ATTENDANCE_RECORD = "ATTENDANCE_RECORD";
 
     private AuditActions() {
