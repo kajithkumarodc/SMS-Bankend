@@ -88,7 +88,7 @@ class PortalIntegrationTest {
              Statement st = connection.createStatement()) {
 
             st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students, "
-                    + "attendance_records, sections, classes, audit_log CASCADE");
+                    + "attendance_records, sections, classes, subjects, exams, exam_marks, audit_log CASCADE");
 
             seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolA);
             seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolB);
@@ -121,6 +121,28 @@ class PortalIntegrationTest {
             seedAttendance(st, tenantA, s1Id, "2026-08-25", "ABSENT", su1Id);
             seedAttendance(st, tenantA, s2Id, "2026-08-24", "PRESENT", su2Id);
             seedAttendance(st, tenantB, s3Id, "2026-08-24", "LATE", su3Id);
+
+            // Exams (tenant A): one class + subject, two exams. S1 has marks in both,
+            // S2 in one. Tenant B: one exam with a mark for S3.
+            UUID classA = UUID.randomUUID();
+            UUID subjectA = UUID.randomUUID();
+            seedClass(st, tenantA, schoolA, classA, "Grade 5");
+            seedSubject(st, tenantA, schoolA, subjectA, "Mathematics");
+            UUID examA1 = UUID.randomUUID();
+            UUID examA2 = UUID.randomUUID();
+            seedExam(st, tenantA, examA1, classA, subjectA, "Unit Test 1", "2026-08-10");
+            seedExam(st, tenantA, examA2, classA, subjectA, "Unit Test 2", "2026-08-20");
+            seedMark(st, tenantA, examA1, s1Id, "88");
+            seedMark(st, tenantA, examA2, s1Id, "40");
+            seedMark(st, tenantA, examA1, s2Id, "55");
+
+            UUID classB = UUID.randomUUID();
+            UUID subjectB = UUID.randomUUID();
+            seedClass(st, tenantB, schoolB, classB, "Grade 5");
+            seedSubject(st, tenantB, schoolB, subjectB, "Mathematics");
+            UUID examB1 = UUID.randomUUID();
+            seedExam(st, tenantB, examB1, classB, subjectB, "Unit Test 1", "2026-08-10");
+            seedMark(st, tenantB, examB1, s3Id, "70");
         }
     }
 
@@ -163,6 +185,31 @@ class PortalIntegrationTest {
         st.execute("INSERT INTO attendance_records (id, tenant_id, student_id, date, status, marked_by) VALUES ('"
                 + UUID.randomUUID() + "', '" + tenantId + "', '" + studentId + "', '" + date + "', '" + attStatus
                 + "', '" + markedBy + "')");
+    }
+
+    private static void seedClass(Statement st, UUID tenantId, UUID schoolId, UUID classId, String name)
+            throws SQLException {
+        st.execute("INSERT INTO classes (id, tenant_id, school_id, name) VALUES ('"
+                + classId + "', '" + tenantId + "', '" + schoolId + "', '" + name + "')");
+    }
+
+    private static void seedSubject(Statement st, UUID tenantId, UUID schoolId, UUID subjectId, String name)
+            throws SQLException {
+        st.execute("INSERT INTO subjects (id, tenant_id, school_id, name) VALUES ('"
+                + subjectId + "', '" + tenantId + "', '" + schoolId + "', '" + name + "')");
+    }
+
+    private static void seedExam(Statement st, UUID tenantId, UUID examId, UUID classId, UUID subjectId, String name,
+                                 String examDate) throws SQLException {
+        st.execute("INSERT INTO exams (id, tenant_id, class_id, subject_id, name, exam_date, max_marks) VALUES ('"
+                + examId + "', '" + tenantId + "', '" + classId + "', '" + subjectId + "', '" + name + "', '"
+                + examDate + "', 100)");
+    }
+
+    private static void seedMark(Statement st, UUID tenantId, UUID examId, UUID studentId, String marks)
+            throws SQLException {
+        st.execute("INSERT INTO exam_marks (id, tenant_id, exam_id, student_id, marks_obtained) VALUES ('"
+                + UUID.randomUUID() + "', '" + tenantId + "', '" + examId + "', '" + studentId + "', " + marks + ")");
     }
 
     private Cookie login(String schoolIdentifier, String email) throws Exception {
@@ -262,6 +309,51 @@ class PortalIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/me/student").cookie(login(SCHOOL_A, GU1)))
                 .andExpect(status().isForbidden());
+    }
+
+    // --- Exam results: ownership on top of tenant isolation --------
+
+    @Test
+    void studentSeesOnlyTheirOwnExamResults() throws Exception {
+        JsonNode su1Results = json("/api/v1/me/student/results", login(SCHOOL_A, SU1));
+        assertThat(su1Results).hasSize(2); // marks in both exams
+
+        JsonNode su2Results = json("/api/v1/me/student/results", login(SCHOOL_A, SU2));
+        assertThat(su2Results).hasSize(1);
+        assertThat(su2Results.get(0).get("marksObtained").asDouble()).isEqualTo(55.0);
+    }
+
+    @Test
+    void studentCannotUseTheStaffResultsEndpointEvenForTheirOwnId() throws Exception {
+        // SU1 IS S1 -- still forbidden: the staff endpoint is SCHOOL_ADMIN/TEACHER only.
+        mockMvc.perform(get("/api/v1/exams/student/" + s1Id).cookie(login(SCHOOL_A, SU1)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void parentCanReadTheirOwnChildsExamResults() throws Exception {
+        JsonNode results = json("/api/v1/me/children/" + s1Id + "/results", login(SCHOOL_A, GU1));
+        assertThat(results).hasSize(2);
+    }
+
+    @Test
+    void parentCannotReadANonChildsExamResultsSameTenant() throws Exception {
+        // S2 (Bala) belongs to GU2, not GU1.
+        mockMvc.perform(get("/api/v1/me/children/" + s2Id + "/results").cookie(login(SCHOOL_A, GU1)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void parentCannotUseTheStaffResultsEndpoint() throws Exception {
+        mockMvc.perform(get("/api/v1/exams/student/" + s1Id).cookie(login(SCHOOL_A, GU1)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void examResultsTenantIsolationStillHolds() throws Exception {
+        // Tenant B parent cannot reach a Tenant A student's results by exact id.
+        mockMvc.perform(get("/api/v1/me/children/" + s1Id + "/results").cookie(login(SCHOOL_B, GU3)))
+                .andExpect(status().isNotFound());
     }
 
     // --- Dashboard integration -----------------------------------

@@ -3,6 +3,8 @@ package com.smsapp.portal;
 import com.smsapp.attendance.AttendanceRecord;
 import com.smsapp.attendance.AttendanceService;
 import com.smsapp.common.ApiException;
+import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
+import com.smsapp.exam.ExamService;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
 import org.junit.jupiter.api.Test;
@@ -34,13 +36,16 @@ class PortalServiceTest {
     @Mock
     private AttendanceService attendanceService;
 
+    @Mock
+    private ExamService examService;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID studentUserId = UUID.randomUUID();
     private final UUID guardianUserId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
 
     private PortalService service() {
-        return new PortalService(studentRepository, attendanceService);
+        return new PortalService(studentRepository, attendanceService, examService);
     }
 
     private Student linkedStudent() {
@@ -116,5 +121,51 @@ class PortalServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
         verify(attendanceService, never()).studentHistory(any(), any(), any());
+    }
+
+    @Test
+    void ownResultsIsScopedToTheCallersOwnStudentId() {
+        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
+                .thenReturn(Optional.of(linkedStudent()));
+        when(examService.studentResults(tenantId, studentId)).thenReturn(List.of());
+
+        service().ownResults(tenantId, studentUserId);
+
+        verify(examService).studentResults(tenantId, studentId);
+    }
+
+    @Test
+    void ownResultsIs404WhenNoRecordIsLinked() {
+        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().ownResults(tenantId, studentUserId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(examService, never()).studentResults(any(), any());
+    }
+
+    @Test
+    void childResultsIsAllowedForTheParentsOwnChild() {
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.of(linkedStudent()));
+        when(examService.studentResults(tenantId, studentId)).thenReturn(List.<StudentExamResult>of());
+
+        service().childResults(tenantId, guardianUserId, studentId);
+
+        verify(examService).studentResults(tenantId, studentId);
+    }
+
+    @Test
+    void childResultsIs404WhenTheStudentIsNotThisParentsChild() {
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().childResults(tenantId, guardianUserId, studentId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(examService, never()).studentResults(any(), any());
     }
 }

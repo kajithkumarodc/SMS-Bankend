@@ -1,8 +1,10 @@
 package com.smsapp.portal;
 
 import com.smsapp.attendance.AttendanceRecord;
+import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.student.Student;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -39,6 +41,21 @@ final class PortalDtos {
 
         static AttendanceEntryView from(AttendanceRecord entry) {
             return new AttendanceEntryView(entry.getDate(), entry.getStatus());
+        }
+    }
+
+    /** One exam result row for the portal. Same shape as the staff endpoint's response. */
+    record ExamResultView(
+            UUID examId,
+            String examName,
+            LocalDate examDate,
+            UUID subjectId,
+            BigDecimal maxMarks,
+            BigDecimal marksObtained) {
+
+        static ExamResultView from(StudentExamResult result) {
+            return new ExamResultView(result.getExamId(), result.getExamName(), result.getExamDate(),
+                    result.getSubjectId(), result.getMaxMarks(), result.getMarksObtained());
         }
     }
 }

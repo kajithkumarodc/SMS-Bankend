@@ -75,8 +75,14 @@ public class ExamController {
                 .map(ExamMarkResponse::from).toList();
     }
 
-    /** One student's results across all exams. 404 if the student is not in the caller's tenant. */
+    /**
+     * One student's results across all exams, for staff use. SCHOOL_ADMIN or TEACHER only --
+     * a STUDENT or PARENT must use {@code /api/v1/me/student/results} or
+     * {@code /api/v1/me/children/{studentId}/results}, which enforce ownership. 404 if the
+     * student is not in the caller's tenant.
+     */
     @GetMapping("/student/{studentId}")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     List<StudentExamResultResponse> studentResults(@PathVariable UUID studentId, Authentication authentication) {
         return examService.studentResults(tenantId(authentication), studentId).stream()
                 .map(StudentExamResultResponse::from).toList();

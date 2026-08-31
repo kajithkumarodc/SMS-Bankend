@@ -1,6 +1,7 @@
 package com.smsapp.portal;
 
 import com.smsapp.portal.PortalDtos.AttendanceEntryView;
+import com.smsapp.portal.PortalDtos.ExamResultView;
 import com.smsapp.portal.PortalDtos.StudentView;
 import com.smsapp.user.Roles;
 import org.springframework.data.domain.Pageable;
@@ -66,6 +67,22 @@ public class PortalController {
         return new PagedModel<>(portalService
                 .childAttendance(tenantId(authentication), userId(authentication), studentId, pageable)
                 .map(AttendanceEntryView::from));
+    }
+
+    /** STUDENT: their own exam results only. 404 if no record is linked yet. */
+    @GetMapping("/student/results")
+    @PreAuthorize(Roles.HAS_STUDENT)
+    public List<ExamResultView> ownResults(Authentication authentication) {
+        return portalService.ownResults(tenantId(authentication), userId(authentication))
+                .stream().map(ExamResultView::from).toList();
+    }
+
+    /** PARENT: one of their own children's exam results. 404 if the student is not this parent's child. */
+    @GetMapping("/children/{studentId}/results")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public List<ExamResultView> childResults(@PathVariable UUID studentId, Authentication authentication) {
+        return portalService.childResults(tenantId(authentication), userId(authentication), studentId)
+                .stream().map(ExamResultView::from).toList();
     }
 
     private static UUID tenantId(Authentication authentication) {

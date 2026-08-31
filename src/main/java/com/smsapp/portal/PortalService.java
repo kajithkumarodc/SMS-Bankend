@@ -3,6 +3,8 @@ package com.smsapp.portal;
 import com.smsapp.attendance.AttendanceRecord;
 import com.smsapp.attendance.AttendanceService;
 import com.smsapp.common.ApiException;
+import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
+import com.smsapp.exam.ExamService;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
 import org.springframework.data.domain.Page;
@@ -25,10 +27,13 @@ public class PortalService {
 
     private final StudentRepository studentRepository;
     private final AttendanceService attendanceService;
+    private final ExamService examService;
 
-    public PortalService(StudentRepository studentRepository, AttendanceService attendanceService) {
+    public PortalService(StudentRepository studentRepository, AttendanceService attendanceService,
+                         ExamService examService) {
         this.studentRepository = studentRepository;
         this.attendanceService = attendanceService;
+        this.examService = examService;
     }
 
     /**
@@ -66,5 +71,23 @@ public class PortalService {
         Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
                 .orElseThrow(() -> new ApiException("Child not found", HttpStatus.NOT_FOUND));
         return attendanceService.studentHistory(tenantId, child.getId(), pageable);
+    }
+
+    /** The caller's own exam results, strictly scoped to their own student id. */
+    @Transactional(readOnly = true)
+    public List<StudentExamResult> ownResults(UUID tenantId, UUID studentUserId) {
+        Student self = ownStudent(tenantId, studentUserId);
+        return examService.studentResults(tenantId, self.getId());
+    }
+
+    /**
+     * A parent's own child's exam results. The {@code studentId} from the URL is only
+     * honoured if that student's {@code guardian_user_id} is this parent -- otherwise 404.
+     */
+    @Transactional(readOnly = true)
+    public List<StudentExamResult> childResults(UUID tenantId, UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+                .orElseThrow(() -> new ApiException("Child not found", HttpStatus.NOT_FOUND));
+        return examService.studentResults(tenantId, child.getId());
     }
 }
