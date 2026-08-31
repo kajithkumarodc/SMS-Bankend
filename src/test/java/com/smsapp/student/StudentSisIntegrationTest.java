@@ -21,7 +21,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -49,6 +51,7 @@ class StudentSisIntegrationTest {
     private UUID tenantB;
     private UUID schoolA;
     private UUID schoolB;
+    private UUID studentA;
     private UUID studentB;
 
     @DynamicPropertySource
@@ -63,6 +66,7 @@ class StudentSisIntegrationTest {
         tenantB = UUID.randomUUID();
         schoolA = UUID.randomUUID();
         schoolB = UUID.randomUUID();
+        studentA = UUID.randomUUID();
         studentB = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
@@ -85,8 +89,8 @@ class StudentSisIntegrationTest {
             // One pre-existing student in each tenant. Tenant A uses "ADM-A-1";
             // tenant B uses "ADM-100" -- tenant A can then reuse "ADM-100" because
             // uniqueness is per-tenant.
-            st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status) VALUES ('"
-                    + UUID.randomUUID() + "', '" + tenantA + "', '" + schoolA + "', 'Existing A', 'ADM-A-1', 'ACTIVE')");
+            st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, guardian_name, admission_number, status) VALUES ('"
+                    + studentA + "', '" + tenantA + "', '" + schoolA + "', 'Existing A', 'Old Guardian', 'ADM-A-1', 'ACTIVE')");
             st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status) VALUES ('"
                     + studentB + "', '" + tenantB + "', '" + schoolB + "', 'Existing B', 'ADM-100', 'ACTIVE')");
         }
@@ -222,5 +226,81 @@ class StudentSisIntegrationTest {
                         .contentType("application/json")
                         .content("{\"schoolId\":\"" + schoolA + "\",\"fullName\":\"  \"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // --- Edit (PUT) -----------------------------------------------------
+
+    private static final String UPDATE_BODY = "{\"fullName\":\"Existing A (renamed)\","
+            + "\"guardianName\":\"New Guardian\",\"guardianContact\":\"+1 222 333\",\"status\":\"ACTIVE\"}";
+
+    @Test
+    void schoolAdminCanEditStudentAndAdmissionNumberStaysImmutable() throws Exception {
+        mockMvc.perform(put("/api/v1/students/" + studentA)
+                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
+                        .contentType("application/json")
+                        // admissionNumber in the body is ignored -- the DTO has no such field
+                        .content("{\"fullName\":\"Existing A (renamed)\",\"guardianName\":\"New Guardian\","
+                                + "\"guardianContact\":\"+1 222 333\",\"status\":\"ACTIVE\",\"admissionNumber\":\"HACKED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Existing A (renamed)"))
+                .andExpect(jsonPath("$.guardianName").value("New Guardian"))
+                .andExpect(jsonPath("$.admissionNumber").value("ADM-A-1"));
+
+        mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(SCHOOL_A, "admin@tenant-a.example")))
+                .andExpect(jsonPath("$.fullName").value("Existing A (renamed)"))
+                .andExpect(jsonPath("$.admissionNumber").value("ADM-A-1"));
+    }
+
+    @Test
+    void teacherCannotEditStudentAndGets403() throws Exception {
+        mockMvc.perform(put("/api/v1/students/" + studentA)
+                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example"))
+                        .contentType("application/json")
+                        .content(UPDATE_BODY))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void editingAnotherTenantsStudentReturns404() throws Exception {
+        mockMvc.perform(put("/api/v1/students/" + studentB)
+                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
+                        .contentType("application/json")
+                        .content(UPDATE_BODY))
+                .andExpect(status().isNotFound());
+
+        // Tenant B's record is untouched.
+        mockMvc.perform(get("/api/v1/students/" + studentB).cookie(login(SCHOOL_B, "admin@tenant-b.example")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Existing B"));
+    }
+
+    // --- Deactivate (PATCH .../status) --------------------------------
+
+    @Test
+    void deactivatingAStudentSetsStatusInactiveAndShowsInTheList() throws Exception {
+        mockMvc.perform(patch("/api/v1/students/" + studentA + "/status")
+                        .cookie(login(SCHOOL_A, "admin@tenant-a.example"))
+                        .contentType("application/json")
+                        .content("{\"status\":\"INACTIVE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("INACTIVE"));
+
+        var list = mockMvc.perform(get("/api/v1/students").cookie(login(SCHOOL_A, "admin@tenant-a.example")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(studentA.toString()))
+                .andExpect(jsonPath("$.content[0].status").value("INACTIVE"))
+                .andReturn();
+        // Soft delete: the row is still there, just INACTIVE.
+        assertThat(JSON.readTree(list.getResponse().getContentAsString()).get("content")).hasSize(1);
+    }
+
+    @Test
+    void teacherCannotDeactivateAStudentAndGets403() throws Exception {
+        mockMvc.perform(patch("/api/v1/students/" + studentA + "/status")
+                        .cookie(login(SCHOOL_A, "teacher@tenant-a.example"))
+                        .contentType("application/json")
+                        .content("{\"status\":\"INACTIVE\"}"))
+                .andExpect(status().isForbidden());
     }
 }

@@ -3,6 +3,7 @@ package com.smsapp.student;
 import com.smsapp.common.ApiException;
 import com.smsapp.school.SchoolRepository;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
+import com.smsapp.student.StudentDtos.UpdateStudentRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -74,6 +75,64 @@ public class StudentService {
     public Student get(UUID tenantId, UUID id) {
         return studentRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ApiException("Student not found", HttpStatus.NOT_FOUND));
+    }
+
+    /**
+     * Updates a student's editable fields for a SCHOOL_ADMIN.
+     *
+     * <p>{@code admissionNumber} is intentionally NOT editable here: it is the
+     * tenant-unique business key (UNIQUE(tenant_id, admission_number) in V5), so
+     * allowing a change would re-open the duplicate-check / 409 path and risk
+     * rewriting a student's identity. Admission-number corrections, if ever
+     * needed, should be a separate, deliberate operation.
+     *
+     * @throws ApiException 404 if no such student in the caller's tenant (cross-tenant
+     *         records are reported as missing, same as {@link #get}), 400 if {@code status}
+     *         is not one of ACTIVE / INACTIVE.
+     */
+    @Transactional
+    public Student update(UUID tenantId, UUID id, UpdateStudentRequest request) {
+        Student student = requireStudent(tenantId, id);
+        student.setFullName(request.fullName().trim());
+        student.setGuardianName(blankToNull(request.guardianName()));
+        student.setGuardianContact(blankToNull(request.guardianContact()));
+        student.setStatus(requireValidStatus(request.status()));
+        return studentRepository.save(student);
+    }
+
+    /**
+     * Soft delete / reactivate: sets {@code status} without removing the row, so a
+     * student who has left stays in the historical record (plan section 2).
+     *
+     * @throws ApiException 404 if no such student in the caller's tenant, 400 if
+     *         {@code status} is not one of ACTIVE / INACTIVE.
+     */
+    @Transactional
+    public Student changeStatus(UUID tenantId, UUID id, String status) {
+        Student student = requireStudent(tenantId, id);
+        student.setStatus(requireValidStatus(status));
+        return studentRepository.save(student);
+    }
+
+    private Student requireStudent(UUID tenantId, UUID id) {
+        return studentRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new ApiException("Student not found", HttpStatus.NOT_FOUND));
+    }
+
+    private static String requireValidStatus(String raw) {
+        String status = StudentStatus.normalizeOrNull(raw);
+        if (status == null) {
+            throw new ApiException("Status must be ACTIVE or INACTIVE", HttpStatus.BAD_REQUEST);
+        }
+        return status;
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private static ApiException admissionConflict(String admissionNumber) {

@@ -3,6 +3,7 @@ package com.smsapp.student;
 import com.smsapp.common.ApiException;
 import com.smsapp.school.SchoolRepository;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
+import com.smsapp.student.StudentDtos.UpdateStudentRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -101,6 +102,84 @@ class StudentServiceTest {
         when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().get(tenantId, studentId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    private Student existing(UUID studentId) {
+        Student student = new Student();
+        student.setId(studentId);
+        student.setTenantId(tenantId);
+        student.setSchoolId(schoolId);
+        student.setFullName("Old Name");
+        student.setAdmissionNumber("ADM-KEEP");
+        student.setGuardianName("Old Guardian");
+        student.setStatus(StudentStatus.ACTIVE);
+        return student;
+    }
+
+    @Test
+    void updateChangesEditableFieldsButKeepsAdmissionNumber() {
+        UUID studentId = UUID.randomUUID();
+        Student student = existing(studentId);
+        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
+        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Student result = service().update(tenantId, studentId,
+                new UpdateStudentRequest("  New Name  ", "  New Guardian  ", "  ", StudentStatus.INACTIVE));
+
+        assertThat(result.getFullName()).isEqualTo("New Name");
+        assertThat(result.getGuardianName()).isEqualTo("New Guardian");
+        assertThat(result.getGuardianContact()).isNull();
+        assertThat(result.getStatus()).isEqualTo(StudentStatus.INACTIVE);
+        assertThat(result.getAdmissionNumber()).isEqualTo("ADM-KEEP");
+    }
+
+    @Test
+    void updateReportsMissingStudentAs404() {
+        UUID studentId = UUID.randomUUID();
+        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().update(tenantId, studentId,
+                new UpdateStudentRequest("Name", null, null, StudentStatus.ACTIVE)))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(studentRepository, never()).save(any());
+    }
+
+    @Test
+    void updateRejectsUnknownStatusWith400() {
+        UUID studentId = UUID.randomUUID();
+        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(existing(studentId)));
+
+        assertThatThrownBy(() -> service().update(tenantId, studentId,
+                new UpdateStudentRequest("Name", null, null, "GRADUATED")))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(studentRepository, never()).save(any());
+    }
+
+    @Test
+    void changeStatusDeactivatesWithoutDeleting() {
+        UUID studentId = UUID.randomUUID();
+        Student student = existing(studentId);
+        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
+        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Student result = service().changeStatus(tenantId, studentId, "inactive");
+
+        assertThat(result.getStatus()).isEqualTo(StudentStatus.INACTIVE);
+        verify(studentRepository, never()).delete(any());
+    }
+
+    @Test
+    void changeStatusReportsMissingStudentAs404() {
+        UUID studentId = UUID.randomUUID();
+        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().changeStatus(tenantId, studentId, StudentStatus.INACTIVE))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }

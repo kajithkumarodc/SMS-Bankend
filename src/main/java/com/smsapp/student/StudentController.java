@@ -1,7 +1,9 @@
 package com.smsapp.student;
 
+import com.smsapp.student.StudentDtos.ChangeStudentStatusRequest;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
 import com.smsapp.student.StudentDtos.StudentResponse;
+import com.smsapp.student.StudentDtos.UpdateStudentRequest;
 import com.smsapp.user.Roles;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -12,8 +14,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,6 +57,31 @@ public class StudentController {
     @GetMapping("/{id}")
     StudentResponse get(@PathVariable UUID id, Authentication authentication) {
         return StudentResponse.from(studentService.get(tenantId(authentication), id));
+    }
+
+    /**
+     * Updates a student's editable fields. SCHOOL_ADMIN only; a TEACHER gets 403.
+     * Cross-tenant ids get 404, same as {@link #get}. {@code admissionNumber} is
+     * not editable (see {@link StudentService#update}).
+     */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    public StudentResponse update(@PathVariable UUID id,
+                                  @Valid @RequestBody UpdateStudentRequest request,
+                                  Authentication authentication) {
+        return StudentResponse.from(studentService.update(tenantId(authentication), id, request));
+    }
+
+    /**
+     * Deactivate (soft delete) or reactivate a student. SCHOOL_ADMIN only; a TEACHER
+     * gets 403. No row is deleted -- the student stays in the historical record.
+     */
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('" + Roles.SCHOOL_ADMIN + "')")
+    public StudentResponse changeStatus(@PathVariable UUID id,
+                                        @Valid @RequestBody ChangeStudentStatusRequest request,
+                                        Authentication authentication) {
+        return StudentResponse.from(studentService.changeStatus(tenantId(authentication), id, request.status()));
     }
 
     private static UUID tenantId(Authentication authentication) {

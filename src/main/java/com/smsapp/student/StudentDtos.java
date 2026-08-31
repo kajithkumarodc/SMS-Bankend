@@ -24,6 +24,22 @@ final class StudentDtos {
             @Size(max = 50) String guardianContact) {
     }
 
+    /**
+     * Editable fields on an existing student. {@code admissionNumber} is deliberately
+     * absent -- see {@link StudentService#update}.
+     */
+    record UpdateStudentRequest(
+            @NotBlank @Size(max = 200) String fullName,
+            @Size(max = 200) String guardianName,
+            @Size(max = 50) String guardianContact,
+            @NotBlank String status) {
+    }
+
+    /** Body for {@code PATCH /api/v1/students/{id}/status} -- the soft-delete / reactivate toggle. */
+    record ChangeStudentStatusRequest(
+            @NotBlank String status) {
+    }
+
     record StudentResponse(
             UUID id,
             UUID schoolId,
