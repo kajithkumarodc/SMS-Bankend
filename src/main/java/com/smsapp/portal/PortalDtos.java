@@ -2,10 +2,12 @@ package com.smsapp.portal;
 
 import com.smsapp.attendance.AttendanceRecord;
 import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
+import com.smsapp.fee.Invoice;
 import com.smsapp.student.Student;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /** Curated self-service views for the student and parent portals. Internal link ids are never exposed. */
@@ -41,6 +43,27 @@ final class PortalDtos {
 
         static AttendanceEntryView from(AttendanceRecord entry) {
             return new AttendanceEntryView(entry.getDate(), entry.getStatus());
+        }
+    }
+
+    /**
+     * One invoice row for the parent portal. Carries the Razorpay order id (so the
+     * portal can resume a checkout) but never any raw payment data (plan section 7.2a).
+     */
+    record InvoiceView(
+            UUID id,
+            UUID studentId,
+            UUID feeStructureId,
+            BigDecimal amount,
+            String status,
+            String razorpayOrderId,
+            OffsetDateTime createdAt,
+            OffsetDateTime paidAt) {
+
+        static InvoiceView from(Invoice invoice) {
+            return new InvoiceView(invoice.getId(), invoice.getStudentId(), invoice.getFeeStructureId(),
+                    invoice.getAmount(), invoice.getStatus(), invoice.getRazorpayOrderId(),
+                    invoice.getCreatedAt(), invoice.getPaidAt());
         }
     }
 

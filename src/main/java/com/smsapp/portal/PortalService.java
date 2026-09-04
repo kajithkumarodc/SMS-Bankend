@@ -5,6 +5,8 @@ import com.smsapp.attendance.AttendanceService;
 import com.smsapp.common.ApiException;
 import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.exam.ExamService;
+import com.smsapp.fee.Invoice;
+import com.smsapp.fee.InvoiceRepository;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
 import org.springframework.data.domain.Page;
@@ -25,15 +27,19 @@ import java.util.UUID;
 @Service
 public class PortalService {
 
+    private static final String CHILD_NOT_FOUND = "Child not found";
+
     private final StudentRepository studentRepository;
     private final AttendanceService attendanceService;
     private final ExamService examService;
+    private final InvoiceRepository invoiceRepository;
 
     public PortalService(StudentRepository studentRepository, AttendanceService attendanceService,
-                         ExamService examService) {
+                         ExamService examService, InvoiceRepository invoiceRepository) {
         this.studentRepository = studentRepository;
         this.attendanceService = attendanceService;
         this.examService = examService;
+        this.invoiceRepository = invoiceRepository;
     }
 
     /**
@@ -69,7 +75,7 @@ public class PortalService {
     public Page<AttendanceRecord> childAttendance(UUID tenantId, UUID guardianUserId, UUID studentId,
                                                  Pageable pageable) {
         Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
-                .orElseThrow(() -> new ApiException("Child not found", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
         return attendanceService.studentHistory(tenantId, child.getId(), pageable);
     }
 
@@ -87,7 +93,19 @@ public class PortalService {
     @Transactional(readOnly = true)
     public List<StudentExamResult> childResults(UUID tenantId, UUID guardianUserId, UUID studentId) {
         Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
-                .orElseThrow(() -> new ApiException("Child not found", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
         return examService.studentResults(tenantId, child.getId());
+    }
+
+    /**
+     * A parent's own child's invoices (fee dues). The {@code studentId} from the URL is
+     * only honoured if that student's {@code guardian_user_id} is this parent -- otherwise
+     * 404, so it never leaks that another parent's / another tenant's student exists.
+     */
+    @Transactional(readOnly = true)
+    public List<Invoice> childInvoices(UUID tenantId, UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+                .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
+        return invoiceRepository.findByTenantIdAndStudentIdOrderByCreatedAtDesc(tenantId, child.getId());
     }
 }

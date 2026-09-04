@@ -22,6 +22,10 @@ public final class AuditActions {
     public static final String EXAM_CREATED = "EXAM_CREATED";
     public static final String EXAM_MARK_RECORDED = "EXAM_MARK_RECORDED";
     public static final String EXAM_MARK_CHANGED = "EXAM_MARK_CHANGED";
+    public static final String FEE_STRUCTURE_CREATED = "FEE_STRUCTURE_CREATED";
+    public static final String INVOICE_CREATED = "INVOICE_CREATED";
+    public static final String INVOICE_CHECKOUT_STARTED = "INVOICE_CHECKOUT_STARTED";
+    public static final String INVOICE_PAID = "INVOICE_PAID";
 
     // entity types
     public static final String USER = "USER";
@@ -33,6 +37,8 @@ public final class AuditActions {
     public static final String ATTENDANCE_RECORD = "ATTENDANCE_RECORD";
     public static final String EXAM = "EXAM";
     public static final String EXAM_MARK = "EXAM_MARK";
+    public static final String FEE_STRUCTURE = "FEE_STRUCTURE";
+    public static final String INVOICE = "INVOICE";
 
     private AuditActions() {
     }

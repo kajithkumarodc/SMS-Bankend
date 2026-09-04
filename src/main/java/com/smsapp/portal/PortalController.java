@@ -2,6 +2,7 @@ package com.smsapp.portal;
 
 import com.smsapp.portal.PortalDtos.AttendanceEntryView;
 import com.smsapp.portal.PortalDtos.ExamResultView;
+import com.smsapp.portal.PortalDtos.InvoiceView;
 import com.smsapp.portal.PortalDtos.StudentView;
 import com.smsapp.user.Roles;
 import org.springframework.data.domain.Pageable;
@@ -83,6 +84,14 @@ public class PortalController {
     public List<ExamResultView> childResults(@PathVariable UUID studentId, Authentication authentication) {
         return portalService.childResults(tenantId(authentication), userId(authentication), studentId)
                 .stream().map(ExamResultView::from).toList();
+    }
+
+    /** PARENT: one of their own children's invoices (fee dues). 404 if the student is not this parent's child. */
+    @GetMapping("/children/{studentId}/invoices")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public List<InvoiceView> childInvoices(@PathVariable UUID studentId, Authentication authentication) {
+        return portalService.childInvoices(tenantId(authentication), userId(authentication), studentId)
+                .stream().map(InvoiceView::from).toList();
     }
 
     private static UUID tenantId(Authentication authentication) {

@@ -5,6 +5,8 @@ import com.smsapp.attendance.AttendanceService;
 import com.smsapp.common.ApiException;
 import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.exam.ExamService;
+import com.smsapp.fee.Invoice;
+import com.smsapp.fee.InvoiceRepository;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
 import org.junit.jupiter.api.Test;
@@ -39,13 +41,16 @@ class PortalServiceTest {
     @Mock
     private ExamService examService;
 
+    @Mock
+    private InvoiceRepository invoiceRepository;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID studentUserId = UUID.randomUUID();
     private final UUID guardianUserId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
 
     private PortalService service() {
-        return new PortalService(studentRepository, attendanceService, examService);
+        return new PortalService(studentRepository, attendanceService, examService, invoiceRepository);
     }
 
     private Student linkedStudent() {
@@ -167,5 +172,29 @@ class PortalServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
         verify(examService, never()).studentResults(any(), any());
+    }
+
+    @Test
+    void childInvoicesIsAllowedForTheParentsOwnChild() {
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.of(linkedStudent()));
+        when(invoiceRepository.findByTenantIdAndStudentIdOrderByCreatedAtDesc(tenantId, studentId))
+                .thenReturn(List.<Invoice>of());
+
+        service().childInvoices(tenantId, guardianUserId, studentId);
+
+        verify(invoiceRepository).findByTenantIdAndStudentIdOrderByCreatedAtDesc(tenantId, studentId);
+    }
+
+    @Test
+    void childInvoicesIs404WhenTheStudentIsNotThisParentsChild() {
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().childInvoices(tenantId, guardianUserId, studentId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(invoiceRepository, never()).findByTenantIdAndStudentIdOrderByCreatedAtDesc(any(), any());
     }
 }

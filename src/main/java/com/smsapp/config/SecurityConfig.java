@@ -54,6 +54,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/actuator/health",
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                 .permitAll()
+                // Razorpay's server-to-server payment webhook cannot present a JWT.
+                // It is authenticated instead by its HMAC signature, which the
+                // handler verifies before touching any data (see RazorpayWebhookController).
+                .requestMatchers("/api/v1/webhooks/razorpay")
+                .permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2

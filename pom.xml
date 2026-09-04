@@ -75,10 +75,28 @@
             <version>2.8.9</version>
         </dependency>
 
+        <!-- Razorpay server-side SDK: used only to create payment Orders at checkout.
+             Webhook signature verification is done in-house (RazorpaySignatureVerifier)
+             to keep the security-critical path free of external coupling. -->
+        <dependency>
+            <groupId>com.razorpay</groupId>
+            <artifactId>razorpay-java</artifactId>
+            <version>1.4.10</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+            <exclusions>
+                <!-- JSONAssert's stripped android-json clashes with the real org.json
+                     that the Razorpay SDK needs (duplicate org.json.JSONObject on the
+                     classpath). We assert JSON with Jackson, not JSONAssert. -->
+                <exclusion>
+                    <groupId>com.vaadin.external.google</groupId>
+                    <artifactId>android-json</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>

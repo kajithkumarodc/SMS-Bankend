@@ -59,6 +59,16 @@ app:
       same-site: ${AUTH_COOKIE_SAME_SITE:Strict}
       max-age-seconds: ${AUTH_COOKIE_MAX_AGE_SECONDS:3600}
 
+# Razorpay payment gateway (fee collection). Credentials come from the
+# environment only -- never commit them (plan section 7.2d / 7.3). Test-mode
+# keys are fine for development. `webhook-secret` is the separate secret set on
+# the Razorpay dashboard webhook and is used only to verify inbound signatures.
+razorpay:
+  key-id: ${RAZORPAY_KEY_ID:}
+  key-secret: ${RAZORPAY_KEY_SECRET:}
+  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+  currency: ${RAZORPAY_CURRENCY:INR}
+
 management:
   endpoints:
     web:

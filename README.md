@@ -117,6 +117,44 @@ no secret is committed. Future migrations that add tables are covered by
   `SELECT usename, application_name FROM pg_stat_activity WHERE datname = 'sms_db';`
   — the `PostgreSQL JDBC Driver` connections must all be `app_user`.
 
+## Payments (Razorpay)
+
+Fee collection integrates [Razorpay](https://razorpay.com/) in **test mode**. All
+credentials come from the environment only (never hard-coded — plan section 7.2d):
+
+| Variable | Purpose |
+|---|---|
+| `RAZORPAY_KEY_ID` | Public key id. Sent to the browser Checkout widget; safe to expose. |
+| `RAZORPAY_KEY_SECRET` | Secret key. Used server-side only, to create payment Orders. |
+| `RAZORPAY_WEBHOOK_SECRET` | Separate secret configured on the Razorpay dashboard webhook. Used only to verify the `X-Razorpay-Signature` on inbound webhooks. |
+| `RAZORPAY_CURRENCY` | ISO currency code for new orders (default `INR`). |
+
+Flow:
+
+1. A `SCHOOL_ADMIN` defines a **fee structure** (`POST /api/v1/fee-structures`) and
+   generates a per-student **invoice** (`POST /api/v1/invoices`), which starts `PENDING`.
+2. `POST /api/v1/invoices/{invoiceId}/checkout` creates a Razorpay Order server-side
+   and returns only the order id, public key id and amount — never any raw payment
+   data (plan section 7.2a, tokenization).
+3. The browser completes payment with Razorpay Checkout. Razorpay then calls
+   `POST /api/v1/webhooks/razorpay` (server-to-server). This endpoint is public (no
+   JWT) and is authenticated **solely** by its HMAC signature: a missing or invalid
+   signature is rejected with `400` before the body is read. A signature-verified
+   `order.paid` event flips the matching invoice to `PAID` (idempotent — a Razorpay
+   retry is a no-op).
+
+To receive webhooks during local development, expose the app with a tunnel (e.g.
+`ngrok http 8080`) and register `https://<tunnel>/api/v1/webhooks/razorpay` on the
+Razorpay dashboard with the same secret as `RAZORPAY_WEBHOOK_SECRET`, subscribed to
+the `order.paid` event.
+
+Parents read their own children's invoices at
+`GET /api/v1/me/children/{studentId}/invoices` (ownership-scoped, like the other
+`/api/v1/me/...` endpoints).
+
+The Razorpay HTTP client is never called from tests — `RazorpayGateway` is mocked —
+but webhook signature verification is exercised for real against a test secret.
+
 ## Build
 
 ```bash
