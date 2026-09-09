@@ -46,6 +46,12 @@ server:
   port: 8080
 
 app:
+  # DANGER: local-development convenience only. When true it exposes
+  # /api/v1/dev/** endpoints (e.g. simulating a paid invoice without a real
+  # Razorpay webhook). MUST stay false in every deployed environment -- real
+  # payment confirmation only ever comes through the signature-verified webhook.
+  # See DevToolsController and the README "Local demo without a webhook tunnel".
+  dev-tools-enabled: ${APP_DEV_TOOLS_ENABLED:false}
   cors:
     # Origin patterns allowed to send credentialed (cookie) requests. Comma-separated.
     # Matched with Spring's allowedOriginPatterns, so "http://localhost:*" style

@@ -26,6 +26,8 @@ public final class AuditActions {
     public static final String INVOICE_CREATED = "INVOICE_CREATED";
     public static final String INVOICE_CHECKOUT_STARTED = "INVOICE_CHECKOUT_STARTED";
     public static final String INVOICE_PAID = "INVOICE_PAID";
+    /** DEV-ONLY: an invoice marked paid through the dev-tools simulate endpoint, not a real webhook. */
+    public static final String INVOICE_PAID_SIMULATED = "INVOICE_PAID_SIMULATED";
 
     // entity types
     public static final String USER = "USER";

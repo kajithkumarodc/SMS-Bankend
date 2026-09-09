@@ -143,10 +143,81 @@ Flow:
    `order.paid` event flips the matching invoice to `PAID` (idempotent — a Razorpay
    retry is a no-op).
 
-To receive webhooks during local development, expose the app with a tunnel (e.g.
-`ngrok http 8080`) and register `https://<tunnel>/api/v1/webhooks/razorpay` on the
-Razorpay dashboard with the same secret as `RAZORPAY_WEBHOOK_SECRET`, subscribed to
-the `order.paid` event.
+### Receiving webhooks locally with ngrok
+
+Razorpay calls the webhook server-to-server, so `localhost` is not reachable from
+it. Expose the running backend with a tunnel.
+
+1. **Install ngrok** (free, one-time):
+
+   ```powershell
+   winget install Ngrok.Ngrok
+   ```
+
+   or download from <https://ngrok.com/download>. Then create a free account at
+   <https://dashboard.ngrok.com>, copy your authtoken, and register it once:
+
+   ```bash
+   ngrok config add-authtoken <YOUR_AUTHTOKEN>
+   ```
+
+2. **Start the tunnel** to the backend port (this project runs it on `8081`
+   locally — `mvn spring-boot:run "-Dspring-boot.run.arguments=--server.port=8081"`):
+
+   ```bash
+   ngrok http 8081
+   ```
+
+   ngrok prints a forwarding line like
+   `Forwarding  https://a1b2-c3d4.ngrok-free.app -> http://localhost:8081`.
+
+3. **Configure the webhook in the Razorpay Dashboard** — *Settings → Webhooks →
+   Add New Webhook*:
+
+   | Field | Value |
+   |---|---|
+   | Webhook URL | `https://<your-ngrok-subdomain>.ngrok-free.app/api/v1/webhooks/razorpay` |
+   | Secret | the exact value of `RAZORPAY_WEBHOOK_SECRET` in your `.env` |
+   | Active Events | tick **`order.paid`** |
+
+   Save. Razorpay sends a test ping; the endpoint returns `200` for a correctly
+   signed request and `400` for anything unsigned or tampered.
+
+> **Free-tier URL is ephemeral.** ngrok assigns a new `*.ngrok-free.app`
+> subdomain every time you restart it, so you must update the webhook URL in the
+> Razorpay Dashboard each session. To avoid that, claim the one free static
+> domain (dashboard → *Domains*) and start the tunnel with it:
+> `ngrok http --domain=<your-name>.ngrok-free.app 8081` — then the Razorpay URL
+> never changes. (ngrok ≥ 3.5 renamed this flag to `--url`; `--domain` still works.)
+
+### Local demo without a webhook tunnel (dev-tools) — ⚠️ never deploy this
+
+When a public tunnel isn't available, a **local-development-only** endpoint can
+flip an invoice to `PAID` the same way the verified webhook would, so a demo can
+show the paid state:
+
+```
+POST /api/v1/dev/invoices/{invoiceId}/simulate-payment-success   (SCHOOL_ADMIN)
+```
+
+It is gated by `app.dev-tools-enabled`, which **defaults to `false`**. When false
+or absent, `DevToolsController` is not even registered as a bean — the route does
+not exist and returns `404` (covered by `DevToolsDisabledTest`). To use it
+locally, set `APP_DEV_TOOLS_ENABLED=true` (or `app.dev-tools-enabled: true`) and
+restart, then:
+
+```bash
+curl -X POST http://localhost:8081/api/v1/dev/invoices/<invoiceId>/simulate-payment-success \
+  -b "access_token=<admin JWT cookie>"
+```
+
+**This is a temporary convenience and must never be enabled in any deployed
+environment.** Real payment confirmation must always arrive through the
+signature-verified Razorpay webhook (`POST /api/v1/webhooks/razorpay`) — never
+through this endpoint. Before any real deployment: keep `app.dev-tools-enabled`
+`false`, or delete `DevToolsController` and `FeeService.simulatePaymentSuccess`
+entirely. Do not "secure" it and ship it — a payment side-channel that bypasses
+gateway verification does not belong in production even behind auth.
 
 Parents read their own children's invoices at
 `GET /api/v1/me/children/{studentId}/invoices` (ownership-scoped, like the other

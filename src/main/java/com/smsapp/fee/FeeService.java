@@ -215,4 +215,48 @@ public class FeeService {
         auditService.logAs(tenantId, null, AuditActions.INVOICE_PAID, AuditActions.INVOICE, invoice.getId(),
                 Map.of("razorpayOrderId", razorpayOrderId, "razorpayPaymentId", razorpayPaymentId));
     }
+
+    // --- DEV-ONLY payment simulation ------------------------------
+
+    /** Payment/order reference stamped on invoices flipped to PAID by the dev-tools endpoint. */
+    static final String SIMULATED_PAYMENT_REF = "dev-simulated";
+
+    /**
+     * DEV-ONLY. Flips an invoice to PAID exactly as {@link #markInvoicePaid} would,
+     * but on the authority of an authenticated SCHOOL_ADMIN instead of a
+     * signature-verified Razorpay webhook. This exists purely so a local demo can
+     * show the "paid" state without a public webhook tunnel.
+     *
+     * <p><b>Never a substitute for the real webhook.</b> It is only reachable when
+     * {@code app.dev-tools-enabled=true} (see {@link DevToolsController}); in any
+     * deployed environment that flag is false and this path does not exist.
+     *
+     * <p>Tenant context is already established from the caller's JWT (the request
+     * filter), so unlike the webhook path this does not set it manually. Idempotent:
+     * a second call on an already-paid invoice is a no-op.
+     *
+     * @throws ApiException 404 if the invoice is not in the caller's tenant.
+     */
+    @Transactional
+    public Invoice simulatePaymentSuccess(UUID tenantId, UUID invoiceId) {
+        Invoice invoice = invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)
+                .orElseThrow(() -> new ApiException("Invoice not found", HttpStatus.NOT_FOUND));
+        if (InvoiceStatus.PAID.equals(invoice.getStatus())) {
+            return invoice;
+        }
+
+        invoice.setStatus(InvoiceStatus.PAID);
+        if (invoice.getRazorpayOrderId() == null) {
+            invoice.setRazorpayOrderId(SIMULATED_PAYMENT_REF);
+        }
+        invoice.setRazorpayPaymentId(SIMULATED_PAYMENT_REF);
+        invoice.setPaidAt(OffsetDateTime.now());
+        Invoice saved = invoiceRepository.save(invoice);
+
+        log.warn("DEV-TOOLS: invoice {} marked PAID via simulate-payment-success (not a real Razorpay webhook)",
+                saved.getId());
+        auditService.log(AuditActions.INVOICE_PAID_SIMULATED, AuditActions.INVOICE, saved.getId(),
+                Map.of("note", "dev-tools simulate-payment-success; not a verified webhook"));
+        return saved;
+    }
 }

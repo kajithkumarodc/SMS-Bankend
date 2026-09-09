@@ -7,6 +7,20 @@ spring:
     url: ${DB_TEST_URL:jdbc:postgresql://localhost:5433/sms_db_test}
     username: ${DB_TEST_APP_USERNAME:app_user_test}
     password: ${DB_TEST_APP_PASSWORD:app_pass}
+    hikari:
+      # The suite loads many Spring contexts (distinct @MockitoBean /
+      # @TestPropertySource / @DynamicPropertySource combos), and each cached
+      # context keeps its own HikariCP pool. With the default pool (10 idle
+      # connections held open) a dozen cached contexts exhaust PostgreSQL's
+      # max_connections and late integration tests fail with
+      # "remaining connection slots are reserved for roles with the SUPERUSER
+      # attribute". Integration tests run one request at a time, so a tiny pool
+      # is plenty (3 = business tx + a REQUIRES_NEW audit tx + margin), and
+      # idle connections are released quickly so inactive cached contexts stop
+      # holding slots. Production keeps the framework defaults.
+      maximum-pool-size: 3
+      minimum-idle: 0
+      idle-timeout: 20000
   flyway:
     url: ${DB_TEST_URL:jdbc:postgresql://localhost:5433/sms_db_test}
     user: ${DB_TEST_USERNAME:${DB_USERNAME:postgres}}
