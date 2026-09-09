@@ -247,6 +247,21 @@ analytics store. All three are **SCHOOL_ADMIN only**:
 
 Teacher-scoped and parent-scoped reports are a later slice.
 
+## Announcements
+
+School-wide messages (plan section 2, "Communication"). Tenant-scoped: everyone
+signed in to the school reads the same list; only a `SCHOOL_ADMIN` writes.
+
+| Endpoint | Access |
+|---|---|
+| `POST /api/v1/announcements` (`{title, body}`) | SCHOOL_ADMIN only |
+| `GET /api/v1/announcements` (paginated, newest first) | any authenticated role — admin, teacher, student, parent |
+| `DELETE /api/v1/announcements/{id}` | SCHOOL_ADMIN only; 404 for a cross-tenant id |
+
+`GET /api/v1/dashboard/summary` also carries the **3 most recent** announcements
+in an `announcements` array, for every role (genuinely tenant-wide, not
+ownership-scoped).
+
 ## Build
 
 ```bash

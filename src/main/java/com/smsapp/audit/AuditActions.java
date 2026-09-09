@@ -28,6 +28,8 @@ public final class AuditActions {
     public static final String INVOICE_PAID = "INVOICE_PAID";
     /** DEV-ONLY: an invoice marked paid through the dev-tools simulate endpoint, not a real webhook. */
     public static final String INVOICE_PAID_SIMULATED = "INVOICE_PAID_SIMULATED";
+    public static final String ANNOUNCEMENT_CREATED = "ANNOUNCEMENT_CREATED";
+    public static final String ANNOUNCEMENT_DELETED = "ANNOUNCEMENT_DELETED";
 
     // entity types
     public static final String USER = "USER";
@@ -41,6 +43,7 @@ public final class AuditActions {
     public static final String EXAM_MARK = "EXAM_MARK";
     public static final String FEE_STRUCTURE = "FEE_STRUCTURE";
     public static final String INVOICE = "INVOICE";
+    public static final String ANNOUNCEMENT = "ANNOUNCEMENT";
 
     private AuditActions() {
     }

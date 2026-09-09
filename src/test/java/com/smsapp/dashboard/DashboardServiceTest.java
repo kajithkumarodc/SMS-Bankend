@@ -1,5 +1,7 @@
 package com.smsapp.dashboard;
 
+import com.smsapp.announcement.Announcement;
+import com.smsapp.announcement.AnnouncementRepository;
 import com.smsapp.attendance.AttendanceRepository;
 import com.smsapp.school.SchoolRepository;
 import com.smsapp.student.Student;
@@ -34,10 +36,14 @@ class DashboardServiceTest {
     @Mock
     private AttendanceRepository attendanceRepository;
 
+    @Mock
+    private AnnouncementRepository announcementRepository;
+
     private final UUID tenantId = UUID.randomUUID();
 
     private DashboardService service() {
-        return new DashboardService(schoolRepository, userRepository, studentRepository, attendanceRepository);
+        return new DashboardService(schoolRepository, userRepository, studentRepository, attendanceRepository,
+                announcementRepository);
     }
 
     private Student student(UUID id, String fullName, UUID studentUserId, UUID guardianUserId) {
@@ -116,6 +122,24 @@ class DashboardServiceTest {
         assertThat(summary.children()).extracting(DashboardSummary.StudentInfo::fullName)
                 .containsExactly("Kiran", "Meera");
         assertThat(summary.student()).isNull();
+    }
+
+    @Test
+    void recentAnnouncementsAreIncludedForEveryRole() {
+        Announcement a = new Announcement();
+        a.setId(UUID.randomUUID());
+        a.setTenantId(tenantId);
+        a.setTitle("Sports day moved to Friday");
+        a.setBody("Details to follow.");
+        a.setCreatedAt(java.time.OffsetDateTime.now());
+        when(announcementRepository.findTop3ByTenantIdOrderByCreatedAtDesc(tenantId)).thenReturn(List.of(a));
+
+        for (String role : List.of(Roles.SCHOOL_ADMIN, Roles.TEACHER, Roles.STUDENT, Roles.PARENT)) {
+            DashboardSummary summary = service().summaryFor(tenantId, UUID.randomUUID().toString(), List.of(role));
+            assertThat(summary.announcements()).singleElement()
+                    .extracting(DashboardSummary.AnnouncementSummary::title)
+                    .isEqualTo("Sports day moved to Friday");
+        }
     }
 
     private static AttendanceRepository.StatusTally tally(String status, long total) {
