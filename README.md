@@ -262,6 +262,23 @@ signed in to the school reads the same list; only a `SCHOOL_ADMIN` writes.
 in an `announcements` array, for every role (genuinely tenant-wide, not
 ownership-scoped).
 
+## Library
+
+First slice of the library module (plan section 2) — catalog plus issue/return.
+Fines and reservations are a later slice. Every book and loan is tenant-scoped on
+top of RLS; `available_copies` moves with the loans (−1 on issue, +1 on return,
+capped at `total_copies`). The standard loan period is 14 days.
+
+| Endpoint | Access |
+|---|---|
+| `POST /api/v1/library/books` (`{title, author, isbn?, totalCopies}`) | SCHOOL_ADMIN only; `available_copies` starts equal to `totalCopies` |
+| `GET /api/v1/library/books?q={text}` (paginated, title asc) | any authenticated role; `q` matches title or author |
+| `POST /api/v1/library/loans` (`{bookId, studentId}`) | SCHOOL_ADMIN only; 404 if the book/student is not in the tenant, 400 if no copies are available |
+| `POST /api/v1/library/loans/{loanId}/return` | SCHOOL_ADMIN only; 404 for a cross-tenant id, 409 if already returned |
+| `GET /api/v1/library/loans?studentId={id}` | SCHOOL_ADMIN or TEACHER; 404 if the student is not in the tenant |
+| `GET /api/v1/me/student/library` | STUDENT — their own loan history only |
+| `GET /api/v1/me/children/{studentId}/library` | PARENT — their own child's loan history only (404 otherwise) |
+
 ## Build
 
 ```bash

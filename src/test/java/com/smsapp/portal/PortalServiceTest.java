@@ -7,6 +7,8 @@ import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.exam.ExamService;
 import com.smsapp.fee.Invoice;
 import com.smsapp.fee.InvoiceRepository;
+import com.smsapp.library.BookLoanRepository;
+import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
 import org.junit.jupiter.api.Test;
@@ -44,13 +46,17 @@ class PortalServiceTest {
     @Mock
     private InvoiceRepository invoiceRepository;
 
+    @Mock
+    private BookLoanRepository bookLoanRepository;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID studentUserId = UUID.randomUUID();
     private final UUID guardianUserId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
 
     private PortalService service() {
-        return new PortalService(studentRepository, attendanceService, examService, invoiceRepository);
+        return new PortalService(studentRepository, attendanceService, examService, invoiceRepository,
+                bookLoanRepository);
     }
 
     private Student linkedStudent() {
@@ -196,5 +202,39 @@ class PortalServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
         verify(invoiceRepository, never()).findByTenantIdAndStudentIdOrderByCreatedAtDesc(any(), any());
+    }
+
+    @Test
+    void ownLibraryIsScopedToTheCallersOwnStudentId() {
+        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
+                .thenReturn(Optional.of(linkedStudent()));
+        when(bookLoanRepository.findLoanHistory(tenantId, studentId)).thenReturn(List.<LoanWithBook>of());
+
+        service().ownLibrary(tenantId, studentUserId);
+
+        verify(bookLoanRepository).findLoanHistory(tenantId, studentId);
+    }
+
+    @Test
+    void childLibraryIsAllowedForTheParentsOwnChild() {
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.of(linkedStudent()));
+        when(bookLoanRepository.findLoanHistory(tenantId, studentId)).thenReturn(List.<LoanWithBook>of());
+
+        service().childLibrary(tenantId, guardianUserId, studentId);
+
+        verify(bookLoanRepository).findLoanHistory(tenantId, studentId);
+    }
+
+    @Test
+    void childLibraryIs404WhenTheStudentIsNotThisParentsChild() {
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().childLibrary(tenantId, guardianUserId, studentId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(bookLoanRepository, never()).findLoanHistory(any(), any());
     }
 }

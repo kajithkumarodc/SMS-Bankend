@@ -3,6 +3,7 @@ package com.smsapp.portal;
 import com.smsapp.attendance.AttendanceRecord;
 import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.fee.Invoice;
+import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.student.Student;
 
 import java.math.BigDecimal;
@@ -64,6 +65,22 @@ final class PortalDtos {
             return new InvoiceView(invoice.getId(), invoice.getStudentId(), invoice.getFeeStructureId(),
                     invoice.getAmount(), invoice.getStatus(), invoice.getRazorpayOrderId(),
                     invoice.getCreatedAt(), invoice.getPaidAt());
+        }
+    }
+
+    /** One library loan row for the portal. Carries the book title/author (joined), never internal ids beyond bookId. */
+    record LoanView(
+            UUID id,
+            UUID bookId,
+            String bookTitle,
+            String bookAuthor,
+            LocalDate issuedDate,
+            LocalDate dueDate,
+            LocalDate returnedDate) {
+
+        static LoanView from(LoanWithBook loan) {
+            return new LoanView(loan.getId(), loan.getBookId(), loan.getBookTitle(), loan.getBookAuthor(),
+                    loan.getIssuedDate(), loan.getDueDate(), loan.getReturnedDate());
         }
     }
 

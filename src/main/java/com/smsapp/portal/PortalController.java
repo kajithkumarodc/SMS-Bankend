@@ -3,6 +3,7 @@ package com.smsapp.portal;
 import com.smsapp.portal.PortalDtos.AttendanceEntryView;
 import com.smsapp.portal.PortalDtos.ExamResultView;
 import com.smsapp.portal.PortalDtos.InvoiceView;
+import com.smsapp.portal.PortalDtos.LoanView;
 import com.smsapp.portal.PortalDtos.StudentView;
 import com.smsapp.user.Roles;
 import org.springframework.data.domain.Pageable;
@@ -92,6 +93,22 @@ public class PortalController {
     public List<InvoiceView> childInvoices(@PathVariable UUID studentId, Authentication authentication) {
         return portalService.childInvoices(tenantId(authentication), userId(authentication), studentId)
                 .stream().map(InvoiceView::from).toList();
+    }
+
+    /** STUDENT: their own library loan history only. 404 if no record is linked yet. */
+    @GetMapping("/student/library")
+    @PreAuthorize(Roles.HAS_STUDENT)
+    public List<LoanView> ownLibrary(Authentication authentication) {
+        return portalService.ownLibrary(tenantId(authentication), userId(authentication))
+                .stream().map(LoanView::from).toList();
+    }
+
+    /** PARENT: one of their own children's library loan history. 404 if the student is not this parent's child. */
+    @GetMapping("/children/{studentId}/library")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public List<LoanView> childLibrary(@PathVariable UUID studentId, Authentication authentication) {
+        return portalService.childLibrary(tenantId(authentication), userId(authentication), studentId)
+                .stream().map(LoanView::from).toList();
     }
 
     private static UUID tenantId(Authentication authentication) {

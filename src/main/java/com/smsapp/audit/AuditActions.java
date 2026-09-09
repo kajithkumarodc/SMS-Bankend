@@ -30,6 +30,9 @@ public final class AuditActions {
     public static final String INVOICE_PAID_SIMULATED = "INVOICE_PAID_SIMULATED";
     public static final String ANNOUNCEMENT_CREATED = "ANNOUNCEMENT_CREATED";
     public static final String ANNOUNCEMENT_DELETED = "ANNOUNCEMENT_DELETED";
+    public static final String LIBRARY_BOOK_ADDED = "LIBRARY_BOOK_ADDED";
+    public static final String LIBRARY_BOOK_ISSUED = "LIBRARY_BOOK_ISSUED";
+    public static final String LIBRARY_BOOK_RETURNED = "LIBRARY_BOOK_RETURNED";
 
     // entity types
     public static final String USER = "USER";
@@ -44,6 +47,8 @@ public final class AuditActions {
     public static final String FEE_STRUCTURE = "FEE_STRUCTURE";
     public static final String INVOICE = "INVOICE";
     public static final String ANNOUNCEMENT = "ANNOUNCEMENT";
+    public static final String LIBRARY_BOOK = "LIBRARY_BOOK";
+    public static final String BOOK_LOAN = "BOOK_LOAN";
 
     private AuditActions() {
     }
