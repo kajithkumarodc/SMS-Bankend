@@ -356,6 +356,22 @@ class FeeIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void aParentCanCheckOutTheirOwnChildsInvoiceButNotAnotherChilds() throws Exception {
+        UUID childInvoice = createInvoiceA(login(SCHOOL_A, ADMIN_A), studentAId, feeStructureAId);
+        UUID otherChildInvoice = createInvoiceA(login(SCHOOL_A, ADMIN_A), studentA2Id, feeStructureAId);
+        when(razorpayGateway.createOrder(anyLong(), anyString(), anyString(), anyMap())).thenReturn("order_PARENT");
+
+        // PARENT_A is Anaya's (studentAId) guardian.
+        mockMvc.perform(post("/api/v1/invoices/" + childInvoice + "/checkout").cookie(login(SCHOOL_A, PARENT_A)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.razorpayOrderId").value("order_PARENT"));
+
+        // Bhavya (studentA2Id) is PARENT_A2's child, not PARENT_A's -> 404, never leaks it exists.
+        mockMvc.perform(post("/api/v1/invoices/" + otherChildInvoice + "/checkout").cookie(login(SCHOOL_A, PARENT_A)))
+                .andExpect(status().isNotFound());
+    }
+
     // --- Webhook: signature verification (plan 7.2f) -------------
 
     @Test

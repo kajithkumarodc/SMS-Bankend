@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.sql.DriverManager;
@@ -26,16 +27,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Guards the safety property of {@link DevToolsController}: with
- * {@code app.dev-tools-enabled} left at its default ({@code false}), the whole
+ * {@code app.dev-tools-enabled=false} (its production default), the whole
  * {@code /api/v1/dev/**} surface must not exist -- an authenticated SCHOOL_ADMIN
  * hitting it gets a plain {@code 404}, and nothing about the invoice changes.
  *
  * <p>This is the test that makes it safe to ship: the payment side-channel cannot
- * silently be present in a deployed environment.
+ * silently be present in a deployed environment. The flag is pinned to
+ * {@code false} here explicitly so this stays true even when a developer's local
+ * {@code .env} turns dev-tools on.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@TestPropertySource(properties = "app.dev-tools-enabled=false")
 class DevToolsDisabledTest {
 
     private static final String SCHOOL = "devtools-off";
@@ -56,7 +60,6 @@ class DevToolsDisabledTest {
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("JWT_SECRET", () -> "integration-test-secret-with-at-least-32-chars");
         registry.add("JWT_ISSUER_URI", () -> "http://localhost:8080");
-        // app.dev-tools-enabled deliberately NOT set -> defaults to false.
     }
 
     @BeforeEach

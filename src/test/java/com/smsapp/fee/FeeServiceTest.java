@@ -188,7 +188,7 @@ class FeeServiceTest {
         when(razorpayGateway.createOrder(anyLong(), eq("INR"), anyString(), anyMap())).thenReturn("order_TEST123");
         when(razorpayGateway.keyId()).thenReturn("rzp_test_key");
 
-        CheckoutResponse response = service().startCheckout(tenantId, invoiceId);
+        CheckoutResponse response = service().startCheckout(tenantId, invoiceId, null);
 
         assertThat(response.razorpayOrderId()).isEqualTo("order_TEST123");
         assertThat(response.razorpayKeyId()).isEqualTo("rzp_test_key");
@@ -200,7 +200,7 @@ class FeeServiceTest {
     void checkoutRejectsAnInvoiceNotInTenantWith404() {
         when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().startCheckout(tenantId, invoiceId))
+        assertThatThrownBy(() -> service().startCheckout(tenantId, invoiceId, null))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -211,11 +211,42 @@ class FeeServiceTest {
     void checkoutRejectsAnAlreadyPaidInvoiceWith409() {
         when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.of(invoice(InvoiceStatus.PAID)));
 
-        assertThatThrownBy(() -> service().startCheckout(tenantId, invoiceId))
+        assertThatThrownBy(() -> service().startCheckout(tenantId, invoiceId, null))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
         verify(razorpayGateway, never()).createOrder(anyLong(), anyString(), anyString(), anyMap());
+    }
+
+    @Test
+    void checkoutByAParentRejectsAnInvoiceThatIsNotTheirChildsWith404() {
+        UUID guardianUserId = UUID.randomUUID();
+        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId))
+                .thenReturn(Optional.of(invoice(InvoiceStatus.PENDING)));
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().startCheckout(tenantId, invoiceId, guardianUserId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(razorpayGateway, never()).createOrder(anyLong(), anyString(), anyString(), anyMap());
+    }
+
+    @Test
+    void checkoutByAParentIsAllowedForTheirOwnChildsInvoice() {
+        UUID guardianUserId = UUID.randomUUID();
+        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId))
+                .thenReturn(Optional.of(invoice(InvoiceStatus.PENDING)));
+        when(invoiceRepository.save(any(Invoice.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.of(new com.smsapp.student.Student()));
+        when(razorpayGateway.createOrder(anyLong(), anyString(), anyString(), anyMap())).thenReturn("order_P1");
+        when(razorpayGateway.keyId()).thenReturn("rzp_test_key");
+
+        CheckoutResponse response = service().startCheckout(tenantId, invoiceId, guardianUserId);
+
+        assertThat(response.razorpayOrderId()).isEqualTo("order_P1");
     }
 
     // --- Webhook application (idempotency + guards) ----------------

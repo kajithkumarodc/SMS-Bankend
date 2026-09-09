@@ -142,17 +142,36 @@ public class FeeService {
     // --- Checkout --------------------------------------------------
 
     /**
+     * The invoice must belong to the caller's tenant, and -- when the caller is a
+     * PARENT rather than staff ({@code parentGuardianUserId} non-null) -- to one of
+     * that parent's own children. A mismatch is reported as 404, never 403, so it
+     * never leaks that another family's invoice exists (same rule as the portal
+     * ownership checks).
+     */
+    private Invoice loadInvoiceForActor(UUID tenantId, UUID invoiceId, UUID parentGuardianUserId) {
+        Invoice invoice = invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)
+                .orElseThrow(() -> new ApiException("Invoice not found", HttpStatus.NOT_FOUND));
+        if (parentGuardianUserId != null
+                && studentRepository.findByIdAndTenantIdAndGuardianUserId(
+                        invoice.getStudentId(), tenantId, parentGuardianUserId).isEmpty()) {
+            throw new ApiException("Invoice not found", HttpStatus.NOT_FOUND);
+        }
+        return invoice;
+    }
+
+    /**
      * Create a Razorpay Order for an invoice and hand the browser only what its
      * Checkout widget needs -- order id, public key id, amount. No raw payment
      * data ever crosses this boundary (plan section 7.2a).
      *
-     * @throws ApiException 404 if the invoice is not in the caller's tenant,
-     *         409 if it is already paid.
+     * @param parentGuardianUserId the caller's user id when the caller is a PARENT
+     *        (restricts the invoice to their own children); {@code null} for staff.
+     * @throws ApiException 404 if the invoice is not in the caller's tenant (or not
+     *         the parent's child), 409 if it is already paid.
      */
     @Transactional
-    public CheckoutResponse startCheckout(UUID tenantId, UUID invoiceId) {
-        Invoice invoice = invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)
-                .orElseThrow(() -> new ApiException("Invoice not found", HttpStatus.NOT_FOUND));
+    public CheckoutResponse startCheckout(UUID tenantId, UUID invoiceId, UUID parentGuardianUserId) {
+        Invoice invoice = loadInvoiceForActor(tenantId, invoiceId, parentGuardianUserId);
         if (InvoiceStatus.PAID.equals(invoice.getStatus())) {
             throw new ApiException("This invoice is already paid", HttpStatus.CONFLICT);
         }
@@ -235,12 +254,14 @@ public class FeeService {
      * filter), so unlike the webhook path this does not set it manually. Idempotent:
      * a second call on an already-paid invoice is a no-op.
      *
-     * @throws ApiException 404 if the invoice is not in the caller's tenant.
+     * @param parentGuardianUserId the caller's user id when the caller is a PARENT
+     *        (restricts the invoice to their own children); {@code null} for staff.
+     * @throws ApiException 404 if the invoice is not in the caller's tenant (or not
+     *         the parent's child).
      */
     @Transactional
-    public Invoice simulatePaymentSuccess(UUID tenantId, UUID invoiceId) {
-        Invoice invoice = invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)
-                .orElseThrow(() -> new ApiException("Invoice not found", HttpStatus.NOT_FOUND));
+    public Invoice simulatePaymentSuccess(UUID tenantId, UUID invoiceId, UUID parentGuardianUserId) {
+        Invoice invoice = loadInvoiceForActor(tenantId, invoiceId, parentGuardianUserId);
         if (InvoiceStatus.PAID.equals(invoice.getStatus())) {
             return invoice;
         }

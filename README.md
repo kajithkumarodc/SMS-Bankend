@@ -197,14 +197,19 @@ flip an invoice to `PAID` the same way the verified webhook would, so a demo can
 show the paid state:
 
 ```
-POST /api/v1/dev/invoices/{invoiceId}/simulate-payment-success   (SCHOOL_ADMIN)
+POST /api/v1/dev/invoices/{invoiceId}/simulate-payment-success
 ```
+
+A `SCHOOL_ADMIN` may call it for any invoice in the tenant; a `PARENT` only for
+their own child's — this is what lets the parent-facing **"Pay now"** flow work
+locally: the frontend opens the real Razorpay Checkout widget (test mode), and on
+the widget's success callback calls this endpoint to stand in for the webhook.
 
 It is gated by `app.dev-tools-enabled`, which **defaults to `false`**. When false
 or absent, `DevToolsController` is not even registered as a bean — the route does
-not exist and returns `404` (covered by `DevToolsDisabledTest`). To use it
-locally, set `APP_DEV_TOOLS_ENABLED=true` (or `app.dev-tools-enabled: true`) and
-restart, then:
+not exist and returns `404` (covered by `DevToolsDisabledTest`, which pins the
+flag off regardless of `.env`). To use it locally, set `APP_DEV_TOOLS_ENABLED=true`
+(or `app.dev-tools-enabled: true`) and restart, then:
 
 ```bash
 curl -X POST http://localhost:8081/api/v1/dev/invoices/<invoiceId>/simulate-payment-success \
@@ -215,9 +220,11 @@ curl -X POST http://localhost:8081/api/v1/dev/invoices/<invoiceId>/simulate-paym
 environment.** Real payment confirmation must always arrive through the
 signature-verified Razorpay webhook (`POST /api/v1/webhooks/razorpay`) — never
 through this endpoint. Before any real deployment: keep `app.dev-tools-enabled`
-`false`, or delete `DevToolsController` and `FeeService.simulatePaymentSuccess`
-entirely. Do not "secure" it and ship it — a payment side-channel that bypasses
-gateway verification does not belong in production even behind auth.
+`false`, delete `DevToolsController` + `FeeService.simulatePaymentSuccess`, and
+drop the `simulateInvoicePayment` call from the frontend `PayNowButton` (the
+widget's success callback then just waits for the webhook). Do not "secure" it and
+ship it — a payment side-channel that bypasses gateway verification does not
+belong in production even behind auth.
 
 Parents read their own children's invoices at
 `GET /api/v1/me/children/{studentId}/invoices` (ownership-scoped, like the other

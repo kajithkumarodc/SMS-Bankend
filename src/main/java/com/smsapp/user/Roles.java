@@ -23,8 +23,13 @@ public final class Roles {
     public static final String HAS_SCHOOL_ADMIN = ROLE_OPEN + SCHOOL_ADMIN + CLOSE;
     public static final String HAS_SCHOOL_ADMIN_OR_TEACHER =
             "hasAnyRole('" + SCHOOL_ADMIN + "', '" + TEACHER + CLOSE;
+    public static final String HAS_SCHOOL_ADMIN_OR_PARENT =
+            "hasAnyRole('" + SCHOOL_ADMIN + "', '" + PARENT + CLOSE;
     public static final String HAS_STUDENT = ROLE_OPEN + STUDENT + CLOSE;
     public static final String HAS_PARENT = ROLE_OPEN + PARENT + CLOSE;
+
+    /** Spring maps the JWT {@code roles} claim to {@code ROLE_*} authorities. */
+    public static final String ROLE_SCHOOL_ADMIN = "ROLE_" + SCHOOL_ADMIN;
 
     private Roles() {
     }

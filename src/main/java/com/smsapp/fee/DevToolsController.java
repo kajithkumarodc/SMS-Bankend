@@ -47,13 +47,16 @@ public class DevToolsController {
 
     /**
      * DEV-ONLY. Flip an invoice to {@code PAID} as if a verified Razorpay
-     * {@code order.paid} webhook had arrived. SCHOOL_ADMIN only, tenant-scoped,
-     * idempotent. 404 if the invoice is not in the caller's tenant.
+     * {@code order.paid} webhook had arrived. Tenant-scoped and idempotent. A
+     * SCHOOL_ADMIN may do this for any invoice in the tenant; a PARENT only for
+     * their own child's invoice (so the parent-facing "Pay Now" demo flow can
+     * stand in for the webhook locally). 404 otherwise.
      */
     @PostMapping("/invoices/{invoiceId}/simulate-payment-success")
-    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_PARENT)
     public InvoiceResponse simulatePaymentSuccess(@PathVariable UUID invoiceId, Authentication authentication) {
-        return InvoiceResponse.from(feeService.simulatePaymentSuccess(tenantId(authentication), invoiceId));
+        return InvoiceResponse.from(feeService.simulatePaymentSuccess(
+                tenantId(authentication), invoiceId, FeeController.parentScope(authentication)));
     }
 
     private static UUID tenantId(Authentication authentication) {

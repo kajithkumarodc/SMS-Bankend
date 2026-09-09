@@ -80,18 +80,33 @@ public class FeeController {
 
     /**
      * Create a Razorpay Order for an invoice and return only what the browser
-     * Checkout widget needs (order id + public key id + amount). SCHOOL_ADMIN only
-     * for this first slice -- parent-initiated payment is a follow-up. 404 if the
-     * invoice is not in the caller's tenant, 409 if it is already paid.
+     * Checkout widget needs (order id + public key id + amount). A SCHOOL_ADMIN may
+     * check out any invoice in the tenant; a PARENT may check out only their own
+     * child's invoice (enforced in the service -- 404 otherwise). 409 if it is
+     * already paid.
      */
     @PostMapping("/invoices/{invoiceId}/checkout")
-    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_PARENT)
     public CheckoutResponse checkout(@PathVariable UUID invoiceId, Authentication authentication) {
-        return feeService.startCheckout(tenantId(authentication), invoiceId);
+        return feeService.startCheckout(tenantId(authentication), invoiceId, parentScope(authentication));
     }
 
     private static UUID tenantId(Authentication authentication) {
         Jwt jwt = (Jwt) authentication.getPrincipal();
         return UUID.fromString(jwt.getClaimAsString("tenant_id"));
+    }
+
+    /**
+     * The caller's user id when they are acting as a PARENT (so the service can
+     * restrict the invoice to their own children), or {@code null} when they hold
+     * SCHOOL_ADMIN and may act on any invoice in the tenant.
+     */
+    static UUID parentScope(Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> Roles.ROLE_SCHOOL_ADMIN.equals(a.getAuthority()));
+        if (isAdmin) {
+            return null;
+        }
+        return UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
     }
 }
