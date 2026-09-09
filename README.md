@@ -233,6 +233,20 @@ Parents read their own children's invoices at
 The Razorpay HTTP client is never called from tests — `RazorpayGateway` is mocked —
 but webhook signature verification is exercised for real against a test secret.
 
+## Reporting (school-level)
+
+First slice of school-level reporting (plan section 2), read directly off the
+operational tables as simple tenant-scoped aggregate queries — no separate
+analytics store. All three are **SCHOOL_ADMIN only**:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v1/reports/attendance-trend?from={date}&to={date}` | one row per day in the inclusive range: `present` / `absent` / `late` counts, `total`, and `attendancePercentage` (`(present + late) / total`, 2 dp) |
+| `GET /api/v1/reports/academic-performance?classId={id}` | one row per exam of that class that has marks: `averageMarks`, `studentsGraded`, oldest exam first |
+| `GET /api/v1/reports/fee-collection` | `totalInvoiced`, `totalCollected` (PAID), `outstanding`, and `overdueInvoices` — the defaulter list of still-`PENDING` invoices whose due date has passed |
+
+Teacher-scoped and parent-scoped reports are a later slice.
+
 ## Build
 
 ```bash
