@@ -33,6 +33,9 @@ public final class AuditActions {
     public static final String LIBRARY_BOOK_ADDED = "LIBRARY_BOOK_ADDED";
     public static final String LIBRARY_BOOK_ISSUED = "LIBRARY_BOOK_ISSUED";
     public static final String LIBRARY_BOOK_RETURNED = "LIBRARY_BOOK_RETURNED";
+    public static final String TRANSPORT_ROUTE_CREATED = "TRANSPORT_ROUTE_CREATED";
+    public static final String TRANSPORT_VEHICLE_ADDED = "TRANSPORT_VEHICLE_ADDED";
+    public static final String TRANSPORT_ROUTE_ASSIGNED = "TRANSPORT_ROUTE_ASSIGNED";
 
     // entity types
     public static final String USER = "USER";
@@ -49,6 +52,8 @@ public final class AuditActions {
     public static final String ANNOUNCEMENT = "ANNOUNCEMENT";
     public static final String LIBRARY_BOOK = "LIBRARY_BOOK";
     public static final String BOOK_LOAN = "BOOK_LOAN";
+    public static final String TRANSPORT_ROUTE = "TRANSPORT_ROUTE";
+    public static final String TRANSPORT_VEHICLE = "TRANSPORT_VEHICLE";
 
     private AuditActions() {
     }

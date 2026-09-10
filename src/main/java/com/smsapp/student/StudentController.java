@@ -1,10 +1,12 @@
 package com.smsapp.student;
 
 import com.smsapp.student.StudentDtos.AssignSectionRequest;
+import com.smsapp.student.StudentDtos.AssignTransportRouteRequest;
 import com.smsapp.student.StudentDtos.ChangeStudentStatusRequest;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
 import com.smsapp.student.StudentDtos.StudentResponse;
 import com.smsapp.student.StudentDtos.UpdateStudentRequest;
+import com.smsapp.transport.TransportService;
 import com.smsapp.user.Roles;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -34,9 +36,11 @@ import java.util.UUID;
 public class StudentController {
 
     private final StudentService studentService;
+    private final TransportService transportService;
 
-    public StudentController(StudentService studentService) {
+    public StudentController(StudentService studentService, TransportService transportService) {
         this.studentService = studentService;
+        this.transportService = transportService;
     }
 
     /** Only SCHOOL_ADMIN may enroll a student (plan section 2). A TEACHER gets 403. */
@@ -113,6 +117,20 @@ public class StudentController {
                                          Authentication authentication) {
         return StudentResponse.from(
                 studentService.assignSection(tenantId(authentication), id, request.sectionId()));
+    }
+
+    /**
+     * Assign a student to a transport route, or unassign them with a null
+     * {@code routeId}. SCHOOL_ADMIN only; a TEACHER gets 403. 404 if the student or
+     * the route is not in the caller's tenant.
+     */
+    @PatchMapping("/{id}/transport-route")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    public StudentResponse assignTransportRoute(@PathVariable UUID id,
+                                                @Valid @RequestBody AssignTransportRouteRequest request,
+                                                Authentication authentication) {
+        return StudentResponse.from(
+                transportService.assignStudentRoute(tenantId(authentication), id, request.routeId()));
     }
 
     private static UUID tenantId(Authentication authentication) {

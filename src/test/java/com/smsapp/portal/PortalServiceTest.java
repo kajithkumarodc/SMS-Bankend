@@ -10,6 +10,8 @@ import com.smsapp.fee.InvoiceRepository;
 import com.smsapp.library.BookLoanRepository;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.student.Student;
+import com.smsapp.transport.TransportAssignment;
+import com.smsapp.transport.TransportService;
 import com.smsapp.student.StudentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,6 +51,9 @@ class PortalServiceTest {
     @Mock
     private BookLoanRepository bookLoanRepository;
 
+    @Mock
+    private TransportService transportService;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID studentUserId = UUID.randomUUID();
     private final UUID guardianUserId = UUID.randomUUID();
@@ -56,7 +61,7 @@ class PortalServiceTest {
 
     private PortalService service() {
         return new PortalService(studentRepository, attendanceService, examService, invoiceRepository,
-                bookLoanRepository);
+                bookLoanRepository, transportService);
     }
 
     private Student linkedStudent() {
@@ -236,5 +241,46 @@ class PortalServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
         verify(bookLoanRepository, never()).findLoanHistory(any(), any());
+    }
+
+    @Test
+    void ownTransportResolvesTheAssignmentForTheCallersOwnRoute() {
+        UUID routeId = UUID.randomUUID();
+        Student self = linkedStudent();
+        self.setTransportRouteId(routeId);
+        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
+                .thenReturn(Optional.of(self));
+        TransportAssignment assignment = new TransportAssignment(routeId, "Route 1", List.of());
+        when(transportService.assignmentForRoute(tenantId, routeId)).thenReturn(assignment);
+
+        assertThat(service().ownTransport(tenantId, studentUserId)).isSameAs(assignment);
+        verify(transportService).assignmentForRoute(tenantId, routeId);
+    }
+
+    @Test
+    void childTransportIsAllowedForTheParentsOwnChild() {
+        UUID routeId = UUID.randomUUID();
+        Student child = linkedStudent();
+        child.setTransportRouteId(routeId);
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.of(child));
+        when(transportService.assignmentForRoute(tenantId, routeId))
+                .thenReturn(new TransportAssignment(routeId, "Route 1", List.of()));
+
+        service().childTransport(tenantId, guardianUserId, studentId);
+
+        verify(transportService).assignmentForRoute(tenantId, routeId);
+    }
+
+    @Test
+    void childTransportIs404WhenTheStudentIsNotThisParentsChild() {
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().childTransport(tenantId, guardianUserId, studentId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(transportService, never()).assignmentForRoute(any(), any());
     }
 }

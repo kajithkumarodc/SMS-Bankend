@@ -5,6 +5,7 @@ import com.smsapp.portal.PortalDtos.ExamResultView;
 import com.smsapp.portal.PortalDtos.InvoiceView;
 import com.smsapp.portal.PortalDtos.LoanView;
 import com.smsapp.portal.PortalDtos.StudentView;
+import com.smsapp.portal.PortalDtos.TransportView;
 import com.smsapp.user.Roles;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -109,6 +110,21 @@ public class PortalController {
     public List<LoanView> childLibrary(@PathVariable UUID studentId, Authentication authentication) {
         return portalService.childLibrary(tenantId(authentication), userId(authentication), studentId)
                 .stream().map(LoanView::from).toList();
+    }
+
+    /** STUDENT: their own transport assignment (route + vehicle + driver info). 404 if none is assigned. */
+    @GetMapping("/student/transport")
+    @PreAuthorize(Roles.HAS_STUDENT)
+    public TransportView ownTransport(Authentication authentication) {
+        return TransportView.from(portalService.ownTransport(tenantId(authentication), userId(authentication)));
+    }
+
+    /** PARENT: one of their own children's transport assignment. 404 if not their child or none is assigned. */
+    @GetMapping("/children/{studentId}/transport")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public TransportView childTransport(@PathVariable UUID studentId, Authentication authentication) {
+        return TransportView.from(
+                portalService.childTransport(tenantId(authentication), userId(authentication), studentId));
     }
 
     private static UUID tenantId(Authentication authentication) {

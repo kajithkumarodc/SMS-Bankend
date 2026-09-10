@@ -45,6 +45,10 @@ public class Student extends TenantScopedEntity {
     @Column(name = "section_id")
     private UUID sectionId;
 
+    /** Transport route the student uses, or null if they don't use school transport. */
+    @Column(name = "transport_route_id")
+    private UUID transportRouteId;
+
     /** The PARENT user account linked as this student's guardian, or null. */
     @Column(name = "guardian_user_id")
     private UUID guardianUserId;

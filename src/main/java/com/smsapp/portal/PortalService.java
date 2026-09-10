@@ -10,6 +10,8 @@ import com.smsapp.fee.InvoiceRepository;
 import com.smsapp.library.BookLoanRepository;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.student.Student;
+import com.smsapp.transport.TransportAssignment;
+import com.smsapp.transport.TransportService;
 import com.smsapp.student.StudentRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,15 +38,17 @@ public class PortalService {
     private final ExamService examService;
     private final InvoiceRepository invoiceRepository;
     private final BookLoanRepository bookLoanRepository;
+    private final TransportService transportService;
 
     public PortalService(StudentRepository studentRepository, AttendanceService attendanceService,
                          ExamService examService, InvoiceRepository invoiceRepository,
-                         BookLoanRepository bookLoanRepository) {
+                         BookLoanRepository bookLoanRepository, TransportService transportService) {
         this.studentRepository = studentRepository;
         this.attendanceService = attendanceService;
         this.examService = examService;
         this.invoiceRepository = invoiceRepository;
         this.bookLoanRepository = bookLoanRepository;
+        this.transportService = transportService;
     }
 
     /**
@@ -131,5 +135,32 @@ public class PortalService {
         Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
         return bookLoanRepository.findLoanHistory(tenantId, child.getId());
+    }
+
+    /**
+     * The caller's own transport assignment (route + vehicles + driver info).
+     *
+     * @throws ApiException 404 if no student record is linked, or the student has no
+     *         transport route assigned.
+     */
+    @Transactional(readOnly = true)
+    public TransportAssignment ownTransport(UUID tenantId, UUID studentUserId) {
+        Student self = ownStudent(tenantId, studentUserId);
+        return transportService.assignmentForRoute(tenantId, self.getTransportRouteId());
+    }
+
+    /**
+     * A parent's own child's transport assignment. The {@code studentId} from the URL
+     * is only honoured if that student's {@code guardian_user_id} is this parent --
+     * otherwise 404.
+     *
+     * @throws ApiException 404 if not this parent's child, or the child has no
+     *         transport route assigned.
+     */
+    @Transactional(readOnly = true)
+    public TransportAssignment childTransport(UUID tenantId, UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+                .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
+        return transportService.assignmentForRoute(tenantId, child.getTransportRouteId());
     }
 }

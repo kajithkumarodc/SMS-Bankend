@@ -45,6 +45,14 @@ final class StudentDtos {
             @NotNull UUID sectionId) {
     }
 
+    /**
+     * Body for {@code PATCH /api/v1/students/{id}/transport-route}. A null
+     * {@code routeId} unassigns the student from school transport.
+     */
+    record AssignTransportRouteRequest(
+            UUID routeId) {
+    }
+
     record StudentResponse(
             UUID id,
             UUID schoolId,
@@ -55,6 +63,7 @@ final class StudentDtos {
             String guardianContact,
             String status,
             UUID sectionId,
+            UUID transportRouteId,
             OffsetDateTime createdAt) {
 
         static StudentResponse from(Student student) {
@@ -68,6 +77,7 @@ final class StudentDtos {
                     student.getGuardianContact(),
                     student.getStatus(),
                     student.getSectionId(),
+                    student.getTransportRouteId(),
                     student.getCreatedAt());
         }
     }

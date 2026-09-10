@@ -5,10 +5,12 @@ import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.fee.Invoice;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.student.Student;
+import com.smsapp.transport.TransportAssignment;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /** Curated self-service views for the student and parent portals. Internal link ids are never exposed. */
@@ -81,6 +83,32 @@ final class PortalDtos {
         static LoanView from(LoanWithBook loan) {
             return new LoanView(loan.getId(), loan.getBookId(), loan.getBookTitle(), loan.getBookAuthor(),
                     loan.getIssuedDate(), loan.getDueDate(), loan.getReturnedDate());
+        }
+    }
+
+    /** The student's transport assignment for the portal: route name + the vehicles running it. */
+    record TransportView(
+            UUID routeId,
+            String routeName,
+            List<TransportVehicleView> vehicles) {
+
+        static TransportView from(TransportAssignment assignment) {
+            return new TransportView(
+                    assignment.routeId(),
+                    assignment.routeName(),
+                    assignment.vehicles().stream().map(TransportVehicleView::from).toList());
+        }
+    }
+
+    record TransportVehicleView(
+            String registrationNumber,
+            String driverName,
+            String driverContact,
+            int capacity) {
+
+        static TransportVehicleView from(TransportAssignment.Vehicle vehicle) {
+            return new TransportVehicleView(vehicle.registrationNumber(), vehicle.driverName(),
+                    vehicle.driverContact(), vehicle.capacity());
         }
     }
 

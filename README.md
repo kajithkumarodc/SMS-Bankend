@@ -280,6 +280,25 @@ capped at `total_copies`). The standard loan period is 14 days.
 | `GET /api/v1/me/student/library` | STUDENT — their own loan history only |
 | `GET /api/v1/me/children/{studentId}/library` | PARENT — their own child's loan history only (404 otherwise) |
 
+## Transport
+
+First slice of the transport module (plan section 2) — routes, vehicles and
+student-route assignment. Stops, fee integration and GPS/live-tracking are later
+considerations. Every route and vehicle is tenant-scoped on top of RLS;
+`(tenant_id, registration_number)` is unique so two tenants may reuse a plate.
+A student optionally carries a `transport_route_id`.
+
+| Endpoint | Access |
+|---|---|
+| `POST /api/v1/transport/routes` (`{name}`) | SCHOOL_ADMIN only |
+| `GET /api/v1/transport/routes` | any authenticated role; tenant's routes by name |
+| `POST /api/v1/transport/vehicles` (`{registrationNumber, driverName, driverContact?, capacity, routeId?}`) | SCHOOL_ADMIN only; 404 if `routeId` is not in the tenant, 409 on a duplicate registration number |
+| `GET /api/v1/transport/vehicles?routeId={id}` | any authenticated role; optionally filtered to one route |
+| `PATCH /api/v1/students/{id}/transport-route` (`{routeId}`, null to unassign) | SCHOOL_ADMIN only; 404 if the student or route is not in the tenant |
+| `GET /api/v1/transport/routes/{routeId}/students` | SCHOOL_ADMIN or TEACHER; 404 for a cross-tenant route |
+| `GET /api/v1/me/student/transport` | STUDENT — their own route + vehicle + driver info; 404 if not assigned |
+| `GET /api/v1/me/children/{studentId}/transport` | PARENT — their own child's assignment (404 otherwise) |
+
 ## Build
 
 ```bash
