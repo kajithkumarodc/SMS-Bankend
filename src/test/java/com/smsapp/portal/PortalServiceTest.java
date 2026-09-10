@@ -7,6 +7,8 @@ import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.exam.ExamService;
 import com.smsapp.fee.Invoice;
 import com.smsapp.fee.InvoiceRepository;
+import com.smsapp.hostel.HostelAllocation;
+import com.smsapp.hostel.HostelService;
 import com.smsapp.library.BookLoanRepository;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.student.Student;
@@ -54,6 +56,9 @@ class PortalServiceTest {
     @Mock
     private TransportService transportService;
 
+    @Mock
+    private HostelService hostelService;
+
     private final UUID tenantId = UUID.randomUUID();
     private final UUID studentUserId = UUID.randomUUID();
     private final UUID guardianUserId = UUID.randomUUID();
@@ -61,7 +66,7 @@ class PortalServiceTest {
 
     private PortalService service() {
         return new PortalService(studentRepository, attendanceService, examService, invoiceRepository,
-                bookLoanRepository, transportService);
+                bookLoanRepository, transportService, hostelService);
     }
 
     private Student linkedStudent() {
@@ -282,5 +287,47 @@ class PortalServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
         verify(transportService, never()).assignmentForRoute(any(), any());
+    }
+
+    @Test
+    void ownHostelResolvesTheAllocationForTheCallersOwnRoom() {
+        UUID roomId = UUID.randomUUID();
+        Student self = linkedStudent();
+        self.setHostelRoomId(roomId);
+        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
+                .thenReturn(Optional.of(self));
+        HostelAllocation allocation =
+                new HostelAllocation(UUID.randomUUID(), "Block A", roomId, "A-101", 3, List.of());
+        when(hostelService.allocationForRoom(tenantId, studentId, roomId)).thenReturn(allocation);
+
+        assertThat(service().ownHostel(tenantId, studentUserId)).isSameAs(allocation);
+        verify(hostelService).allocationForRoom(tenantId, studentId, roomId);
+    }
+
+    @Test
+    void childHostelIsAllowedForTheParentsOwnChild() {
+        UUID roomId = UUID.randomUUID();
+        Student child = linkedStudent();
+        child.setHostelRoomId(roomId);
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.of(child));
+        when(hostelService.allocationForRoom(tenantId, studentId, roomId))
+                .thenReturn(new HostelAllocation(UUID.randomUUID(), "Block A", roomId, "A-101", 3, List.of()));
+
+        service().childHostel(tenantId, guardianUserId, studentId);
+
+        verify(hostelService).allocationForRoom(tenantId, studentId, roomId);
+    }
+
+    @Test
+    void childHostelIs404WhenTheStudentIsNotThisParentsChild() {
+        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().childHostel(tenantId, guardianUserId, studentId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(hostelService, never()).allocationForRoom(any(), any(), any());
     }
 }

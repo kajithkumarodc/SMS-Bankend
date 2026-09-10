@@ -1,0 +1,17 @@
+package com.smsapp.hostel;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+/** Every query is explicitly filtered by {@code tenant_id} -- defense in depth on top of RLS. */
+public interface HostelBlockRepository extends JpaRepository<HostelBlock, UUID> {
+
+    List<HostelBlock> findByTenantIdOrderByName(UUID tenantId);
+
+    Optional<HostelBlock> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    boolean existsByIdAndTenantId(UUID id, UUID tenantId);
+}

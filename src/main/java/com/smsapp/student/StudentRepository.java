@@ -21,6 +21,12 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
     /** Transport: all students assigned to one route, still tenant-scoped underneath. */
     List<Student> findByTenantIdAndTransportRouteIdOrderByFullName(UUID tenantId, UUID transportRouteId);
 
+    /** Hostel: all students allocated to one room, still tenant-scoped underneath. */
+    List<Student> findByTenantIdAndHostelRoomIdOrderByFullName(UUID tenantId, UUID hostelRoomId);
+
+    /** Hostel: how many students are currently allocated to a room (for the capacity check). */
+    long countByTenantIdAndHostelRoomId(UUID tenantId, UUID hostelRoomId);
+
     Optional<Student> findByIdAndTenantId(UUID id, UUID tenantId);
 
     boolean existsByTenantIdAndAdmissionNumber(UUID tenantId, String admissionNumber);

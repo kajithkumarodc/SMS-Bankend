@@ -53,6 +53,14 @@ final class StudentDtos {
             UUID routeId) {
     }
 
+    /**
+     * Body for {@code PATCH /api/v1/students/{id}/hostel-room}. A null {@code roomId}
+     * deallocates the student from the hostel.
+     */
+    record AllocateHostelRoomRequest(
+            UUID roomId) {
+    }
+
     record StudentResponse(
             UUID id,
             UUID schoolId,
@@ -64,6 +72,7 @@ final class StudentDtos {
             String status,
             UUID sectionId,
             UUID transportRouteId,
+            UUID hostelRoomId,
             OffsetDateTime createdAt) {
 
         static StudentResponse from(Student student) {
@@ -78,6 +87,7 @@ final class StudentDtos {
                     student.getStatus(),
                     student.getSectionId(),
                     student.getTransportRouteId(),
+                    student.getHostelRoomId(),
                     student.getCreatedAt());
         }
     }

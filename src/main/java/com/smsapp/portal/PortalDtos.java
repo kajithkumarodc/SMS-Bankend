@@ -3,6 +3,7 @@ package com.smsapp.portal;
 import com.smsapp.attendance.AttendanceRecord;
 import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.fee.Invoice;
+import com.smsapp.hostel.HostelAllocation;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.student.Student;
 import com.smsapp.transport.TransportAssignment;
@@ -109,6 +110,21 @@ final class PortalDtos {
         static TransportVehicleView from(TransportAssignment.Vehicle vehicle) {
             return new TransportVehicleView(vehicle.registrationNumber(), vehicle.driverName(),
                     vehicle.driverContact(), vehicle.capacity());
+        }
+    }
+
+    /** The student's hostel allocation for the portal: block + room + roommates' names. */
+    record HostelView(
+            UUID blockId,
+            String blockName,
+            UUID roomId,
+            String roomNumber,
+            int capacity,
+            List<String> roommates) {
+
+        static HostelView from(HostelAllocation allocation) {
+            return new HostelView(allocation.blockId(), allocation.blockName(), allocation.roomId(),
+                    allocation.roomNumber(), allocation.capacity(), allocation.roommates());
         }
     }
 

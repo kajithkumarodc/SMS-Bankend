@@ -3,6 +3,7 @@ package com.smsapp.portal;
 import com.smsapp.portal.PortalDtos.AttendanceEntryView;
 import com.smsapp.portal.PortalDtos.ExamResultView;
 import com.smsapp.portal.PortalDtos.InvoiceView;
+import com.smsapp.portal.PortalDtos.HostelView;
 import com.smsapp.portal.PortalDtos.LoanView;
 import com.smsapp.portal.PortalDtos.StudentView;
 import com.smsapp.portal.PortalDtos.TransportView;
@@ -125,6 +126,21 @@ public class PortalController {
     public TransportView childTransport(@PathVariable UUID studentId, Authentication authentication) {
         return TransportView.from(
                 portalService.childTransport(tenantId(authentication), userId(authentication), studentId));
+    }
+
+    /** STUDENT: their own hostel allocation (block + room + roommates). 404 if none is allocated. */
+    @GetMapping("/student/hostel")
+    @PreAuthorize(Roles.HAS_STUDENT)
+    public HostelView ownHostel(Authentication authentication) {
+        return HostelView.from(portalService.ownHostel(tenantId(authentication), userId(authentication)));
+    }
+
+    /** PARENT: one of their own children's hostel allocation. 404 if not their child or none is allocated. */
+    @GetMapping("/children/{studentId}/hostel")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public HostelView childHostel(@PathVariable UUID studentId, Authentication authentication) {
+        return HostelView.from(
+                portalService.childHostel(tenantId(authentication), userId(authentication), studentId));
     }
 
     private static UUID tenantId(Authentication authentication) {

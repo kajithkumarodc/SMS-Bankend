@@ -36,6 +36,9 @@ public final class AuditActions {
     public static final String TRANSPORT_ROUTE_CREATED = "TRANSPORT_ROUTE_CREATED";
     public static final String TRANSPORT_VEHICLE_ADDED = "TRANSPORT_VEHICLE_ADDED";
     public static final String TRANSPORT_ROUTE_ASSIGNED = "TRANSPORT_ROUTE_ASSIGNED";
+    public static final String HOSTEL_BLOCK_CREATED = "HOSTEL_BLOCK_CREATED";
+    public static final String HOSTEL_ROOM_ADDED = "HOSTEL_ROOM_ADDED";
+    public static final String HOSTEL_ROOM_ALLOCATED = "HOSTEL_ROOM_ALLOCATED";
 
     // entity types
     public static final String USER = "USER";
@@ -54,6 +57,8 @@ public final class AuditActions {
     public static final String BOOK_LOAN = "BOOK_LOAN";
     public static final String TRANSPORT_ROUTE = "TRANSPORT_ROUTE";
     public static final String TRANSPORT_VEHICLE = "TRANSPORT_VEHICLE";
+    public static final String HOSTEL_BLOCK = "HOSTEL_BLOCK";
+    public static final String HOSTEL_ROOM = "HOSTEL_ROOM";
 
     private AuditActions() {
     }

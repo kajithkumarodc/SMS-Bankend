@@ -1,5 +1,7 @@
 package com.smsapp.student;
 
+import com.smsapp.hostel.HostelService;
+import com.smsapp.student.StudentDtos.AllocateHostelRoomRequest;
 import com.smsapp.student.StudentDtos.AssignSectionRequest;
 import com.smsapp.student.StudentDtos.AssignTransportRouteRequest;
 import com.smsapp.student.StudentDtos.ChangeStudentStatusRequest;
@@ -37,10 +39,13 @@ public class StudentController {
 
     private final StudentService studentService;
     private final TransportService transportService;
+    private final HostelService hostelService;
 
-    public StudentController(StudentService studentService, TransportService transportService) {
+    public StudentController(StudentService studentService, TransportService transportService,
+                             HostelService hostelService) {
         this.studentService = studentService;
         this.transportService = transportService;
+        this.hostelService = hostelService;
     }
 
     /** Only SCHOOL_ADMIN may enroll a student (plan section 2). A TEACHER gets 403. */
@@ -131,6 +136,20 @@ public class StudentController {
                                                 Authentication authentication) {
         return StudentResponse.from(
                 transportService.assignStudentRoute(tenantId(authentication), id, request.routeId()));
+    }
+
+    /**
+     * Allocate a student to a hostel room, or deallocate them with a null
+     * {@code roomId}. SCHOOL_ADMIN only; a TEACHER gets 403. 404 if the student or
+     * the room is not in the caller's tenant, 400 if the room is already full.
+     */
+    @PatchMapping("/{id}/hostel-room")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    public StudentResponse allocateHostelRoom(@PathVariable UUID id,
+                                              @Valid @RequestBody AllocateHostelRoomRequest request,
+                                              Authentication authentication) {
+        return StudentResponse.from(
+                hostelService.allocateStudentRoom(tenantId(authentication), id, request.roomId()));
     }
 
     private static UUID tenantId(Authentication authentication) {

@@ -7,6 +7,8 @@ import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.exam.ExamService;
 import com.smsapp.fee.Invoice;
 import com.smsapp.fee.InvoiceRepository;
+import com.smsapp.hostel.HostelAllocation;
+import com.smsapp.hostel.HostelService;
 import com.smsapp.library.BookLoanRepository;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.student.Student;
@@ -39,16 +41,19 @@ public class PortalService {
     private final InvoiceRepository invoiceRepository;
     private final BookLoanRepository bookLoanRepository;
     private final TransportService transportService;
+    private final HostelService hostelService;
 
     public PortalService(StudentRepository studentRepository, AttendanceService attendanceService,
                          ExamService examService, InvoiceRepository invoiceRepository,
-                         BookLoanRepository bookLoanRepository, TransportService transportService) {
+                         BookLoanRepository bookLoanRepository, TransportService transportService,
+                         HostelService hostelService) {
         this.studentRepository = studentRepository;
         this.attendanceService = attendanceService;
         this.examService = examService;
         this.invoiceRepository = invoiceRepository;
         this.bookLoanRepository = bookLoanRepository;
         this.transportService = transportService;
+        this.hostelService = hostelService;
     }
 
     /**
@@ -162,5 +167,32 @@ public class PortalService {
         Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
         return transportService.assignmentForRoute(tenantId, child.getTransportRouteId());
+    }
+
+    /**
+     * The caller's own hostel allocation (block + room + roommates).
+     *
+     * @throws ApiException 404 if no student record is linked, or the student has no
+     *         hostel room allocated.
+     */
+    @Transactional(readOnly = true)
+    public HostelAllocation ownHostel(UUID tenantId, UUID studentUserId) {
+        Student self = ownStudent(tenantId, studentUserId);
+        return hostelService.allocationForRoom(tenantId, self.getId(), self.getHostelRoomId());
+    }
+
+    /**
+     * A parent's own child's hostel allocation. The {@code studentId} from the URL is
+     * only honoured if that student's {@code guardian_user_id} is this parent --
+     * otherwise 404.
+     *
+     * @throws ApiException 404 if not this parent's child, or the child has no hostel
+     *         room allocated.
+     */
+    @Transactional(readOnly = true)
+    public HostelAllocation childHostel(UUID tenantId, UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+                .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
+        return hostelService.allocationForRoom(tenantId, child.getId(), child.getHostelRoomId());
     }
 }

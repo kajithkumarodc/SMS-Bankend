@@ -299,6 +299,25 @@ A student optionally carries a `transport_route_id`.
 | `GET /api/v1/me/student/transport` | STUDENT — their own route + vehicle + driver info; 404 if not assigned |
 | `GET /api/v1/me/children/{studentId}/transport` | PARENT — their own child's assignment (404 otherwise) |
 
+## Hostel
+
+First slice of the hostel module (plan section 2) — blocks, rooms and student
+allocation. Hostel attendance and mess/fee integration are later (a hostel fee
+can reuse `fee_structures`). Every block and room is tenant-scoped on top of RLS;
+room numbers are unique per `(tenant_id, block_id)`, so "A-101" can exist in two
+blocks. A student optionally carries a `hostel_room_id`.
+
+| Endpoint | Access |
+|---|---|
+| `POST /api/v1/hostel/blocks` (`{name}`) | SCHOOL_ADMIN only |
+| `GET /api/v1/hostel/blocks` | any authenticated role; tenant's blocks by name |
+| `POST /api/v1/hostel/blocks/{blockId}/rooms` (`{roomNumber, capacity}`) | SCHOOL_ADMIN only; 404 if the block is not in the tenant, 409 on a duplicate room number **within that block** |
+| `GET /api/v1/hostel/blocks/{blockId}/rooms` | any authenticated role; each room with live `occupied` / `capacity`; 404 for a cross-tenant block |
+| `PATCH /api/v1/students/{id}/hostel-room` (`{roomId}`, null to deallocate) | SCHOOL_ADMIN only; 404 if the student or room is not in the tenant, **400 if the room is at full capacity** |
+| `GET /api/v1/hostel/blocks/{blockId}/rooms/{roomId}/students` | SCHOOL_ADMIN or TEACHER; 404 for a cross-tenant room or a room not in that block |
+| `GET /api/v1/me/student/hostel` | STUDENT — their own block + room + roommates' names; 404 if not allocated |
+| `GET /api/v1/me/children/{studentId}/hostel` | PARENT — their own child's allocation (404 otherwise) |
+
 ## Build
 
 ```bash

@@ -49,6 +49,10 @@ public class Student extends TenantScopedEntity {
     @Column(name = "transport_route_id")
     private UUID transportRouteId;
 
+    /** Hostel room the student is allocated to, or null if they are a day scholar. */
+    @Column(name = "hostel_room_id")
+    private UUID hostelRoomId;
+
     /** The PARENT user account linked as this student's guardian, or null. */
     @Column(name = "guardian_user_id")
     private UUID guardianUserId;
