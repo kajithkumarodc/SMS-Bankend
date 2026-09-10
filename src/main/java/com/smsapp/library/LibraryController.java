@@ -1,5 +1,6 @@
 package com.smsapp.library;
 
+import com.smsapp.library.LibraryDtos.ActiveLoanView;
 import com.smsapp.library.LibraryDtos.BookResponse;
 import com.smsapp.library.LibraryDtos.CreateBookRequest;
 import com.smsapp.library.LibraryDtos.IssueLoanRequest;
@@ -94,6 +95,18 @@ public class LibraryController {
     List<LoanHistoryView> loanHistory(@RequestParam UUID studentId, Authentication authentication) {
         return libraryService.loanHistoryForStudent(tenantId(authentication), studentId).stream()
                 .map(LoanHistoryView::from).toList();
+    }
+
+    /**
+     * Every book currently on loan (not yet returned) across the tenant, soonest
+     * due first. SCHOOL_ADMIN or TEACHER only. Feeds the "Active loans" view where
+     * a book is returned from.
+     */
+    @GetMapping("/loans/active")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
+    List<ActiveLoanView> activeLoans(Authentication authentication) {
+        return libraryService.activeLoans(tenantId(authentication)).stream()
+                .map(ActiveLoanView::from).toList();
     }
 
     private static UUID tenantId(Authentication authentication) {

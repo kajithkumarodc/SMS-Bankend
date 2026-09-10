@@ -3,6 +3,7 @@ package com.smsapp.library;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
+import com.smsapp.library.BookLoanRepository.ActiveLoan;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.library.LibraryDtos.CreateBookRequest;
 import com.smsapp.library.LibraryDtos.IssueLoanRequest;
@@ -148,5 +149,11 @@ public class LibraryService {
     @Transactional(readOnly = true)
     public List<LoanWithBook> loanHistoryForOwnedStudent(UUID tenantId, UUID studentId) {
         return loanRepository.findLoanHistory(tenantId, studentId);
+    }
+
+    /** Every not-yet-returned loan in the tenant, for the staff "active loans" view. */
+    @Transactional(readOnly = true)
+    public List<ActiveLoan> activeLoans(UUID tenantId) {
+        return loanRepository.findActiveLoans(tenantId);
     }
 }

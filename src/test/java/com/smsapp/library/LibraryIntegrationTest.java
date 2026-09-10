@@ -338,6 +338,40 @@ class LibraryIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // --- Active loans (staff) --------------------------------
+
+    @Test
+    void activeLoansListsOpenLoansTenantScopedExcludesReturnedAndIsStaffOnly() throws Exception {
+        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+
+        mockMvc.perform(get("/api/v1/library/loans/active").cookie(adminA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].bookTitle").value("Refactoring"))
+                .andExpect(jsonPath("$[0].studentName").value("Anaya"));
+
+        // Tenant B's open loan never shows for tenant A.
+        mockMvc.perform(get("/api/v1/library/loans/active").cookie(login(SCHOOL_B, ADMIN_B)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].bookTitle").value("The Pragmatic Programmer"));
+
+        // A returned loan drops off the list.
+        mockMvc.perform(post("/api/v1/library/loans/" + loanAId + "/return").cookie(adminA))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/library/loans/active").cookie(adminA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // Teacher may read it; student / parent may not.
+        mockMvc.perform(get("/api/v1/library/loans/active").cookie(login(SCHOOL_A, TEACHER_A)))
+                .andExpect(status().isOk());
+        for (String email : new String[] {STUDENT_A, PARENT_A}) {
+            mockMvc.perform(get("/api/v1/library/loans/active").cookie(login(SCHOOL_A, email)))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
     // --- Staff loan history -----------------------------------
 
     @Test

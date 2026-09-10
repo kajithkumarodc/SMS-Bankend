@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -224,5 +225,14 @@ class LibraryServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
         verify(loanRepository, never()).findLoanHistory(any(), any());
+    }
+
+    @Test
+    void activeLoansIsScopedToTheTenant() {
+        when(loanRepository.findActiveLoans(tenantId)).thenReturn(List.of());
+
+        service().activeLoans(tenantId);
+
+        verify(loanRepository).findActiveLoans(tenantId);
     }
 }

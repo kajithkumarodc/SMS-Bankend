@@ -1,5 +1,6 @@
 package com.smsapp.library;
 
+import com.smsapp.library.BookLoanRepository.ActiveLoan;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -72,6 +73,22 @@ final class LibraryDtos {
         static LoanHistoryView from(LoanWithBook loan) {
             return new LoanHistoryView(loan.getId(), loan.getBookId(), loan.getBookTitle(), loan.getBookAuthor(),
                     loan.getIssuedDate(), loan.getDueDate(), loan.getReturnedDate());
+        }
+    }
+
+    /** One currently-issued loan for the staff "active loans" view -- carries the book title and student name. */
+    record ActiveLoanView(
+            UUID id,
+            UUID bookId,
+            String bookTitle,
+            UUID studentId,
+            String studentName,
+            LocalDate issuedDate,
+            LocalDate dueDate) {
+
+        static ActiveLoanView from(ActiveLoan loan) {
+            return new ActiveLoanView(loan.getId(), loan.getBookId(), loan.getBookTitle(),
+                    loan.getStudentId(), loan.getStudentName(), loan.getIssuedDate(), loan.getDueDate());
         }
     }
 }

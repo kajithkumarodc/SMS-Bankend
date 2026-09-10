@@ -22,6 +22,15 @@ public interface BookLoanRepository extends JpaRepository<BookLoan, UUID> {
             + "order by l.issuedDate desc, l.id")
     List<LoanWithBook> findLoanHistory(@Param("tenantId") UUID tenantId, @Param("studentId") UUID studentId);
 
+    /** Every loan in the tenant that has not been returned yet, soonest due first, with book + student joined in. */
+    @Query("select l.id as id, l.bookId as bookId, b.title as bookTitle, "
+            + "l.studentId as studentId, s.fullName as studentName, "
+            + "l.issuedDate as issuedDate, l.dueDate as dueDate "
+            + "from BookLoan l, LibraryBook b, com.smsapp.student.Student s "
+            + "where l.bookId = b.id and l.studentId = s.id and l.tenantId = :tenantId and l.returnedDate is null "
+            + "order by l.dueDate asc, l.id")
+    List<ActiveLoan> findActiveLoans(@Param("tenantId") UUID tenantId);
+
     interface LoanWithBook {
         UUID getId();
 
@@ -36,5 +45,22 @@ public interface BookLoanRepository extends JpaRepository<BookLoan, UUID> {
         LocalDate getDueDate();
 
         LocalDate getReturnedDate();
+    }
+
+    /** One currently-issued loan, for the staff "active loans" view. */
+    interface ActiveLoan {
+        UUID getId();
+
+        UUID getBookId();
+
+        String getBookTitle();
+
+        UUID getStudentId();
+
+        String getStudentName();
+
+        LocalDate getIssuedDate();
+
+        LocalDate getDueDate();
     }
 }

@@ -276,6 +276,7 @@ capped at `total_copies`). The standard loan period is 14 days.
 | `POST /api/v1/library/loans` (`{bookId, studentId}`) | SCHOOL_ADMIN only; 404 if the book/student is not in the tenant, 400 if no copies are available |
 | `POST /api/v1/library/loans/{loanId}/return` | SCHOOL_ADMIN only; 404 for a cross-tenant id, 409 if already returned |
 | `GET /api/v1/library/loans?studentId={id}` | SCHOOL_ADMIN or TEACHER; 404 if the student is not in the tenant |
+| `GET /api/v1/library/loans/active` | SCHOOL_ADMIN or TEACHER; every not-yet-returned loan in the tenant (book title + student name), soonest due first |
 | `GET /api/v1/me/student/library` | STUDENT — their own loan history only |
 | `GET /api/v1/me/children/{studentId}/library` | PARENT — their own child's loan history only (404 otherwise) |
 
