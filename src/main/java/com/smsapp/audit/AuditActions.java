@@ -39,6 +39,11 @@ public final class AuditActions {
     public static final String HOSTEL_BLOCK_CREATED = "HOSTEL_BLOCK_CREATED";
     public static final String HOSTEL_ROOM_ADDED = "HOSTEL_ROOM_ADDED";
     public static final String HOSTEL_ROOM_ALLOCATED = "HOSTEL_ROOM_ALLOCATED";
+    public static final String STAFF_PROFILE_CREATED = "STAFF_PROFILE_CREATED";
+    public static final String STAFF_PROFILE_UPDATED = "STAFF_PROFILE_UPDATED";
+    public static final String LEAVE_REQUEST_CREATED = "LEAVE_REQUEST_CREATED";
+    public static final String LEAVE_REQUEST_DECIDED = "LEAVE_REQUEST_DECIDED";
+    public static final String PAYROLL_RECORD_CREATED = "PAYROLL_RECORD_CREATED";
 
     // entity types
     public static final String USER = "USER";
@@ -59,6 +64,9 @@ public final class AuditActions {
     public static final String TRANSPORT_VEHICLE = "TRANSPORT_VEHICLE";
     public static final String HOSTEL_BLOCK = "HOSTEL_BLOCK";
     public static final String HOSTEL_ROOM = "HOSTEL_ROOM";
+    public static final String STAFF_PROFILE = "STAFF_PROFILE";
+    public static final String LEAVE_REQUEST = "LEAVE_REQUEST";
+    public static final String PAYROLL_RECORD = "PAYROLL_RECORD";
 
     private AuditActions() {
     }
