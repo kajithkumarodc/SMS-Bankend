@@ -425,4 +425,129 @@ class StaffIntegrationTest {
                     .andExpect(status().isForbidden());
         }
     }
+
+    // --- /staff/eligible-users --------------------------------------
+
+    @Test
+    void eligibleUsersExcludesUsersWhoAlreadyHaveAProfileAndIsTenantScoped() throws Exception {
+        mockMvc.perform(get("/api/v1/staff/eligible-users").cookie(login(SCHOOL_A, ADMIN_A)))
+                .andExpect(status().isOk())
+                // ADMIN_A + STUDENT_A + PARENT_A have no profile; TEACHER_A/TEACHER_A2 already do.
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[*].email", org.hamcrest.Matchers.containsInAnyOrder(
+                        ADMIN_A, STUDENT_A, PARENT_A)));
+    }
+
+    @Test
+    void onlySchoolAdminCanListEligibleUsers() throws Exception {
+        for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
+            mockMvc.perform(get("/api/v1/staff/eligible-users").cookie(login(SCHOOL_A, email)))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    // --- /me/staff-profile --------------------------------------------
+
+    @Test
+    void aTeacherSeesTheirOwnStaffProfile() throws Exception {
+        mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(SCHOOL_A, TEACHER_A)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.employeeCode").value("EMP-A1"))
+                .andExpect(jsonPath("$.userId").value(teacherAUserId.toString()));
+    }
+
+    @Test
+    void aUserWithNoStaffProfileGetsACleanNotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(SCHOOL_A, ADMIN_A)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void studentAndParentCannotReadOwnStaffProfile() throws Exception {
+        for (String email : new String[] {STUDENT_A, PARENT_A}) {
+            mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(SCHOOL_A, email)))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    // --- GET /leave-requests: SCHOOL_ADMIN view, filters, tenant scope --
+
+    @Test
+    void listLeaveRequestsWithNoFilterReturnsTheWholeTenant() throws Exception {
+        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        UUID profileId = staffProfileId(adminA, teacherAUserId);
+        mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(adminA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"leaveType\":\"SICK\",\"startDate\":\"2026-03-01\",\"endDate\":\"2026-03-03\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/leave-requests").cookie(adminA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        // Tenant B's admin sees none of tenant A's requests.
+        mockMvc.perform(get("/api/v1/leave-requests").cookie(login(SCHOOL_B, ADMIN_B)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void listLeaveRequestsFiltersByStatusForThePendingQueue() throws Exception {
+        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        UUID profileId = staffProfileId(adminA, teacherAUserId);
+        var result = mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(adminA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"leaveType\":\"SICK\",\"startDate\":\"2026-03-01\",\"endDate\":\"2026-03-03\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        UUID leaveId = UUID.fromString(readJson(result.getResponse().getContentAsString()).get("id").asText());
+        mockMvc.perform(patch("/api/v1/leave-requests/" + leaveId).cookie(adminA)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"APPROVED\"}"))
+                .andExpect(status().isOk());
+
+        UUID profileId2 = staffProfileId(adminA, teacherA2UserId);
+        mockMvc.perform(post("/api/v1/staff/" + profileId2 + "/leave-requests").cookie(adminA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"leaveType\":\"CASUAL\",\"startDate\":\"2026-04-01\",\"endDate\":\"2026-04-01\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/leave-requests").param("status", "PENDING").cookie(adminA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].leaveType").value("CASUAL"));
+    }
+
+    @Test
+    void listLeaveRequestsFiltersByStaffMemberForTheDetailView() throws Exception {
+        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        UUID profileId = staffProfileId(adminA, teacherAUserId);
+        UUID profileId2 = staffProfileId(adminA, teacherA2UserId);
+        mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(adminA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"leaveType\":\"SICK\",\"startDate\":\"2026-03-01\",\"endDate\":\"2026-03-03\"}"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/staff/" + profileId2 + "/leave-requests").cookie(adminA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"leaveType\":\"CASUAL\",\"startDate\":\"2026-04-01\",\"endDate\":\"2026-04-01\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/leave-requests").param("staffUserId", teacherAUserId.toString()).cookie(adminA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].leaveType").value("SICK"));
+    }
+
+    @Test
+    void listLeaveRequestsWithAnInvalidStatusReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/leave-requests").param("status", "CANCELLED").cookie(login(SCHOOL_A, ADMIN_A)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void teacherStudentAndParentCannotListLeaveRequests() throws Exception {
+        for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
+            mockMvc.perform(get("/api/v1/leave-requests").cookie(login(SCHOOL_A, email)))
+                    .andExpect(status().isForbidden());
+        }
+    }
 }

@@ -6,6 +6,8 @@ import com.smsapp.common.ApiException;
 import com.smsapp.staff.LeaveDtos.CreateLeaveRequestRequest;
 import com.smsapp.staff.StaffDtos.CreateStaffProfileRequest;
 import com.smsapp.staff.StaffDtos.UpdateStaffProfileRequest;
+import com.smsapp.user.RoleRepository;
+import com.smsapp.user.User;
 import com.smsapp.user.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,10 +44,14 @@ class StaffServiceTest {
     private UserRepository userRepository;
 
     @Mock
+    private RoleRepository roleRepository;
+
+    @Mock
     private AuditService auditService;
 
     private StaffService service() {
-        return new StaffService(staffProfileRepository, leaveRequestRepository, userRepository, auditService);
+        return new StaffService(staffProfileRepository, leaveRequestRepository, userRepository, roleRepository,
+                auditService);
     }
 
     private final UUID tenantId = UUID.randomUUID();
@@ -141,6 +147,40 @@ class StaffServiceTest {
                 userId, "EMP-001", null, null, LocalDate.of(2020, 1, 1), BigDecimal.TEN)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    // --- response enrichment (join with the owning user) ----------
+
+    @Test
+    void toResponseJoinsTheOwningUsersEmailAndFullName() {
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("teacher@demo.edu");
+        user.setFullName("Priya Teacher");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        var response = service().toResponse(profile());
+
+        assertThat(response.email()).isEqualTo("teacher@demo.edu");
+        assertThat(response.fullName()).isEqualTo("Priya Teacher");
+        assertThat(response.employeeCode()).isEqualTo("EMP-001");
+    }
+
+    @Test
+    void listProfilesWithNamesJoinsEachProfileWithItsOwningUser() {
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("teacher@demo.edu");
+        user.setFullName("Priya Teacher");
+        when(staffProfileRepository.findByTenantIdOrderByEmployeeCode(tenantId)).thenReturn(List.of(profile()));
+        when(userRepository.findAllById(List.of(userId))).thenReturn(List.of(user));
+
+        var responses = service().listProfilesWithNames(tenantId);
+
+        assertThat(responses).singleElement().satisfies(r -> {
+            assertThat(r.userId()).isEqualTo(userId);
+            assertThat(r.fullName()).isEqualTo("Priya Teacher");
+        });
     }
 
     // --- update profile ------------------------------------------
@@ -298,5 +338,99 @@ class StaffServiceTest {
         service().ownLeaveRequests(tenantId, userId);
 
         verify(leaveRequestRepository).findByTenantIdAndStaffUserIdOrderByCreatedAtDesc(tenantId, userId);
+    }
+
+    @Test
+    void listLeaveRequestsWithNoFiltersListsTheWholeTenant() {
+        when(leaveRequestRepository.findByTenantIdOrderByCreatedAtDesc(tenantId)).thenReturn(List.of());
+
+        service().listLeaveRequests(tenantId, null, null);
+
+        verify(leaveRequestRepository).findByTenantIdOrderByCreatedAtDesc(tenantId);
+    }
+
+    @Test
+    void listLeaveRequestsFiltersByStatusOnly() {
+        when(leaveRequestRepository.findByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, "PENDING"))
+                .thenReturn(List.of());
+
+        service().listLeaveRequests(tenantId, null, "pending");
+
+        verify(leaveRequestRepository).findByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, "PENDING");
+    }
+
+    @Test
+    void listLeaveRequestsFiltersByStaffMemberOnly() {
+        when(leaveRequestRepository.findByTenantIdAndStaffUserIdOrderByCreatedAtDesc(tenantId, userId))
+                .thenReturn(List.of());
+
+        service().listLeaveRequests(tenantId, userId, null);
+
+        verify(leaveRequestRepository).findByTenantIdAndStaffUserIdOrderByCreatedAtDesc(tenantId, userId);
+    }
+
+    @Test
+    void listLeaveRequestsFiltersByBothStaffMemberAndStatus() {
+        when(leaveRequestRepository.findByTenantIdAndStaffUserIdAndStatusOrderByCreatedAtDesc(
+                tenantId, userId, "APPROVED")).thenReturn(List.of());
+
+        service().listLeaveRequests(tenantId, userId, "APPROVED");
+
+        verify(leaveRequestRepository).findByTenantIdAndStaffUserIdAndStatusOrderByCreatedAtDesc(
+                tenantId, userId, "APPROVED");
+    }
+
+    @Test
+    void listLeaveRequestsWithAnInvalidStatusReturns400() {
+        assertThatThrownBy(() -> service().listLeaveRequests(tenantId, null, "CANCELLED"))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    // --- eligible users ---------------------------------------------
+
+    @Test
+    void eligibleUsersExcludesUsersWhoAlreadyHaveAProfile() {
+        User already = new User();
+        already.setId(userId);
+        already.setEmail("already@demo.edu");
+        already.setFullName("Already Staff");
+        User free = new User();
+        UUID freeId = UUID.randomUUID();
+        free.setId(freeId);
+        free.setEmail("free@demo.edu");
+        free.setFullName("Free User");
+
+        when(staffProfileRepository.findUserIdsByTenantId(tenantId)).thenReturn(List.of(userId));
+        when(userRepository.findByTenantIdOrderByFullName(tenantId)).thenReturn(List.of(already, free));
+        when(roleRepository.findNamesByUserId(freeId)).thenReturn(List.of("TEACHER"));
+
+        List<StaffDtos.EligibleUserResponse> eligible = service().eligibleUsers(tenantId);
+
+        assertThat(eligible).singleElement().satisfies(u -> {
+            assertThat(u.id()).isEqualTo(freeId);
+            assertThat(u.email()).isEqualTo("free@demo.edu");
+            assertThat(u.roles()).containsExactly("TEACHER");
+        });
+    }
+
+    // --- own profile --------------------------------------------------
+
+    @Test
+    void ownProfileReturnsTheCallersProfile() {
+        when(staffProfileRepository.findByTenantIdAndUserId(tenantId, userId)).thenReturn(Optional.of(profile()));
+
+        StaffProfile found = service().ownProfile(tenantId, userId);
+
+        assertThat(found.getId()).isEqualTo(profileId);
+    }
+
+    @Test
+    void ownProfileWithNoLinkedProfileReturns404() {
+        when(staffProfileRepository.findByTenantIdAndUserId(tenantId, userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().ownProfile(tenantId, userId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
 }

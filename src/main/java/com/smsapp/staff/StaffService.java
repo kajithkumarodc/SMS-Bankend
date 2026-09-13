@@ -5,7 +5,11 @@ import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
 import com.smsapp.staff.LeaveDtos.CreateLeaveRequestRequest;
 import com.smsapp.staff.StaffDtos.CreateStaffProfileRequest;
+import com.smsapp.staff.StaffDtos.EligibleUserResponse;
+import com.smsapp.staff.StaffDtos.StaffProfileResponse;
 import com.smsapp.staff.StaffDtos.UpdateStaffProfileRequest;
+import com.smsapp.user.RoleRepository;
+import com.smsapp.user.User;
 import com.smsapp.user.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -13,9 +17,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Staff profiles + leave requests (plan section 2, Staff Management). Every
@@ -34,15 +41,18 @@ public class StaffService {
     private final StaffProfileRepository staffProfileRepository;
     private final LeaveRequestRepository leaveRequestRepository;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final AuditService auditService;
 
     public StaffService(StaffProfileRepository staffProfileRepository,
                         LeaveRequestRepository leaveRequestRepository,
                         UserRepository userRepository,
+                        RoleRepository roleRepository,
                         AuditService auditService) {
         this.staffProfileRepository = staffProfileRepository;
         this.leaveRequestRepository = leaveRequestRepository;
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
         this.auditService = auditService;
     }
 
@@ -95,6 +105,61 @@ public class StaffService {
     @Transactional(readOnly = true)
     public List<StaffProfile> listProfiles(UUID tenantId) {
         return staffProfileRepository.findByTenantIdOrderByEmployeeCode(tenantId);
+    }
+
+    /** All staff profiles for the tenant, each joined with its owning user's email/fullName. */
+    @Transactional(readOnly = true)
+    public List<StaffProfileResponse> listProfilesWithNames(UUID tenantId) {
+        List<StaffProfile> profiles = listProfiles(tenantId);
+        Map<UUID, User> usersById = userRepository
+                .findAllById(profiles.stream().map(StaffProfile::getUserId).toList())
+                .stream().collect(Collectors.toMap(User::getId, u -> u));
+        return profiles.stream().map(p -> toResponse(p, usersById.get(p.getUserId()))).toList();
+    }
+
+    /**
+     * Joins one staff profile with its owning user's email/fullName for the API response.
+     * A profile's {@code userId} always points at a real user in the same tenant (enforced
+     * at creation, and users are never hard-deleted), so a missing user here would mean
+     * the two tables have drifted out of sync.
+     */
+    @Transactional(readOnly = true)
+    public StaffProfileResponse toResponse(StaffProfile profile) {
+        User user = userRepository.findById(profile.getUserId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Staff profile " + profile.getId() + " references a missing user"));
+        return toResponse(profile, user);
+    }
+
+    private static StaffProfileResponse toResponse(StaffProfile profile, User user) {
+        return StaffProfileResponse.from(profile, user.getEmail(), user.getFullName());
+    }
+
+    /**
+     * Users in the tenant who do not yet have a staff profile -- powers the "Add staff
+     * profile" picker so an admin can't try to attach a second profile to the same user.
+     */
+    @Transactional(readOnly = true)
+    public List<EligibleUserResponse> eligibleUsers(UUID tenantId) {
+        Set<UUID> alreadyStaff = new HashSet<>(staffProfileRepository.findUserIdsByTenantId(tenantId));
+        return userRepository.findByTenantIdOrderByFullName(tenantId).stream()
+                .filter(user -> !alreadyStaff.contains(user.getId()))
+                .map(user -> new EligibleUserResponse(user.getId(), user.getEmail(), user.getFullName(),
+                        roleRepository.findNamesByUserId(user.getId())))
+                .toList();
+    }
+
+    /**
+     * The caller's own staff profile -- lets a SCHOOL_ADMIN or TEACHER discover their own
+     * profile id (needed to file a leave request against it) without a staff-directory read.
+     *
+     * @throws ApiException 404 if no staff profile is linked to this account.
+     */
+    @Transactional(readOnly = true)
+    public StaffProfile ownProfile(UUID tenantId, UUID userId) {
+        return staffProfileRepository.findByTenantIdAndUserId(tenantId, userId)
+                .orElseThrow(() -> new ApiException("No staff profile is linked to your account",
+                        HttpStatus.NOT_FOUND));
     }
 
     /**
@@ -197,6 +262,36 @@ public class StaffService {
     @Transactional(readOnly = true)
     public List<LeaveRequest> ownLeaveRequests(UUID tenantId, UUID staffUserId) {
         return leaveRequestRepository.findByTenantIdAndStaffUserIdOrderByCreatedAtDesc(tenantId, staffUserId);
+    }
+
+    /**
+     * The SCHOOL_ADMIN leave-request view: every request in the tenant, optionally
+     * narrowed to one staff member and/or one status (e.g. the PENDING approval queue,
+     * or one staff member's full history on their detail view).
+     *
+     * @throws ApiException 400 if {@code status} is given but not PENDING/APPROVED/REJECTED.
+     */
+    @Transactional(readOnly = true)
+    public List<LeaveRequest> listLeaveRequests(UUID tenantId, UUID staffUserId, String status) {
+        String normalizedStatus = null;
+        if (status != null) {
+            normalizedStatus = LeaveRequestStatus.normalizeOrNull(status);
+            if (normalizedStatus == null) {
+                throw new ApiException("Status must be PENDING, APPROVED or REJECTED", HttpStatus.BAD_REQUEST);
+            }
+        }
+
+        if (staffUserId != null && normalizedStatus != null) {
+            return leaveRequestRepository.findByTenantIdAndStaffUserIdAndStatusOrderByCreatedAtDesc(
+                    tenantId, staffUserId, normalizedStatus);
+        }
+        if (staffUserId != null) {
+            return leaveRequestRepository.findByTenantIdAndStaffUserIdOrderByCreatedAtDesc(tenantId, staffUserId);
+        }
+        if (normalizedStatus != null) {
+            return leaveRequestRepository.findByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, normalizedStatus);
+        }
+        return leaveRequestRepository.findByTenantIdOrderByCreatedAtDesc(tenantId);
     }
 
     private StaffProfile requireProfile(UUID tenantId, UUID id) {

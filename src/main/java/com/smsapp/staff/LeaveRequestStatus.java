@@ -17,6 +17,8 @@ public final class LeaveRequestStatus {
     /** Statuses a {@code PATCH} may resolve a request to -- {@code PENDING} is initial-only. */
     private static final Set<String> DECIDABLE = Set.of(APPROVED, REJECTED);
 
+    private static final Set<String> ALL = Set.of(PENDING, APPROVED, REJECTED);
+
     private LeaveRequestStatus() {
     }
 
@@ -27,5 +29,14 @@ public final class LeaveRequestStatus {
         }
         String normalized = raw.trim().toUpperCase(Locale.ROOT);
         return DECIDABLE.contains(normalized) ? normalized : null;
+    }
+
+    /** Normalises to upper-case and validates against the full set; null/blank/unknown returns null. */
+    public static String normalizeOrNull(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String normalized = raw.trim().toUpperCase(Locale.ROOT);
+        return ALL.contains(normalized) ? normalized : null;
     }
 }
