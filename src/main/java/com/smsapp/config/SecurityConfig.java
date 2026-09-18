@@ -51,8 +51,25 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // Spring Boot's default error handling resolves an unhandled MVC exception
+                // (e.g. a Bean Validation failure) by forwarding the request to `/error`.
+                // Boot registers the security filter chain for FORWARD/ERROR dispatches too
+                // (not just the original REQUEST), so that forward re-enters authorization --
+                // and since it carries no credentials of its own, an unauthenticated caller's
+                // 400 on a permitAll endpoint would otherwise come back masked as an empty 401
+                // (discovered via a real validation-failure request to /register-school, and
+                // reproducible the same way against the pre-existing /auth/login). Must be
+                // permitAll for every permitAll endpoint's own validation errors to render.
+                .requestMatchers("/error").permitAll()
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/actuator/health",
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                .permitAll()
+                // Self-service tenant onboarding (plan sections 1/3): the one deliberate
+                // exception to "every endpoint requires a JWT" -- there is, by definition,
+                // no tenant and no user yet. Bean Validation on the request body is the
+                // application-layer defense; IP-based rate limiting belongs at the
+                // infrastructure/gateway level (see OnboardingController).
+                .requestMatchers("/api/v1/onboarding/register-school")
                 .permitAll()
                 // Razorpay's server-to-server payment webhook cannot present a JWT.
                 // It is authenticated instead by its HMAC signature, which the

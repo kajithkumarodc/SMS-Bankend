@@ -1,0 +1,7 @@
+package com.smsapp.user;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+/** Every write here happens right after the {@link User} and {@link Role} it links are created. */
+public interface UserRoleRepository extends JpaRepository<UserRole, UserRole.Key> {
+}
