@@ -4,7 +4,7 @@ import java.util.Set;
 
 /**
  * Invoice lifecycle states. Kept as constants (not a persisted JPA enum) so the
- * column stays a plain string like the other tenant tables; the DB CHECK
+ * column stays a plain string like the other status columns; the DB CHECK
  * constraint in migration V12 is the source of truth for the set.
  */
 public final class InvoiceStatus {

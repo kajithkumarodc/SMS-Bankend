@@ -12,7 +12,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-/** A school-wide message. Everyone in the tenant can read it; only a SCHOOL_ADMIN posts or removes one. */
+/** A school-wide message. Everyone can read it; only a SCHOOL_ADMIN posts or removes one. */
 @Entity
 @Table(name = "announcements")
 @Getter

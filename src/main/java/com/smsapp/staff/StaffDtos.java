@@ -73,7 +73,7 @@ final class StaffDtos {
         }
     }
 
-    /** A user in the tenant with no staff profile yet -- one row of the "Add staff profile" picker. */
+    /** A user with no staff profile yet -- one row of the "Add staff profile" picker. */
     record EligibleUserResponse(
             UUID id,
             String email,
