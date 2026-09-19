@@ -1,6 +1,6 @@
 package com.smsapp.exam;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -20,7 +20,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Exam extends TenantScopedEntity {
+public class Exam extends UuidEntity {
 
     @Column(name = "class_id", nullable = false, updatable = false)
     private UUID classId;

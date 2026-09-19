@@ -46,30 +46,29 @@ public class StaffController {
         this.staffService = staffService;
     }
 
-    /** Create a staff profile for an existing user. SCHOOL_ADMIN only. 404 if the user is not in the tenant. */
+    /** Create a staff profile for an existing user. SCHOOL_ADMIN only. 404 if the user doesn't exist. */
     @PostMapping("/staff")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    public ResponseEntity<StaffProfileResponse> createProfile(@Valid @RequestBody CreateStaffProfileRequest request,
-                                                              Authentication authentication) {
-        StaffProfile created = staffService.createProfile(tenantId(authentication), request);
+    public ResponseEntity<StaffProfileResponse> createProfile(@Valid @RequestBody CreateStaffProfileRequest request) {
+        StaffProfile created = staffService.createProfile(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(staffService.toResponse(created));
     }
 
-    /** All staff profiles for the caller's tenant, by employee code. SCHOOL_ADMIN only -- salary is sensitive HR data. */
+    /** All staff profiles, by employee code. SCHOOL_ADMIN only -- salary is sensitive HR data. */
     @GetMapping("/staff")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    List<StaffProfileResponse> listProfiles(Authentication authentication) {
-        return staffService.listProfilesWithNames(tenantId(authentication));
+    List<StaffProfileResponse> listProfiles() {
+        return staffService.listProfilesWithNames();
     }
 
     /**
-     * Users in the tenant with no staff profile yet -- powers the "Add staff profile"
-     * user picker. SCHOOL_ADMIN only.
+     * Users with no staff profile yet -- powers the "Add staff profile" user
+     * picker. SCHOOL_ADMIN only.
      */
     @GetMapping("/staff/eligible-users")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    List<EligibleUserResponse> eligibleUsers(Authentication authentication) {
-        return staffService.eligibleUsers(tenantId(authentication));
+    List<EligibleUserResponse> eligibleUsers() {
+        return staffService.eligibleUsers();
     }
 
     /**
@@ -80,58 +79,53 @@ public class StaffController {
     @GetMapping("/me/staff-profile")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     StaffProfileResponse ownProfile(Authentication authentication) {
-        return staffService.toResponse(staffService.ownProfile(tenantId(authentication), userId(authentication)));
+        return staffService.toResponse(staffService.ownProfile(userId(authentication)));
     }
 
-    /** Update a staff profile's editable fields. SCHOOL_ADMIN only. 404 if not in the caller's tenant. */
+    /** Update a staff profile's editable fields. SCHOOL_ADMIN only. 404 if it doesn't exist. */
     @PutMapping("/staff/{id}")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public StaffProfileResponse updateProfile(@PathVariable UUID id,
-                                              @Valid @RequestBody UpdateStaffProfileRequest request,
-                                              Authentication authentication) {
-        return staffService.toResponse(staffService.updateProfile(tenantId(authentication), id, request));
+                                              @Valid @RequestBody UpdateStaffProfileRequest request) {
+        return staffService.toResponse(staffService.updateProfile(id, request));
     }
 
     /**
      * File a leave request against a staff profile -- the staff member themselves, or a
-     * SCHOOL_ADMIN on their behalf. 404 if the profile is not in the caller's tenant,
-     * 403 if a non-admin caller is filing for a profile that is not their own.
+     * SCHOOL_ADMIN on their behalf. 404 if the profile doesn't exist, 403 if a
+     * non-admin caller is filing for a profile that is not their own.
      */
     @PostMapping("/staff/{id}/leave-requests")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     public ResponseEntity<LeaveRequestResponse> createLeaveRequest(@PathVariable UUID id,
                                                                    @Valid @RequestBody CreateLeaveRequestRequest request,
                                                                    Authentication authentication) {
-        LeaveRequest created = staffService.createLeaveRequest(
-                tenantId(authentication), id, staffScope(authentication), request);
+        LeaveRequest created = staffService.createLeaveRequest(id, staffScope(authentication), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(LeaveRequestResponse.from(created));
     }
 
     /**
-     * Approve or reject a leave request. SCHOOL_ADMIN only. 404 if not in the caller's
-     * tenant, 400 if {@code status} is not APPROVED or REJECTED.
+     * Approve or reject a leave request. SCHOOL_ADMIN only. 404 if it doesn't
+     * exist, 400 if {@code status} is not APPROVED or REJECTED.
      */
     @PatchMapping("/leave-requests/{id}")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public LeaveRequestResponse decideLeaveRequest(@PathVariable UUID id,
-                                                   @Valid @RequestBody DecideLeaveRequestRequest request,
-                                                   Authentication authentication) {
-        return LeaveRequestResponse.from(
-                staffService.decideLeaveRequest(tenantId(authentication), id, request.status()));
+                                                   @Valid @RequestBody DecideLeaveRequestRequest request) {
+        return LeaveRequestResponse.from(staffService.decideLeaveRequest(id, request.status()));
     }
 
     /**
-     * The SCHOOL_ADMIN leave-request view: every request in the tenant, optionally
-     * narrowed with {@code ?staffUserId=} (one staff member's full history, shown on
-     * their detail view) and/or {@code ?status=} (e.g. {@code PENDING} for the
-     * approval queue). 400 if {@code status} is not PENDING/APPROVED/REJECTED.
+     * The SCHOOL_ADMIN leave-request view: every request, optionally narrowed with
+     * {@code ?staffUserId=} (one staff member's full history, shown on their detail
+     * view) and/or {@code ?status=} (e.g. {@code PENDING} for the approval queue).
+     * 400 if {@code status} is not PENDING/APPROVED/REJECTED.
      */
     @GetMapping("/leave-requests")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     List<LeaveRequestResponse> listLeaveRequests(@RequestParam(required = false) UUID staffUserId,
-                                                 @RequestParam(required = false) String status,
-                                                 Authentication authentication) {
-        return staffService.listLeaveRequests(tenantId(authentication), staffUserId, status).stream()
+                                                 @RequestParam(required = false) String status) {
+        return staffService.listLeaveRequests(staffUserId, status).stream()
                 .map(LeaveRequestResponse::from).toList();
     }
 
@@ -139,12 +133,8 @@ public class StaffController {
     @GetMapping("/me/leave-requests")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     List<LeaveRequestResponse> ownLeaveRequests(Authentication authentication) {
-        return staffService.ownLeaveRequests(tenantId(authentication), userId(authentication)).stream()
+        return staffService.ownLeaveRequests(userId(authentication)).stream()
                 .map(LeaveRequestResponse::from).toList();
-    }
-
-    private static UUID tenantId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getClaimAsString("tenant_id"));
     }
 
     private static UUID userId(Authentication authentication) {
@@ -154,7 +144,7 @@ public class StaffController {
     /**
      * The caller's own user id when they hold TEACHER (so the service restricts the
      * leave request to their own profile), or {@code null} when they hold SCHOOL_ADMIN
-     * and may file on behalf of any staff member in the tenant.
+     * and may file on behalf of any staff member.
      */
     private static UUID staffScope(Authentication authentication) {
         boolean isAdmin = authentication.getAuthorities().stream()

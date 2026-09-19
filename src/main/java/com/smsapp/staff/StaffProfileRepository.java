@@ -7,20 +7,17 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Every query is explicitly filtered by {@code tenant_id} -- defense in depth on top of RLS. */
 public interface StaffProfileRepository extends JpaRepository<StaffProfile, UUID> {
 
-    List<StaffProfile> findByTenantIdOrderByEmployeeCode(UUID tenantId);
+    List<StaffProfile> findAllByOrderByEmployeeCode();
 
-    Optional<StaffProfile> findByIdAndTenantId(UUID id, UUID tenantId);
+    Optional<StaffProfile> findByUserId(UUID userId);
 
-    Optional<StaffProfile> findByTenantIdAndUserId(UUID tenantId, UUID userId);
+    boolean existsByUserId(UUID userId);
 
-    boolean existsByTenantIdAndUserId(UUID tenantId, UUID userId);
+    boolean existsByEmployeeCode(String employeeCode);
 
-    boolean existsByTenantIdAndEmployeeCode(UUID tenantId, String employeeCode);
-
-    /** The user ids that already have a profile in this tenant -- used to build the "eligible users" picker. */
-    @Query("select p.userId from StaffProfile p where p.tenantId = :tenantId")
-    List<UUID> findUserIdsByTenantId(UUID tenantId);
+    /** The user ids that already have a profile -- used to build the "eligible users" picker. */
+    @Query("select p.userId from StaffProfile p")
+    List<UUID> findAllUserIds();
 }

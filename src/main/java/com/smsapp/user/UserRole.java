@@ -28,9 +28,6 @@ public class UserRole {
     @Column(name = "role_id")
     private UUID roleId;
 
-    @Column(name = "tenant_id", nullable = false)
-    private UUID tenantId;
-
     public record Key(UUID userId, UUID roleId) implements Serializable {
     }
 }

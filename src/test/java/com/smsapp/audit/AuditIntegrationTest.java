@@ -10,15 +10,12 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.dao.DataAccessException;
-import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -29,22 +26,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Audit logging against a real PostgreSQL instance with RLS enabled: key actions
- * produce entries with the right actor and details, the log is tenant-scoped and
- * SCHOOL_ADMIN-only to read, and the application cannot mutate audit rows
- * (plan section 7.2 -- immutable audit trail).
+ * Audit logging against a real PostgreSQL instance: key actions produce
+ * entries with the right actor and details, the log is SCHOOL_ADMIN-only to
+ * read, and the application cannot mutate audit rows (plan section 7.2 --
+ * immutable audit trail).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AuditIntegrationTest {
 
-    private static final String SCHOOL_A = "audit-school-a";
-    private static final String SCHOOL_B = "audit-school-b";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Autowired
@@ -56,10 +50,6 @@ class AuditIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    private PlatformTransactionManager transactionManager;
-
-    private UUID tenantA;
     private UUID adminAId;
     private UUID teacherAId;
     private UUID schoolA;
@@ -72,10 +62,7 @@ class AuditIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
         schoolA = UUID.randomUUID();
-        UUID schoolB = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
@@ -83,49 +70,35 @@ class AuditIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students, "
                     + "attendance_records, sections, classes, audit_log CASCADE");
 
-            seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolA);
-            seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolB);
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolA + "', 'Tenant A School')");
 
-            adminAId = seedUser(st, tenantA, "admin@tenant-a.example", "SCHOOL_ADMIN");
-            teacherAId = seedUser(st, tenantA, "teacher@tenant-a.example", "TEACHER");
-            seedUser(st, tenantB, "admin@tenant-b.example", "SCHOOL_ADMIN");
+            adminAId = seedUser(st, "admin@tenant-a.example", "SCHOOL_ADMIN");
+            teacherAId = seedUser(st, "teacher@tenant-a.example", "TEACHER");
         }
     }
 
-    private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
-            throws SQLException {
-        st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                + tenantId + "', '" + name + "', '" + identifier + "')");
-        st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                + schoolId + "', '" + tenantId + "', '" + name + " School')");
-    }
-
-    private UUID seedUser(Statement st, UUID tenantId, String email, String role) throws SQLException {
+    private UUID seedUser(Statement st, String email, String role) throws SQLException {
         UUID userId = UUID.randomUUID();
         UUID roleId = UUID.randomUUID();
-        st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                + userId + "', '" + tenantId + "', '" + email + "', '" + passwordEncoder.encode("secret") + "', '"
-                + email + "')");
-        st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                + roleId + "', '" + tenantId + "', '" + role + "')");
-        st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                + userId + "', '" + roleId + "', '" + tenantId + "')");
+        st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                + userId + "', '" + email + "', '" + passwordEncoder.encode("secret") + "', '" + email + "')");
+        st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', '" + role + "')");
+        st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
         return userId;
     }
 
-    private Cookie login(String schoolIdentifier, String email, String password) throws Exception {
+    private Cookie login(String email, String password) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
-                                + "\",\"password\":\"" + password + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
                 .andReturn().getResponse().getCookie("access_token");
     }
 
     private Cookie loginAdminA() throws Exception {
-        return login(SCHOOL_A, "admin@tenant-a.example", "secret");
+        return login("admin@tenant-a.example", "secret");
     }
 
     private JsonNode auditLog(Cookie session, String query) throws Exception {
@@ -151,8 +124,7 @@ class AuditIntegrationTest {
     @Test
     void loginFailureIsAuditedEvenThoughLoginIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + SCHOOL_A + "\",\"email\":\"admin@tenant-a.example\","
-                                + "\"password\":\"wrong\"}"))
+                        .content("{\"email\":\"admin@tenant-a.example\",\"password\":\"wrong\"}"))
                 .andExpect(status().isUnauthorized());
 
         JsonNode entries = auditLog(loginAdminA(), "?entityType=USER");
@@ -186,7 +158,7 @@ class AuditIntegrationTest {
                 .andReturn();
         String studentId = JSON.readTree(created.getResponse().getContentAsString()).get("id").asText();
 
-        Cookie teacher = login(SCHOOL_A, "teacher@tenant-a.example", "secret");
+        Cookie teacher = login("teacher@tenant-a.example", "secret");
         mockMvc.perform(post("/api/v1/attendance").cookie(teacher).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"studentId\":\"" + studentId + "\",\"date\":\""
                                 + java.time.LocalDate.now() + "\",\"status\":\"PRESENT\"}"))
@@ -198,27 +170,12 @@ class AuditIntegrationTest {
         assertThat(marked.get("details").get("status").asText()).isEqualTo("PRESENT");
     }
 
-    // --- Access + isolation ----------------------------------------
+    // --- Access -----------------------------------------------------
 
     @Test
     void teacherCannotReadTheAuditLog() throws Exception {
-        mockMvc.perform(get("/api/v1/audit-log").cookie(login(SCHOOL_A, "teacher@tenant-a.example", "secret")))
+        mockMvc.perform(get("/api/v1/audit-log").cookie(login("teacher@tenant-a.example", "secret")))
                 .andExpect(status().isForbidden());
-    }
-
-    @Test
-    void auditLogIsTenantScoped() throws Exception {
-        // Tenant B logs in (creates a LOGIN_SUCCESS in tenant B).
-        login(SCHOOL_B, "admin@tenant-b.example", "secret");
-
-        JsonNode entries = auditLog(loginAdminA(), "");
-        for (JsonNode entry : entries) {
-            // Every actor visible here belongs to tenant A.
-            if (!entry.get("actorUserId").isNull()) {
-                assertThat(entry.get("actorUserId").asText())
-                        .isIn(adminAId.toString(), teacherAId.toString());
-            }
-        }
     }
 
     @Test
@@ -240,31 +197,16 @@ class AuditIntegrationTest {
 
     @Test
     void theApplicationCannotUpdateOrDeleteAuditRows() throws Exception {
-        loginAdminA(); // generates at least one audit row for tenant A
+        loginAdminA(); // generates at least one audit row
 
-        assertThatThrownBy(() -> runAsAppRole("UPDATE audit_log SET action = 'HACKED'"))
+        assertThatThrownBy(() -> jdbcTemplate.execute("UPDATE audit_log SET action = 'HACKED'"))
                 .isInstanceOf(DataAccessException.class);
-        assertThatThrownBy(() -> runAsAppRole("DELETE FROM audit_log"))
+        assertThatThrownBy(() -> jdbcTemplate.execute("DELETE FROM audit_log"))
                 .isInstanceOf(DataAccessException.class);
 
         // The row is still there and unchanged.
         Cookie admin = loginAdminA();
         assertThat(auditLog(admin, "?entityType=USER")).isNotEmpty();
-    }
-
-    private void runAsAppRole(String sql) {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                jdbcTemplate.execute((ConnectionCallback<Void>) connection -> {
-                    try (var setTenant = connection.prepareStatement(
-                            "SELECT set_config('app.current_tenant_id', ?, true)")) {
-                        setTenant.setString(1, tenantA.toString());
-                        setTenant.execute();
-                    }
-                    try (var statement = connection.prepareStatement(sql)) {
-                        statement.executeUpdate();
-                    }
-                    return null;
-                }));
     }
 
     private static JsonNode findByAction(JsonNode entries, String action) {

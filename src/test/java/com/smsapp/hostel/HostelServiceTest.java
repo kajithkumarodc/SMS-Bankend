@@ -46,7 +46,6 @@ class HostelServiceTest {
         return new HostelService(blockRepository, roomRepository, studentRepository, auditService);
     }
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID blockId = UUID.randomUUID();
     private final UUID roomId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
@@ -54,7 +53,6 @@ class HostelServiceTest {
     private HostelRoom room(int capacity) {
         HostelRoom room = new HostelRoom();
         room.setId(roomId);
-        room.setTenantId(tenantId);
         room.setBlockId(blockId);
         room.setRoomNumber("A-101");
         room.setCapacity(capacity);
@@ -64,7 +62,6 @@ class HostelServiceTest {
     private HostelBlock block() {
         HostelBlock block = new HostelBlock();
         block.setId(blockId);
-        block.setTenantId(tenantId);
         block.setName("Block A");
         return block;
     }
@@ -72,7 +69,6 @@ class HostelServiceTest {
     private Student student(UUID id, String name) {
         Student s = new Student();
         s.setId(id);
-        s.setTenantId(tenantId);
         s.setFullName(name);
         return s;
     }
@@ -87,9 +83,8 @@ class HostelServiceTest {
             return b;
         });
 
-        HostelBlock created = service().createBlock(tenantId, new CreateBlockRequest("  Block A  "));
+        HostelBlock created = service().createBlock(new CreateBlockRequest("  Block A  "));
 
-        assertThat(created.getTenantId()).isEqualTo(tenantId);
         assertThat(created.getName()).isEqualTo("Block A");
         verify(auditService).log(eq(AuditActions.HOSTEL_BLOCK_CREATED), eq(AuditActions.HOSTEL_BLOCK),
                 eq(blockId), anyMap());
@@ -99,15 +94,15 @@ class HostelServiceTest {
 
     @Test
     void addRoomStoresTheFieldsAndAudits() {
-        when(blockRepository.existsByIdAndTenantId(blockId, tenantId)).thenReturn(true);
-        when(roomRepository.existsByTenantIdAndBlockIdAndRoomNumber(tenantId, blockId, "A-101")).thenReturn(false);
+        when(blockRepository.existsById(blockId)).thenReturn(true);
+        when(roomRepository.existsByBlockIdAndRoomNumber(blockId, "A-101")).thenReturn(false);
         when(roomRepository.saveAndFlush(any(HostelRoom.class))).thenAnswer(inv -> {
             HostelRoom r = inv.getArgument(0);
             r.setId(roomId);
             return r;
         });
 
-        HostelRoom created = service().addRoom(tenantId, blockId, new CreateRoomRequest("  A-101 ", 3));
+        HostelRoom created = service().addRoom(blockId, new CreateRoomRequest("  A-101 ", 3));
 
         assertThat(created.getBlockId()).isEqualTo(blockId);
         assertThat(created.getRoomNumber()).isEqualTo("A-101");
@@ -116,10 +111,10 @@ class HostelServiceTest {
     }
 
     @Test
-    void addRoomToABlockNotInTheTenantReturns404() {
-        when(blockRepository.existsByIdAndTenantId(blockId, tenantId)).thenReturn(false);
+    void addRoomToANonexistentBlockReturns404() {
+        when(blockRepository.existsById(blockId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().addRoom(tenantId, blockId, new CreateRoomRequest("A-101", 3)))
+        assertThatThrownBy(() -> service().addRoom(blockId, new CreateRoomRequest("A-101", 3)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -128,10 +123,10 @@ class HostelServiceTest {
 
     @Test
     void addRoomWithADuplicateNumberInTheBlockReturns409() {
-        when(blockRepository.existsByIdAndTenantId(blockId, tenantId)).thenReturn(true);
-        when(roomRepository.existsByTenantIdAndBlockIdAndRoomNumber(tenantId, blockId, "A-101")).thenReturn(true);
+        when(blockRepository.existsById(blockId)).thenReturn(true);
+        when(roomRepository.existsByBlockIdAndRoomNumber(blockId, "A-101")).thenReturn(true);
 
-        assertThatThrownBy(() -> service().addRoom(tenantId, blockId, new CreateRoomRequest("A-101", 3)))
+        assertThatThrownBy(() -> service().addRoom(blockId, new CreateRoomRequest("A-101", 3)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
@@ -140,38 +135,37 @@ class HostelServiceTest {
 
     @Test
     void addRoomTranslatesAConcurrentInsertRaceIntoAClean409() {
-        when(blockRepository.existsByIdAndTenantId(blockId, tenantId)).thenReturn(true);
-        when(roomRepository.existsByTenantIdAndBlockIdAndRoomNumber(tenantId, blockId, "A-101")).thenReturn(false);
+        when(blockRepository.existsById(blockId)).thenReturn(true);
+        when(roomRepository.existsByBlockIdAndRoomNumber(blockId, "A-101")).thenReturn(false);
         when(roomRepository.saveAndFlush(any(HostelRoom.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-        assertThatThrownBy(() -> service().addRoom(tenantId, blockId, new CreateRoomRequest("A-101", 3)))
+        assertThatThrownBy(() -> service().addRoom(blockId, new CreateRoomRequest("A-101", 3)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
     }
 
     @Test
-    void listRoomsRejectsABlockNotInTheTenantWith404() {
-        when(blockRepository.existsByIdAndTenantId(blockId, tenantId)).thenReturn(false);
+    void listRoomsRejectsANonexistentBlockWith404() {
+        when(blockRepository.existsById(blockId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().listRooms(tenantId, blockId))
+        assertThatThrownBy(() -> service().listRooms(blockId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(roomRepository, never()).findRoomsWithOccupancy(any(), any());
+        verify(roomRepository, never()).findRoomsWithOccupancy(any());
     }
 
     // --- allocation -----------------------------------------
 
     @Test
     void allocateStudentRoomSetsTheRoomAndAudits() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId))
-                .thenReturn(Optional.of(student(studentId, "Anaya")));
-        when(roomRepository.findByIdAndTenantId(roomId, tenantId)).thenReturn(Optional.of(room(2)));
-        when(studentRepository.countByTenantIdAndHostelRoomId(tenantId, roomId)).thenReturn(1L);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student(studentId, "Anaya")));
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room(2)));
+        when(studentRepository.countByHostelRoomId(roomId)).thenReturn(1L);
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Student saved = service().allocateStudentRoom(tenantId, studentId, roomId);
+        Student saved = service().allocateStudentRoom(studentId, roomId);
 
         assertThat(saved.getHostelRoomId()).isEqualTo(roomId);
         verify(auditService).log(eq(AuditActions.HOSTEL_ROOM_ALLOCATED), eq(AuditActions.STUDENT),
@@ -180,12 +174,11 @@ class HostelServiceTest {
 
     @Test
     void allocateStudentRoomToAFullRoomReturns400() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId))
-                .thenReturn(Optional.of(student(studentId, "Anaya")));
-        when(roomRepository.findByIdAndTenantId(roomId, tenantId)).thenReturn(Optional.of(room(2)));
-        when(studentRepository.countByTenantIdAndHostelRoomId(tenantId, roomId)).thenReturn(2L);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student(studentId, "Anaya")));
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room(2)));
+        when(studentRepository.countByHostelRoomId(roomId)).thenReturn(2L);
 
-        assertThatThrownBy(() -> service().allocateStudentRoom(tenantId, studentId, roomId))
+        assertThatThrownBy(() -> service().allocateStudentRoom(studentId, roomId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 
@@ -196,33 +189,33 @@ class HostelServiceTest {
     void reallocatingAStudentToTheRoomTheyAreAlreadyInSkipsTheCapacityCheck() {
         Student already = student(studentId, "Anaya");
         already.setHostelRoomId(roomId);
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(already));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(already));
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service().allocateStudentRoom(tenantId, studentId, roomId);
+        service().allocateStudentRoom(studentId, roomId);
 
-        verify(roomRepository, never()).findByIdAndTenantId(any(), any());
-        verify(studentRepository, never()).countByTenantIdAndHostelRoomId(any(), any());
+        verify(roomRepository, never()).findById(any());
+        verify(studentRepository, never()).countByHostelRoomId(any());
     }
 
     @Test
     void deallocatingWithANullRoomSkipsAnyRoomCheck() {
         Student already = student(studentId, "Anaya");
         already.setHostelRoomId(roomId);
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(already));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(already));
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Student saved = service().allocateStudentRoom(tenantId, studentId, null);
+        Student saved = service().allocateStudentRoom(studentId, null);
 
         assertThat(saved.getHostelRoomId()).isNull();
-        verify(roomRepository, never()).findByIdAndTenantId(any(), any());
+        verify(roomRepository, never()).findById(any());
     }
 
     @Test
-    void allocateStudentRoomWithAStudentNotInTheTenantReturns404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+    void allocateStudentRoomWithANonexistentStudentReturns404() {
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().allocateStudentRoom(tenantId, studentId, roomId))
+        assertThatThrownBy(() -> service().allocateStudentRoom(studentId, roomId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -230,12 +223,11 @@ class HostelServiceTest {
     }
 
     @Test
-    void allocateStudentRoomWithARoomNotInTheTenantReturns404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId))
-                .thenReturn(Optional.of(student(studentId, "Anaya")));
-        when(roomRepository.findByIdAndTenantId(roomId, tenantId)).thenReturn(Optional.empty());
+    void allocateStudentRoomWithANonexistentRoomReturns404() {
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student(studentId, "Anaya")));
+        when(roomRepository.findById(roomId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().allocateStudentRoom(tenantId, studentId, roomId))
+        assertThatThrownBy(() -> service().allocateStudentRoom(studentId, roomId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -245,30 +237,30 @@ class HostelServiceTest {
     // --- room roster ---------------------------------------
 
     @Test
-    void studentsInRoomRejectsARoomNotInTheTenantWith404() {
-        when(roomRepository.findByIdAndTenantId(roomId, tenantId)).thenReturn(Optional.empty());
+    void studentsInRoomRejectsANonexistentRoomWith404() {
+        when(roomRepository.findById(roomId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().studentsInRoom(tenantId, blockId, roomId))
+        assertThatThrownBy(() -> service().studentsInRoom(blockId, roomId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
     void studentsInRoomRejectsARoomThatIsNotInTheGivenBlockWith404() {
-        when(roomRepository.findByIdAndTenantId(roomId, tenantId)).thenReturn(Optional.of(room(3)));
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room(3)));
 
-        assertThatThrownBy(() -> service().studentsInRoom(tenantId, UUID.randomUUID(), roomId))
+        assertThatThrownBy(() -> service().studentsInRoom(UUID.randomUUID(), roomId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(studentRepository, never()).findByTenantIdAndHostelRoomIdOrderByFullName(any(), any());
+        verify(studentRepository, never()).findByHostelRoomIdOrderByFullName(any());
     }
 
     // --- allocation view -----------------------------------
 
     @Test
     void allocationForRoomIs404WhenTheStudentHasNoRoom() {
-        assertThatThrownBy(() -> service().allocationForRoom(tenantId, studentId, null))
+        assertThatThrownBy(() -> service().allocationForRoom(studentId, null))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -276,12 +268,12 @@ class HostelServiceTest {
     @Test
     void allocationForRoomBuildsBlockRoomAndRoommatesExcludingSelf() {
         UUID roommateId = UUID.randomUUID();
-        when(roomRepository.findByIdAndTenantId(roomId, tenantId)).thenReturn(Optional.of(room(3)));
-        when(blockRepository.findByIdAndTenantId(blockId, tenantId)).thenReturn(Optional.of(block()));
-        when(studentRepository.findByTenantIdAndHostelRoomIdOrderByFullName(tenantId, roomId))
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room(3)));
+        when(blockRepository.findById(blockId)).thenReturn(Optional.of(block()));
+        when(studentRepository.findByHostelRoomIdOrderByFullName(roomId))
                 .thenReturn(List.of(student(studentId, "Anaya"), student(roommateId, "Charu")));
 
-        HostelAllocation allocation = service().allocationForRoom(tenantId, studentId, roomId);
+        HostelAllocation allocation = service().allocationForRoom(studentId, roomId);
 
         assertThat(allocation.blockName()).isEqualTo("Block A");
         assertThat(allocation.roomNumber()).isEqualTo("A-101");

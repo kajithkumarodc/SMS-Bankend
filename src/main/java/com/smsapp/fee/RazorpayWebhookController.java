@@ -65,22 +65,21 @@ public class RazorpayWebhookController {
 
         JsonNode order = root.path("payload").path("order").path("entity");
         JsonNode payment = root.path("payload").path("payment").path("entity");
-        JsonNode notes = order.path("notes").hasNonNull(FeeService.NOTE_TENANT_ID)
+        JsonNode notes = order.path("notes").hasNonNull(FeeService.NOTE_INVOICE_ID)
                 ? order.path("notes")
                 : payment.path("notes");
 
-        String tenantIdRaw = notes.path(FeeService.NOTE_TENANT_ID).asText(null);
         String invoiceIdRaw = notes.path(FeeService.NOTE_INVOICE_ID).asText(null);
         String orderId = order.path("id").asText(payment.path("order_id").asText(null));
         String paymentId = payment.path("id").asText(null);
 
-        if (tenantIdRaw == null || invoiceIdRaw == null || orderId == null) {
-            log.warn("Razorpay webhook '{}' lacked tenant/invoice/order references; acknowledged and ignored", event);
+        if (invoiceIdRaw == null || orderId == null) {
+            log.warn("Razorpay webhook '{}' lacked invoice/order references; acknowledged and ignored", event);
             return ResponseEntity.ok().build();
         }
 
         try {
-            feeService.markInvoicePaid(UUID.fromString(tenantIdRaw), UUID.fromString(invoiceIdRaw), orderId, paymentId);
+            feeService.markInvoicePaid(UUID.fromString(invoiceIdRaw), orderId, paymentId);
         } catch (IllegalArgumentException ex) {
             log.warn("Razorpay webhook '{}' had non-UUID references; acknowledged and ignored", event);
         }

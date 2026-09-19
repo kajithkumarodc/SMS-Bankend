@@ -25,13 +25,12 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Staff profiles + leave requests (plan section 2, Staff Management). Every
- * read and write is explicitly scoped by {@code tenant_id} on top of the RLS
- * policy. A cross-tenant user / profile / leave-request reference is reported
- * as 404, never 403, so the API never leaks that the row exists -- the one
- * exception is the leave-request ownership check itself, which is a genuine
- * permission boundary (a TEACHER filing on someone else's behalf), not a
- * tenant leak, so it is reported as 403.
+ * Staff profiles + leave requests (plan section 2, Staff Management). A
+ * nonexistent user / profile / leave-request reference is reported as 404,
+ * never 403, so the API never leaks that the row exists -- the one exception
+ * is the leave-request ownership check itself, which is a genuine permission
+ * boundary (a TEACHER filing on someone else's behalf), not an existence leak,
+ * so it is reported as 403.
  */
 @Service
 public class StaffService {
@@ -59,25 +58,23 @@ public class StaffService {
     // --- Staff profiles -------------------------------------------
 
     /**
-     * @throws ApiException 404 if {@code userId} is not a user in the caller's tenant,
-     *         409 if that user already has a staff profile, or if {@code employeeCode}
-     *         is already used in the tenant.
+     * @throws ApiException 404 if {@code userId} does not exist, 409 if that user
+     *         already has a staff profile, or if {@code employeeCode} is already used.
      */
     @Transactional
-    public StaffProfile createProfile(UUID tenantId, CreateStaffProfileRequest request) {
-        if (!userRepository.existsByIdAndTenantId(request.userId(), tenantId)) {
+    public StaffProfile createProfile(CreateStaffProfileRequest request) {
+        if (!userRepository.existsById(request.userId())) {
             throw new ApiException("User not found", HttpStatus.NOT_FOUND);
         }
-        if (staffProfileRepository.existsByTenantIdAndUserId(tenantId, request.userId())) {
+        if (staffProfileRepository.existsByUserId(request.userId())) {
             throw new ApiException("This user already has a staff profile", HttpStatus.CONFLICT);
         }
         String employeeCode = request.employeeCode().trim();
-        if (staffProfileRepository.existsByTenantIdAndEmployeeCode(tenantId, employeeCode)) {
+        if (staffProfileRepository.existsByEmployeeCode(employeeCode)) {
             throw employeeCodeConflict(employeeCode);
         }
 
         StaffProfile profile = new StaffProfile();
-        profile.setTenantId(tenantId);
         profile.setUserId(request.userId());
         profile.setEmployeeCode(employeeCode);
         profile.setDepartment(blankToNull(request.department()));
@@ -91,7 +88,7 @@ public class StaffService {
             saved = staffProfileRepository.saveAndFlush(profile);
         } catch (DataIntegrityViolationException ex) {
             // Lost the race against a concurrent insert of the same user or employee code.
-            if (staffProfileRepository.existsByTenantIdAndUserId(tenantId, request.userId())) {
+            if (staffProfileRepository.existsByUserId(request.userId())) {
                 throw new ApiException("This user already has a staff profile", HttpStatus.CONFLICT);
             }
             throw employeeCodeConflict(employeeCode);
@@ -103,14 +100,14 @@ public class StaffService {
     }
 
     @Transactional(readOnly = true)
-    public List<StaffProfile> listProfiles(UUID tenantId) {
-        return staffProfileRepository.findByTenantIdOrderByEmployeeCode(tenantId);
+    public List<StaffProfile> listProfiles() {
+        return staffProfileRepository.findAllByOrderByEmployeeCode();
     }
 
-    /** All staff profiles for the tenant, each joined with its owning user's email/fullName. */
+    /** All staff profiles, each joined with its owning user's email/fullName. */
     @Transactional(readOnly = true)
-    public List<StaffProfileResponse> listProfilesWithNames(UUID tenantId) {
-        List<StaffProfile> profiles = listProfiles(tenantId);
+    public List<StaffProfileResponse> listProfilesWithNames() {
+        List<StaffProfile> profiles = listProfiles();
         Map<UUID, User> usersById = userRepository
                 .findAllById(profiles.stream().map(StaffProfile::getUserId).toList())
                 .stream().collect(Collectors.toMap(User::getId, u -> u));
@@ -119,9 +116,9 @@ public class StaffService {
 
     /**
      * Joins one staff profile with its owning user's email/fullName for the API response.
-     * A profile's {@code userId} always points at a real user in the same tenant (enforced
-     * at creation, and users are never hard-deleted), so a missing user here would mean
-     * the two tables have drifted out of sync.
+     * A profile's {@code userId} always points at a real user (enforced at creation, and
+     * users are never hard-deleted), so a missing user here would mean the two tables
+     * have drifted out of sync.
      */
     @Transactional(readOnly = true)
     public StaffProfileResponse toResponse(StaffProfile profile) {
@@ -136,13 +133,13 @@ public class StaffService {
     }
 
     /**
-     * Users in the tenant who do not yet have a staff profile -- powers the "Add staff
-     * profile" picker so an admin can't try to attach a second profile to the same user.
+     * Users who do not yet have a staff profile -- powers the "Add staff profile"
+     * picker so an admin can't try to attach a second profile to the same user.
      */
     @Transactional(readOnly = true)
-    public List<EligibleUserResponse> eligibleUsers(UUID tenantId) {
-        Set<UUID> alreadyStaff = new HashSet<>(staffProfileRepository.findUserIdsByTenantId(tenantId));
-        return userRepository.findByTenantIdOrderByFullName(tenantId).stream()
+    public List<EligibleUserResponse> eligibleUsers() {
+        Set<UUID> alreadyStaff = new HashSet<>(staffProfileRepository.findAllUserIds());
+        return userRepository.findAllByOrderByFullName().stream()
                 .filter(user -> !alreadyStaff.contains(user.getId()))
                 .map(user -> new EligibleUserResponse(user.getId(), user.getEmail(), user.getFullName(),
                         roleRepository.findNamesByUserId(user.getId())))
@@ -156,23 +153,23 @@ public class StaffService {
      * @throws ApiException 404 if no staff profile is linked to this account.
      */
     @Transactional(readOnly = true)
-    public StaffProfile ownProfile(UUID tenantId, UUID userId) {
-        return staffProfileRepository.findByTenantIdAndUserId(tenantId, userId)
+    public StaffProfile ownProfile(UUID userId) {
+        return staffProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ApiException("No staff profile is linked to your account",
                         HttpStatus.NOT_FOUND));
     }
 
     /**
      * Updates a staff profile's editable fields. {@code employeeCode} is intentionally
-     * NOT editable here -- it is the tenant-unique business key, same reasoning as
+     * NOT editable here -- it is the unique business key, same reasoning as
      * {@code students.admission_number} (see {@code StudentService#update}).
      *
-     * @throws ApiException 404 if no such profile in the caller's tenant, 400 if
-     *         {@code status} is not one of ACTIVE / INACTIVE.
+     * @throws ApiException 404 if no such profile, 400 if {@code status} is not
+     *         one of ACTIVE / INACTIVE.
      */
     @Transactional
-    public StaffProfile updateProfile(UUID tenantId, UUID id, UpdateStaffProfileRequest request) {
-        StaffProfile profile = requireProfile(tenantId, id);
+    public StaffProfile updateProfile(UUID id, UpdateStaffProfileRequest request) {
+        StaffProfile profile = requireProfile(id);
         Map<String, Object> before = editableSnapshot(profile);
 
         profile.setDepartment(blankToNull(request.department()));
@@ -202,16 +199,16 @@ public class StaffService {
      * Files a leave request against a staff profile. {@code actingUserId} is the
      * caller's own user id when they hold TEACHER (so the request must be for
      * their own profile), or {@code null} when they hold SCHOOL_ADMIN and may file
-     * on behalf of any staff member in the tenant.
+     * on behalf of any staff member.
      *
-     * @throws ApiException 404 if the staff profile is not in the caller's tenant,
-     *         403 if a non-admin caller is filing for someone else's profile,
-     *         400 if {@code endDate} is before {@code startDate}.
+     * @throws ApiException 404 if the staff profile does not exist, 403 if a
+     *         non-admin caller is filing for someone else's profile, 400 if
+     *         {@code endDate} is before {@code startDate}.
      */
     @Transactional
-    public LeaveRequest createLeaveRequest(UUID tenantId, UUID staffProfileId, UUID actingUserId,
+    public LeaveRequest createLeaveRequest(UUID staffProfileId, UUID actingUserId,
                                            CreateLeaveRequestRequest request) {
-        StaffProfile profile = requireProfile(tenantId, staffProfileId);
+        StaffProfile profile = requireProfile(staffProfileId);
         if (actingUserId != null && !profile.getUserId().equals(actingUserId)) {
             throw new ApiException("You may only request leave for yourself", HttpStatus.FORBIDDEN);
         }
@@ -220,7 +217,6 @@ public class StaffService {
         }
 
         LeaveRequest leaveRequest = new LeaveRequest();
-        leaveRequest.setTenantId(tenantId);
         leaveRequest.setStaffUserId(profile.getUserId());
         leaveRequest.setLeaveType(request.leaveType().trim());
         leaveRequest.setStartDate(request.startDate());
@@ -237,16 +233,16 @@ public class StaffService {
     /**
      * Approves or rejects a leave request. SCHOOL_ADMIN only (enforced at the controller).
      *
-     * @throws ApiException 404 if the leave request is not in the caller's tenant,
-     *         400 if {@code status} is not APPROVED or REJECTED.
+     * @throws ApiException 404 if the leave request does not exist, 400 if
+     *         {@code status} is not APPROVED or REJECTED.
      */
     @Transactional
-    public LeaveRequest decideLeaveRequest(UUID tenantId, UUID id, String status) {
+    public LeaveRequest decideLeaveRequest(UUID id, String status) {
         String decision = LeaveRequestStatus.normalizeDecisionOrNull(status);
         if (decision == null) {
             throw new ApiException("Status must be APPROVED or REJECTED", HttpStatus.BAD_REQUEST);
         }
-        LeaveRequest leaveRequest = leaveRequestRepository.findByIdAndTenantId(id, tenantId)
+        LeaveRequest leaveRequest = leaveRequestRepository.findById(id)
                 .orElseThrow(() -> new ApiException("Leave request not found", HttpStatus.NOT_FOUND));
 
         String previousStatus = leaveRequest.getStatus();
@@ -260,19 +256,19 @@ public class StaffService {
 
     /** A staff member's own leave request history, newest first. */
     @Transactional(readOnly = true)
-    public List<LeaveRequest> ownLeaveRequests(UUID tenantId, UUID staffUserId) {
-        return leaveRequestRepository.findByTenantIdAndStaffUserIdOrderByCreatedAtDesc(tenantId, staffUserId);
+    public List<LeaveRequest> ownLeaveRequests(UUID staffUserId) {
+        return leaveRequestRepository.findByStaffUserIdOrderByCreatedAtDesc(staffUserId);
     }
 
     /**
-     * The SCHOOL_ADMIN leave-request view: every request in the tenant, optionally
-     * narrowed to one staff member and/or one status (e.g. the PENDING approval queue,
-     * or one staff member's full history on their detail view).
+     * The SCHOOL_ADMIN leave-request view: every request, optionally narrowed to
+     * one staff member and/or one status (e.g. the PENDING approval queue, or one
+     * staff member's full history on their detail view).
      *
      * @throws ApiException 400 if {@code status} is given but not PENDING/APPROVED/REJECTED.
      */
     @Transactional(readOnly = true)
-    public List<LeaveRequest> listLeaveRequests(UUID tenantId, UUID staffUserId, String status) {
+    public List<LeaveRequest> listLeaveRequests(UUID staffUserId, String status) {
         String normalizedStatus = null;
         if (status != null) {
             normalizedStatus = LeaveRequestStatus.normalizeOrNull(status);
@@ -282,20 +278,20 @@ public class StaffService {
         }
 
         if (staffUserId != null && normalizedStatus != null) {
-            return leaveRequestRepository.findByTenantIdAndStaffUserIdAndStatusOrderByCreatedAtDesc(
-                    tenantId, staffUserId, normalizedStatus);
+            return leaveRequestRepository.findByStaffUserIdAndStatusOrderByCreatedAtDesc(
+                    staffUserId, normalizedStatus);
         }
         if (staffUserId != null) {
-            return leaveRequestRepository.findByTenantIdAndStaffUserIdOrderByCreatedAtDesc(tenantId, staffUserId);
+            return leaveRequestRepository.findByStaffUserIdOrderByCreatedAtDesc(staffUserId);
         }
         if (normalizedStatus != null) {
-            return leaveRequestRepository.findByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, normalizedStatus);
+            return leaveRequestRepository.findByStatusOrderByCreatedAtDesc(normalizedStatus);
         }
-        return leaveRequestRepository.findByTenantIdOrderByCreatedAtDesc(tenantId);
+        return leaveRequestRepository.findAllByOrderByCreatedAtDesc();
     }
 
-    private StaffProfile requireProfile(UUID tenantId, UUID id) {
-        return staffProfileRepository.findByIdAndTenantId(id, tenantId)
+    private StaffProfile requireProfile(UUID id) {
+        return staffProfileRepository.findById(id)
                 .orElseThrow(() -> new ApiException(STAFF_PROFILE_NOT_FOUND, HttpStatus.NOT_FOUND));
     }
 

@@ -35,22 +35,20 @@ class AnnouncementServiceTest {
         return new AnnouncementService(announcementRepository, auditService);
     }
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID userId = UUID.randomUUID();
     private final UUID id = UUID.randomUUID();
 
     @Test
-    void createTrimsAndStampsTheAuthorAndTenant() {
+    void createTrimsAndStampsTheAuthor() {
         when(announcementRepository.save(any(Announcement.class))).thenAnswer(inv -> {
             Announcement a = inv.getArgument(0);
             a.setId(id);
             return a;
         });
 
-        Announcement created = service().create(tenantId, userId,
+        Announcement created = service().create(userId,
                 new CreateAnnouncementRequest("  Sports day  ", "  Moved to Friday.  "));
 
-        assertThat(created.getTenantId()).isEqualTo(tenantId);
         assertThat(created.getCreatedBy()).isEqualTo(userId);
         assertThat(created.getTitle()).isEqualTo("Sports day");
         assertThat(created.getBody()).isEqualTo("Moved to Friday.");
@@ -61,21 +59,20 @@ class AnnouncementServiceTest {
     void deleteRemovesTheRowAndAudits() {
         Announcement existing = new Announcement();
         existing.setId(id);
-        existing.setTenantId(tenantId);
         existing.setTitle("Old notice");
-        when(announcementRepository.findByIdAndTenantId(id, tenantId)).thenReturn(Optional.of(existing));
+        when(announcementRepository.findById(id)).thenReturn(Optional.of(existing));
 
-        service().delete(tenantId, id);
+        service().delete(id);
 
         verify(announcementRepository).delete(existing);
         verify(auditService).log(eq(AuditActions.ANNOUNCEMENT_DELETED), eq(AuditActions.ANNOUNCEMENT), eq(id), anyMap());
     }
 
     @Test
-    void deleteIs404WhenNotInTenant() {
-        when(announcementRepository.findByIdAndTenantId(id, tenantId)).thenReturn(Optional.empty());
+    void deleteIs404WhenItDoesNotExist() {
+        when(announcementRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().delete(tenantId, id))
+        assertThatThrownBy(() -> service().delete(id))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 

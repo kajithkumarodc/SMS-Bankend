@@ -41,7 +41,7 @@ public class PortalController {
     @GetMapping("/student")
     @PreAuthorize(Roles.HAS_STUDENT)
     public StudentView ownStudent(Authentication authentication) {
-        return StudentView.from(portalService.ownStudent(tenantId(authentication), userId(authentication)));
+        return StudentView.from(portalService.ownStudent(userId(authentication)));
     }
 
     /** STUDENT: their own attendance history only. */
@@ -50,7 +50,7 @@ public class PortalController {
     public PagedModel<AttendanceEntryView> ownAttendance(@PageableDefault(size = 50) Pageable pageable,
                                                          Authentication authentication) {
         return new PagedModel<>(portalService
-                .ownAttendance(tenantId(authentication), userId(authentication), pageable)
+                .ownAttendance(userId(authentication), pageable)
                 .map(AttendanceEntryView::from));
     }
 
@@ -58,8 +58,7 @@ public class PortalController {
     @GetMapping("/children")
     @PreAuthorize(Roles.HAS_PARENT)
     public List<StudentView> children(Authentication authentication) {
-        return portalService.children(tenantId(authentication), userId(authentication))
-                .stream().map(StudentView::from).toList();
+        return portalService.children(userId(authentication)).stream().map(StudentView::from).toList();
     }
 
     /** PARENT: one of their own children's attendance. 404 if the student is not this parent's child. */
@@ -69,7 +68,7 @@ public class PortalController {
                                                            @PageableDefault(size = 50) Pageable pageable,
                                                            Authentication authentication) {
         return new PagedModel<>(portalService
-                .childAttendance(tenantId(authentication), userId(authentication), studentId, pageable)
+                .childAttendance(userId(authentication), studentId, pageable)
                 .map(AttendanceEntryView::from));
     }
 
@@ -77,15 +76,14 @@ public class PortalController {
     @GetMapping("/student/results")
     @PreAuthorize(Roles.HAS_STUDENT)
     public List<ExamResultView> ownResults(Authentication authentication) {
-        return portalService.ownResults(tenantId(authentication), userId(authentication))
-                .stream().map(ExamResultView::from).toList();
+        return portalService.ownResults(userId(authentication)).stream().map(ExamResultView::from).toList();
     }
 
     /** PARENT: one of their own children's exam results. 404 if the student is not this parent's child. */
     @GetMapping("/children/{studentId}/results")
     @PreAuthorize(Roles.HAS_PARENT)
     public List<ExamResultView> childResults(@PathVariable UUID studentId, Authentication authentication) {
-        return portalService.childResults(tenantId(authentication), userId(authentication), studentId)
+        return portalService.childResults(userId(authentication), studentId)
                 .stream().map(ExamResultView::from).toList();
     }
 
@@ -93,7 +91,7 @@ public class PortalController {
     @GetMapping("/children/{studentId}/invoices")
     @PreAuthorize(Roles.HAS_PARENT)
     public List<InvoiceView> childInvoices(@PathVariable UUID studentId, Authentication authentication) {
-        return portalService.childInvoices(tenantId(authentication), userId(authentication), studentId)
+        return portalService.childInvoices(userId(authentication), studentId)
                 .stream().map(InvoiceView::from).toList();
     }
 
@@ -101,15 +99,14 @@ public class PortalController {
     @GetMapping("/student/library")
     @PreAuthorize(Roles.HAS_STUDENT)
     public List<LoanView> ownLibrary(Authentication authentication) {
-        return portalService.ownLibrary(tenantId(authentication), userId(authentication))
-                .stream().map(LoanView::from).toList();
+        return portalService.ownLibrary(userId(authentication)).stream().map(LoanView::from).toList();
     }
 
     /** PARENT: one of their own children's library loan history. 404 if the student is not this parent's child. */
     @GetMapping("/children/{studentId}/library")
     @PreAuthorize(Roles.HAS_PARENT)
     public List<LoanView> childLibrary(@PathVariable UUID studentId, Authentication authentication) {
-        return portalService.childLibrary(tenantId(authentication), userId(authentication), studentId)
+        return portalService.childLibrary(userId(authentication), studentId)
                 .stream().map(LoanView::from).toList();
     }
 
@@ -117,41 +114,31 @@ public class PortalController {
     @GetMapping("/student/transport")
     @PreAuthorize(Roles.HAS_STUDENT)
     public TransportView ownTransport(Authentication authentication) {
-        return TransportView.from(portalService.ownTransport(tenantId(authentication), userId(authentication)));
+        return TransportView.from(portalService.ownTransport(userId(authentication)));
     }
 
     /** PARENT: one of their own children's transport assignment. 404 if not their child or none is assigned. */
     @GetMapping("/children/{studentId}/transport")
     @PreAuthorize(Roles.HAS_PARENT)
     public TransportView childTransport(@PathVariable UUID studentId, Authentication authentication) {
-        return TransportView.from(
-                portalService.childTransport(tenantId(authentication), userId(authentication), studentId));
+        return TransportView.from(portalService.childTransport(userId(authentication), studentId));
     }
 
     /** STUDENT: their own hostel allocation (block + room + roommates). 404 if none is allocated. */
     @GetMapping("/student/hostel")
     @PreAuthorize(Roles.HAS_STUDENT)
     public HostelView ownHostel(Authentication authentication) {
-        return HostelView.from(portalService.ownHostel(tenantId(authentication), userId(authentication)));
+        return HostelView.from(portalService.ownHostel(userId(authentication)));
     }
 
     /** PARENT: one of their own children's hostel allocation. 404 if not their child or none is allocated. */
     @GetMapping("/children/{studentId}/hostel")
     @PreAuthorize(Roles.HAS_PARENT)
     public HostelView childHostel(@PathVariable UUID studentId, Authentication authentication) {
-        return HostelView.from(
-                portalService.childHostel(tenantId(authentication), userId(authentication), studentId));
-    }
-
-    private static UUID tenantId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getClaimAsString("tenant_id"));
+        return HostelView.from(portalService.childHostel(userId(authentication), studentId));
     }
 
     private static UUID userId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getSubject());
-    }
-
-    private static Jwt jwt(Authentication authentication) {
-        return (Jwt) authentication.getPrincipal();
+        return UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
     }
 }

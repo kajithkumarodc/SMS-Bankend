@@ -28,10 +28,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * The dev-tools payment simulator WITH {@code app.dev-tools-enabled=true}: it
  * flips an invoice to PAID exactly as the verified webhook would. A SCHOOL_ADMIN
- * may do it for any invoice in the tenant; a PARENT only for their own child's
- * (so the parent-facing "Pay Now" demo can stand in for the webhook locally).
- * Tenant-scoped and idempotent. (The default-disabled 404 behaviour is covered
- * by {@link DevToolsDisabledTest}.)
+ * may do it for any invoice; a PARENT only for their own child's (so the
+ * parent-facing "Pay Now" demo can stand in for the webhook locally).
+ * Idempotent. (The default-disabled 404 behaviour is covered by
+ * {@link DevToolsDisabledTest}.)
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -39,13 +39,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = "app.dev-tools-enabled=true")
 class DevToolsIntegrationTest {
 
-    private static final String SCHOOL_A = "devtools-a";
-    private static final String SCHOOL_B = "devtools-b";
     private static final String ADMIN_A = "admin@devtools-a.example";
     private static final String TEACHER_A = "teacher@devtools-a.example";
     private static final String PARENT_A = "parent@devtools-a.example";        // guardian of studentAId
     private static final String OTHER_PARENT_A = "parent2@devtools-a.example";  // guardian of otherStudentAId
-    private static final String ADMIN_B = "admin@devtools-b.example";
     private static final String PASSWORD = "secret";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -67,10 +64,7 @@ class DevToolsIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
         UUID schoolAId = UUID.randomUUID();
-        UUID schoolBId = UUID.randomUUID();
         studentAId = UUID.randomUUID();
         otherStudentAId = UUID.randomUUID();
         feeStructureAId = UUID.randomUUID();
@@ -81,61 +75,47 @@ class DevToolsIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students, "
                     + "attendance_records, exam_marks, exams, class_subjects, subjects, sections, classes, "
                     + "invoices, fee_structures, audit_log CASCADE");
 
-            seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolAId);
-            seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolBId);
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolAId + "', 'Tenant A School')");
 
-            seedUser(st, tenantA, ADMIN_A, seedRole(st, tenantA, "SCHOOL_ADMIN"));
-            seedUser(st, tenantA, TEACHER_A, seedRole(st, tenantA, "TEACHER"));
-            UUID parentRoleA = seedRole(st, tenantA, "PARENT");
-            UUID parentAId = seedUser(st, tenantA, PARENT_A, parentRoleA);
-            UUID otherParentAId = seedUser(st, tenantA, OTHER_PARENT_A, parentRoleA);
-            seedUser(st, tenantB, ADMIN_B, seedRole(st, tenantB, "SCHOOL_ADMIN"));
+            seedUser(st, ADMIN_A, seedRole(st, "SCHOOL_ADMIN"));
+            seedUser(st, TEACHER_A, seedRole(st, "TEACHER"));
+            UUID parentRoleA = seedRole(st, "PARENT");
+            UUID parentAId = seedUser(st, PARENT_A, parentRoleA);
+            UUID otherParentAId = seedUser(st, OTHER_PARENT_A, parentRoleA);
 
-            st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status, "
-                    + "guardian_user_id) VALUES ('" + studentAId + "', '" + tenantA + "', '" + schoolAId
+            st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status, "
+                    + "guardian_user_id) VALUES ('" + studentAId + "', '" + schoolAId
                     + "', 'Anaya', 'ADM-Anaya', 'ACTIVE', '" + parentAId + "')");
-            st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status, "
-                    + "guardian_user_id) VALUES ('" + otherStudentAId + "', '" + tenantA + "', '" + schoolAId
+            st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status, "
+                    + "guardian_user_id) VALUES ('" + otherStudentAId + "', '" + schoolAId
                     + "', 'Bhavya', 'ADM-Bhavya', 'ACTIVE', '" + otherParentAId + "')");
-            st.execute("INSERT INTO fee_structures (id, tenant_id, school_id, name, amount, due_date) VALUES ('"
-                    + feeStructureAId + "', '" + tenantA + "', '" + schoolAId + "', 'Term 1', 5000.00, '2026-06-01')");
+            st.execute("INSERT INTO fee_structures (id, school_id, name, amount, due_date) VALUES ('"
+                    + feeStructureAId + "', '" + schoolAId + "', 'Term 1', 5000.00, '2026-06-01')");
         }
     }
 
-    private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
-            throws SQLException {
-        st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                + tenantId + "', '" + name + "', '" + identifier + "')");
-        st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                + schoolId + "', '" + tenantId + "', '" + name + " School')");
-    }
-
-    private static UUID seedRole(Statement st, UUID tenantId, String role) throws SQLException {
+    private static UUID seedRole(Statement st, String role) throws SQLException {
         UUID roleId = UUID.randomUUID();
-        st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                + roleId + "', '" + tenantId + "', '" + role + "')");
+        st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', '" + role + "')");
         return roleId;
     }
 
-    private UUID seedUser(Statement st, UUID tenantId, String email, UUID roleId) throws SQLException {
+    private UUID seedUser(Statement st, String email, UUID roleId) throws SQLException {
         UUID userId = UUID.randomUUID();
-        st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                + userId + "', '" + tenantId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD)
-                + "', '" + email + "')");
-        st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                + userId + "', '" + roleId + "', '" + tenantId + "')");
+        st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                + userId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '" + email + "')");
+        st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
         return userId;
     }
 
-    private Cookie login(String schoolIdentifier, String email) throws Exception {
+    private Cookie login(String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
-                                + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
     }
@@ -166,7 +146,7 @@ class DevToolsIntegrationTest {
 
     @Test
     void adminSimulatesPaymentAndTheInvoiceBecomesPaid() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        Cookie admin = login(ADMIN_A);
         UUID invoiceId = createInvoiceA(admin);
 
         mockMvc.perform(post("/api/v1/dev/invoices/" + invoiceId + "/simulate-payment-success").cookie(admin))
@@ -180,7 +160,7 @@ class DevToolsIntegrationTest {
 
     @Test
     void simulatingIsIdempotent() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        Cookie admin = login(ADMIN_A);
         UUID invoiceId = createInvoiceA(admin);
         String url = "/api/v1/dev/invoices/" + invoiceId + "/simulate-payment-success";
 
@@ -192,19 +172,17 @@ class DevToolsIntegrationTest {
 
     @Test
     void aTeacherCannotSimulatePayment() throws Exception {
-        UUID invoiceId = createInvoiceA(login(SCHOOL_A, ADMIN_A));
+        UUID invoiceId = createInvoiceA(login(ADMIN_A));
 
         mockMvc.perform(post("/api/v1/dev/invoices/" + invoiceId + "/simulate-payment-success")
-                        .cookie(login(SCHOOL_A, TEACHER_A)))
+                        .cookie(login(TEACHER_A)))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    void cannotSimulatePaymentForAnotherTenantsInvoice() throws Exception {
-        UUID invoiceId = createInvoiceA(login(SCHOOL_A, ADMIN_A));
-
-        mockMvc.perform(post("/api/v1/dev/invoices/" + invoiceId + "/simulate-payment-success")
-                        .cookie(login(SCHOOL_B, ADMIN_B)))
+    void simulatingForANonexistentInvoiceReturns404() throws Exception {
+        mockMvc.perform(post("/api/v1/dev/invoices/" + UUID.randomUUID() + "/simulate-payment-success")
+                        .cookie(login(ADMIN_A)))
                 .andExpect(status().isNotFound());
     }
 
@@ -216,21 +194,21 @@ class DevToolsIntegrationTest {
 
     @Test
     void aParentCanSimulatePaymentForTheirOwnChildsInvoice() throws Exception {
-        UUID invoiceId = createInvoice(login(SCHOOL_A, ADMIN_A), studentAId);
+        UUID invoiceId = createInvoice(login(ADMIN_A), studentAId);
 
         mockMvc.perform(post("/api/v1/dev/invoices/" + invoiceId + "/simulate-payment-success")
-                        .cookie(login(SCHOOL_A, PARENT_A)))
+                        .cookie(login(PARENT_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PAID"));
     }
 
     @Test
     void aParentCannotSimulatePaymentForAnotherFamilysInvoice() throws Exception {
-        // Bhavya (otherStudentAId) is OTHER_PARENT_A's child, not PARENT_A's -> 404, same tenant.
-        UUID invoiceId = createInvoice(login(SCHOOL_A, ADMIN_A), otherStudentAId);
+        // Bhavya (otherStudentAId) is OTHER_PARENT_A's child, not PARENT_A's -> 404.
+        UUID invoiceId = createInvoice(login(ADMIN_A), otherStudentAId);
 
         mockMvc.perform(post("/api/v1/dev/invoices/" + invoiceId + "/simulate-payment-success")
-                        .cookie(login(SCHOOL_A, PARENT_A)))
+                        .cookie(login(PARENT_A)))
                 .andExpect(status().isNotFound());
     }
 }

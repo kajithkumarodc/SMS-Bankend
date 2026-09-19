@@ -29,17 +29,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Proves, against a real PostgreSQL instance with RLS enabled, that the new
- * {@code students} table is tenant-isolated (plan section 7c) and that only
- * SCHOOL_ADMIN can create a student (plan section 7d).
+ * Proves, against a real PostgreSQL instance, that only SCHOOL_ADMIN can
+ * create a student (plan section 7d) and that a reference to a nonexistent
+ * school/student is reported as 404, never a raw DB error.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class StudentSisIntegrationTest {
 
-    private static final String SCHOOL_A = "sis-school-a";
-    private static final String SCHOOL_B = "sis-school-b";
     private static final String ADMIN_A = "admin@tenant-a.example";
     private static final String TEACHER_A = "teacher@tenant-a.example";
     private static final String STUDENT_A = "student@tenant-a.example";
@@ -53,12 +51,8 @@ class StudentSisIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    private UUID tenantA;
-    private UUID tenantB;
     private UUID schoolA;
-    private UUID schoolB;
     private UUID studentA;
-    private UUID studentB;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -68,12 +62,8 @@ class StudentSisIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        tenantA = UUID.randomUUID();
-        tenantB = UUID.randomUUID();
         schoolA = UUID.randomUUID();
-        schoolB = UUID.randomUUID();
         studentA = UUID.randomUUID();
-        studentB = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
@@ -81,55 +71,33 @@ class StudentSisIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students CASCADE");
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students CASCADE");
 
-            seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolA);
-            seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolB);
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolA + "', 'Tenant A School')");
 
-            // Tenant A users: one SCHOOL_ADMIN, one TEACHER.
-            seedUser(st, tenantA, ADMIN_A, PASSWORD, "Admin A", "SCHOOL_ADMIN");
-            seedUser(st, tenantA, TEACHER_A, PASSWORD, "Teacher A", "TEACHER");
-            seedUser(st, tenantA, STUDENT_A, PASSWORD, "Student User A", "STUDENT");
-            seedUser(st, tenantA, PARENT_A, PASSWORD, "Parent User A", "PARENT");
-            // Tenant B user: a SCHOOL_ADMIN (unused for auth here, kept for realism).
-            seedUser(st, tenantB, "admin@tenant-b.example", PASSWORD, "Admin B", "SCHOOL_ADMIN");
+            seedUser(st, ADMIN_A, "Admin A", "SCHOOL_ADMIN");
+            seedUser(st, TEACHER_A, "Teacher A", "TEACHER");
+            seedUser(st, STUDENT_A, "Student User A", "STUDENT");
+            seedUser(st, PARENT_A, "Parent User A", "PARENT");
 
-            // One pre-existing student in each tenant. Tenant A uses "ADM-A-1";
-            // tenant B uses "ADM-100" -- tenant A can then reuse "ADM-100" because
-            // uniqueness is per-tenant.
-            st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, guardian_name, admission_number, status) VALUES ('"
-                    + studentA + "', '" + tenantA + "', '" + schoolA + "', 'Existing A', 'Old Guardian', 'ADM-A-1', 'ACTIVE')");
-            st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status) VALUES ('"
-                    + studentB + "', '" + tenantB + "', '" + schoolB + "', 'Existing B', 'ADM-100', 'ACTIVE')");
+            st.execute("INSERT INTO students (id, school_id, full_name, guardian_name, admission_number, status) VALUES ('"
+                    + studentA + "', '" + schoolA + "', 'Existing A', 'Old Guardian', 'ADM-A-1', 'ACTIVE')");
         }
     }
 
-    private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
-            throws SQLException {
-        st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                + tenantId + "', '" + name + "', '" + identifier + "')");
-        st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                + schoolId + "', '" + tenantId + "', '" + name + " School')");
-    }
-
-    private void seedUser(Statement st, UUID tenantId, String email, String password, String fullName, String role)
-            throws SQLException {
+    private void seedUser(Statement st, String email, String fullName, String role) throws SQLException {
         UUID userId = UUID.randomUUID();
         UUID roleId = UUID.randomUUID();
-        st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                + userId + "', '" + tenantId + "', '" + email + "', '" + passwordEncoder.encode(password) + "', '"
-                + fullName + "')");
-        st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                + roleId + "', '" + tenantId + "', '" + role + "')");
-        st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                + userId + "', '" + roleId + "', '" + tenantId + "')");
+        st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                + userId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '" + fullName + "')");
+        st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', '" + role + "')");
+        st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
     }
 
-    private Cookie login(String schoolIdentifier, String email) throws Exception {
+    private Cookie login(String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
-                                + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
     }
@@ -139,11 +107,11 @@ class StudentSisIntegrationTest {
                 + admissionNumber + "\"}";
     }
 
-    // --- Tenant isolation --------------------------------------------------
+    // --- Listing / existence checks ----------------------------------------
 
     @Test
-    void listReturnsOnlyCallersTenantStudents() throws Exception {
-        var response = mockMvc.perform(get("/api/v1/students").cookie(login(SCHOOL_A, ADMIN_A)))
+    void listReturnsStudents() throws Exception {
+        var response = mockMvc.perform(get("/api/v1/students").cookie(login(ADMIN_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].fullName").value("Existing A"))
@@ -154,40 +122,24 @@ class StudentSisIntegrationTest {
     }
 
     @Test
-    void getByIdOfAnotherTenantsStudentReturns404NotFound() throws Exception {
-        mockMvc.perform(get("/api/v1/students/" + studentB).cookie(login(SCHOOL_A, ADMIN_A)))
+    void getByIdOfANonexistentStudentReturns404NotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/students/" + UUID.randomUUID()).cookie(login(ADMIN_A)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void cannotCreateStudentAgainstAnotherTenantsSchool() throws Exception {
+    void cannotCreateStudentAgainstANonexistentSchool() throws Exception {
         mockMvc.perform(post("/api/v1/students")
-                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(createBody(schoolB, "ADM-A-1")))
+                        .content(createBody(UUID.randomUUID(), "ADM-A-1")))
                 .andExpect(status().isNotFound());
-
-        // And nothing leaked into tenant B.
-        var listB = mockMvc.perform(get("/api/v1/students").cookie(login(SCHOOL_B, "admin@tenant-b.example")))
-                .andExpect(status().isOk())
-                .andReturn();
-        assertThat(JSON.readTree(listB.getResponse().getContentAsString()).get("content")).hasSize(1);
     }
 
     @Test
-    void admissionNumberUniquenessIsPerTenantNotGlobal() throws Exception {
-        // "ADM-100" already exists in tenant B, but not for tenant A -> allowed.
-        mockMvc.perform(post("/api/v1/students")
-                        .cookie(login(SCHOOL_A, ADMIN_A))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(createBody(schoolA, "ADM-100")))
-                .andExpect(status().isCreated());
-    }
-
-    @Test
-    void duplicateAdmissionNumberWithinTenantReturns409WithClearMessage() throws Exception {
+    void duplicateAdmissionNumberReturns409WithClearMessage() throws Exception {
         var result = mockMvc.perform(post("/api/v1/students")
-                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(schoolA, "ADM-A-1"))) // "Existing A" already uses this
                 .andExpect(status().isConflict())
@@ -203,7 +155,7 @@ class StudentSisIntegrationTest {
     @Test
     void schoolAdminCanCreateStudent() throws Exception {
         mockMvc.perform(post("/api/v1/students")
-                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(schoolA, "ADM-NEW-1")))
                 .andExpect(status().isCreated())
@@ -214,7 +166,7 @@ class StudentSisIntegrationTest {
     @Test
     void teacherCannotCreateStudentAndGets403() throws Exception {
         mockMvc.perform(post("/api/v1/students")
-                        .cookie(login(SCHOOL_A, TEACHER_A))
+                        .cookie(login(TEACHER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(schoolA, "ADM-NEW-2")))
                 .andExpect(status().isForbidden());
@@ -222,14 +174,14 @@ class StudentSisIntegrationTest {
 
     @Test
     void teacherCanStillListStudents() throws Exception {
-        mockMvc.perform(get("/api/v1/students").cookie(login(SCHOOL_A, TEACHER_A)))
+        mockMvc.perform(get("/api/v1/students").cookie(login(TEACHER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1));
     }
 
     @Test
     void teacherCanStillGetASingleStudentById() throws Exception {
-        mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(SCHOOL_A, TEACHER_A)))
+        mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(TEACHER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fullName").value("Existing A"));
     }
@@ -239,7 +191,7 @@ class StudentSisIntegrationTest {
         // The full student record (guardian contact included) is staff-only; a
         // student or parent must use /api/v1/me/student or /api/v1/me/children.
         for (String email : new String[] {STUDENT_A, PARENT_A}) {
-            mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }
@@ -247,7 +199,7 @@ class StudentSisIntegrationTest {
     @Test
     void validationRejectsMissingRequiredFields() throws Exception {
         mockMvc.perform(post("/api/v1/students")
-                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolId\":\"" + schoolA + "\",\"fullName\":\"  \"}"))
                 .andExpect(status().isBadRequest());
@@ -261,7 +213,7 @@ class StudentSisIntegrationTest {
     @Test
     void schoolAdminCanEditStudentAndAdmissionNumberStaysImmutable() throws Exception {
         mockMvc.perform(put("/api/v1/students/" + studentA)
-                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         // admissionNumber in the body is ignored -- the DTO has no such field
                         .content("{\"fullName\":\"Existing A (renamed)\",\"guardianName\":\"New Guardian\","
@@ -271,7 +223,7 @@ class StudentSisIntegrationTest {
                 .andExpect(jsonPath("$.guardianName").value("New Guardian"))
                 .andExpect(jsonPath("$.admissionNumber").value("ADM-A-1"));
 
-        mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(SCHOOL_A, ADMIN_A)))
+        mockMvc.perform(get("/api/v1/students/" + studentA).cookie(login(ADMIN_A)))
                 .andExpect(jsonPath("$.fullName").value("Existing A (renamed)"))
                 .andExpect(jsonPath("$.admissionNumber").value("ADM-A-1"));
     }
@@ -279,24 +231,19 @@ class StudentSisIntegrationTest {
     @Test
     void teacherCannotEditStudentAndGets403() throws Exception {
         mockMvc.perform(put("/api/v1/students/" + studentA)
-                        .cookie(login(SCHOOL_A, TEACHER_A))
+                        .cookie(login(TEACHER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(UPDATE_BODY))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    void editingAnotherTenantsStudentReturns404() throws Exception {
-        mockMvc.perform(put("/api/v1/students/" + studentB)
-                        .cookie(login(SCHOOL_A, ADMIN_A))
+    void editingANonexistentStudentReturns404() throws Exception {
+        mockMvc.perform(put("/api/v1/students/" + UUID.randomUUID())
+                        .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(UPDATE_BODY))
                 .andExpect(status().isNotFound());
-
-        // Tenant B's record is untouched.
-        mockMvc.perform(get("/api/v1/students/" + studentB).cookie(login(SCHOOL_B, "admin@tenant-b.example")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.fullName").value("Existing B"));
     }
 
     // --- Deactivate (PATCH .../status) --------------------------------
@@ -304,13 +251,13 @@ class StudentSisIntegrationTest {
     @Test
     void deactivatingAStudentSetsStatusInactiveAndShowsInTheList() throws Exception {
         mockMvc.perform(patch("/api/v1/students/" + studentA + "/status")
-                        .cookie(login(SCHOOL_A, ADMIN_A))
+                        .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"INACTIVE\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("INACTIVE"));
 
-        var list = mockMvc.perform(get("/api/v1/students").cookie(login(SCHOOL_A, ADMIN_A)))
+        var list = mockMvc.perform(get("/api/v1/students").cookie(login(ADMIN_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(studentA.toString()))
@@ -323,7 +270,7 @@ class StudentSisIntegrationTest {
     @Test
     void teacherCannotDeactivateAStudentAndGets403() throws Exception {
         mockMvc.perform(patch("/api/v1/students/" + studentA + "/status")
-                        .cookie(login(SCHOOL_A, TEACHER_A))
+                        .cookie(login(TEACHER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"INACTIVE\"}"))
                 .andExpect(status().isForbidden());

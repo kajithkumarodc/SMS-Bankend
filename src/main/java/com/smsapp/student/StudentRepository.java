@@ -8,39 +8,31 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Every query is explicitly filtered by {@code tenant_id} -- defense in depth on
- * top of the database RLS policy (plan section 1, "use both together").
- */
 public interface StudentRepository extends JpaRepository<Student, UUID> {
 
-    Page<Student> findByTenantId(UUID tenantId, Pageable pageable);
+    Page<Student> findBySectionId(UUID sectionId, Pageable pageable);
 
-    Page<Student> findByTenantIdAndSectionId(UUID tenantId, UUID sectionId, Pageable pageable);
+    /** Transport: all students assigned to one route. */
+    List<Student> findByTransportRouteIdOrderByFullName(UUID transportRouteId);
 
-    /** Transport: all students assigned to one route, still tenant-scoped underneath. */
-    List<Student> findByTenantIdAndTransportRouteIdOrderByFullName(UUID tenantId, UUID transportRouteId);
-
-    /** Hostel: all students allocated to one room, still tenant-scoped underneath. */
-    List<Student> findByTenantIdAndHostelRoomIdOrderByFullName(UUID tenantId, UUID hostelRoomId);
+    /** Hostel: all students allocated to one room. */
+    List<Student> findByHostelRoomIdOrderByFullName(UUID hostelRoomId);
 
     /** Hostel: how many students are currently allocated to a room (for the capacity check). */
-    long countByTenantIdAndHostelRoomId(UUID tenantId, UUID hostelRoomId);
+    long countByHostelRoomId(UUID hostelRoomId);
 
-    Optional<Student> findByIdAndTenantId(UUID id, UUID tenantId);
-
-    boolean existsByTenantIdAndAdmissionNumber(UUID tenantId, String admissionNumber);
+    boolean existsByAdmissionNumber(String admissionNumber);
 
     /** Portal: the student record for a STUDENT-role login. */
-    Optional<Student> findByTenantIdAndStudentUserId(UUID tenantId, UUID studentUserId);
+    Optional<Student> findByStudentUserId(UUID studentUserId);
 
     /** Portal: all children of a PARENT-role login (a parent may have several). */
-    List<Student> findByTenantIdAndGuardianUserIdOrderByFullName(UUID tenantId, UUID guardianUserId);
+    List<Student> findByGuardianUserIdOrderByFullName(UUID guardianUserId);
 
     /**
-     * Portal ownership check: the given student only if it belongs to this tenant AND
-     * this parent. An empty result means "not this parent's child" -- reported as 404,
-     * never 403, so it does not leak whether the student exists.
+     * Portal ownership check: the given student only if it belongs to this parent.
+     * An empty result means "not this parent's child" -- reported as 404, never
+     * 403, so it does not leak whether the student exists.
      */
-    Optional<Student> findByIdAndTenantIdAndGuardianUserId(UUID id, UUID tenantId, UUID guardianUserId);
+    Optional<Student> findByIdAndGuardianUserId(UUID id, UUID guardianUserId);
 }

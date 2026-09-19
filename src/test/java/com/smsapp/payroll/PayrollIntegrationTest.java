@@ -25,11 +25,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Payroll generation + history against a real PostgreSQL instance with RLS
- * (plan section 2). Covers: correct {@code netPay} computation from the staff
+ * Payroll generation + history against a real PostgreSQL instance (plan
+ * section 2). Covers: correct {@code netPay} computation from the staff
  * member's on-file salary; SCHOOL_ADMIN-only generation (TEACHER/STUDENT/PARENT
  * 403); a clean 409 on a duplicate staff+month+year record; 404 when the staff
- * member has no profile; tenant isolation; and ownership isolation on
+ * member has no profile / doesn't exist; and ownership isolation on
  * {@code /me/payroll}.
  */
 @SpringBootTest
@@ -37,15 +37,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class PayrollIntegrationTest {
 
-    private static final String SCHOOL_A = "payroll-a";
-    private static final String SCHOOL_B = "payroll-b";
     private static final String ADMIN_A = "admin@payroll-a.example";
     private static final String TEACHER_A = "teacher@payroll-a.example";
     private static final String TEACHER_A2 = "teacher2@payroll-a.example";
     private static final String STUDENT_A = "student@payroll-a.example";
     private static final String PARENT_A = "parent@payroll-a.example";
-    private static final String ADMIN_B = "admin@payroll-b.example";
-    private static final String TEACHER_B = "teacher@payroll-b.example";
     private static final String PASSWORD = "secret";
 
     @Autowired
@@ -56,7 +52,6 @@ class PayrollIntegrationTest {
 
     private UUID teacherAUserId;
     private UUID teacherA2UserId;
-    private UUID teacherBUserId;
     private UUID studentAUserId; // no staff profile -- used for the 404 case
 
     @DynamicPropertySource
@@ -67,10 +62,7 @@ class PayrollIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
         UUID schoolAId = UUID.randomUUID();
-        UUID schoolBId = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
@@ -78,72 +70,54 @@ class PayrollIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, "
                     + "staff_profiles, leave_requests, payroll_records, audit_log CASCADE");
 
-            seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolAId);
-            seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolBId);
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolAId + "', 'Tenant A School')");
 
-            UUID adminRoleA = seedRole(st, tenantA, "SCHOOL_ADMIN");
-            UUID teacherRoleA = seedRole(st, tenantA, "TEACHER");
-            UUID studentRoleA = seedRole(st, tenantA, "STUDENT");
-            UUID parentRoleA = seedRole(st, tenantA, "PARENT");
-            UUID adminRoleB = seedRole(st, tenantB, "SCHOOL_ADMIN");
-            UUID teacherRoleB = seedRole(st, tenantB, "TEACHER");
+            UUID adminRoleA = seedRole(st, "SCHOOL_ADMIN");
+            UUID teacherRoleA = seedRole(st, "TEACHER");
+            UUID studentRoleA = seedRole(st, "STUDENT");
+            UUID parentRoleA = seedRole(st, "PARENT");
 
-            seedUser(st, tenantA, ADMIN_A, adminRoleA);
-            teacherAUserId = seedUser(st, tenantA, TEACHER_A, teacherRoleA);
-            teacherA2UserId = seedUser(st, tenantA, TEACHER_A2, teacherRoleA);
-            studentAUserId = seedUser(st, tenantA, STUDENT_A, studentRoleA);
-            seedUser(st, tenantA, PARENT_A, parentRoleA);
-            seedUser(st, tenantB, ADMIN_B, adminRoleB);
-            teacherBUserId = seedUser(st, tenantB, TEACHER_B, teacherRoleB);
+            seedUser(st, ADMIN_A, adminRoleA);
+            teacherAUserId = seedUser(st, TEACHER_A, teacherRoleA);
+            teacherA2UserId = seedUser(st, TEACHER_A2, teacherRoleA);
+            studentAUserId = seedUser(st, STUDENT_A, studentRoleA);
+            seedUser(st, PARENT_A, parentRoleA);
 
-            seedStaffProfile(st, tenantA, teacherAUserId, "EMP-A1", new BigDecimal("50000.00"));
-            seedStaffProfile(st, tenantA, teacherA2UserId, "EMP-A2", new BigDecimal("40000.00"));
-            seedStaffProfile(st, tenantB, teacherBUserId, "EMP-B1", new BigDecimal("45000.00"));
+            seedStaffProfile(st, teacherAUserId, "EMP-A1", new BigDecimal("50000.00"));
+            seedStaffProfile(st, teacherA2UserId, "EMP-A2", new BigDecimal("40000.00"));
         }
     }
 
     // --- seed helpers ------------------------------------------------
 
-    private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
-            throws SQLException {
-        st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                + tenantId + "', '" + name + "', '" + identifier + "')");
-        st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                + schoolId + "', '" + tenantId + "', '" + name + " School')");
-    }
-
-    private static UUID seedRole(Statement st, UUID tenantId, String role) throws SQLException {
+    private static UUID seedRole(Statement st, String role) throws SQLException {
         UUID roleId = UUID.randomUUID();
-        st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                + roleId + "', '" + tenantId + "', '" + role + "')");
+        st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', '" + role + "')");
         return roleId;
     }
 
-    private UUID seedUser(Statement st, UUID tenantId, String email, UUID roleId) throws SQLException {
+    private UUID seedUser(Statement st, String email, UUID roleId) throws SQLException {
         UUID userId = UUID.randomUUID();
-        st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                + userId + "', '" + tenantId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '"
-                + email + "')");
-        st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                + userId + "', '" + roleId + "', '" + tenantId + "')");
+        st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                + userId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '" + email + "')");
+        st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
         return userId;
     }
 
-    private static void seedStaffProfile(Statement st, UUID tenantId, UUID userId, String employeeCode,
-                                         BigDecimal salary) throws SQLException {
-        st.execute("INSERT INTO staff_profiles (id, tenant_id, user_id, employee_code, date_of_joining, "
-                + "salary_amount, status) VALUES ('" + UUID.randomUUID() + "', '" + tenantId + "', '" + userId
+    private static void seedStaffProfile(Statement st, UUID userId, String employeeCode, BigDecimal salary)
+            throws SQLException {
+        st.execute("INSERT INTO staff_profiles (id, user_id, employee_code, date_of_joining, "
+                + "salary_amount, status) VALUES ('" + UUID.randomUUID() + "', '" + userId
                 + "', '" + employeeCode + "', '2020-01-01', " + salary + ", 'ACTIVE')");
     }
 
-    private Cookie login(String schoolIdentifier, String email) throws Exception {
+    private Cookie login(String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
-                                + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
     }
@@ -157,7 +131,7 @@ class PayrollIntegrationTest {
 
     @Test
     void schoolAdminGeneratesPayrollWithTheCorrectNetPay() throws Exception {
-        mockMvc.perform(post("/api/v1/payroll").cookie(login(SCHOOL_A, ADMIN_A))
+        mockMvc.perform(post("/api/v1/payroll").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(generateBody(teacherAUserId, 3, 2026, "5000.00")))
                 .andExpect(status().isCreated())
@@ -171,7 +145,7 @@ class PayrollIntegrationTest {
     void teacherStudentAndParentCannotGeneratePayroll() throws Exception {
         String body = generateBody(teacherAUserId, 3, 2026, "0.00");
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
-            mockMvc.perform(post("/api/v1/payroll").cookie(login(SCHOOL_A, email))
+            mockMvc.perform(post("/api/v1/payroll").cookie(login(email))
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isForbidden());
         }
@@ -179,7 +153,7 @@ class PayrollIntegrationTest {
 
     @Test
     void aDuplicatePayrollRecordForTheSameStaffMonthAndYearReturnsAClean409() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         mockMvc.perform(post("/api/v1/payroll").cookie(adminA).contentType(MediaType.APPLICATION_JSON)
                         .content(generateBody(teacherAUserId, 3, 2026, "0.00")))
                 .andExpect(status().isCreated());
@@ -196,17 +170,17 @@ class PayrollIntegrationTest {
 
     @Test
     void generatingPayrollForAStaffMemberWithNoProfileReturns404() throws Exception {
-        mockMvc.perform(post("/api/v1/payroll").cookie(login(SCHOOL_A, ADMIN_A))
+        mockMvc.perform(post("/api/v1/payroll").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(generateBody(studentAUserId, 3, 2026, "0.00")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void generatingPayrollForAnotherTenantsStaffMemberReturns404() throws Exception {
-        mockMvc.perform(post("/api/v1/payroll").cookie(login(SCHOOL_A, ADMIN_A))
+    void generatingPayrollForANonexistentStaffMemberReturns404() throws Exception {
+        mockMvc.perform(post("/api/v1/payroll").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(generateBody(teacherBUserId, 3, 2026, "0.00")))
+                        .content(generateBody(UUID.randomUUID(), 3, 2026, "0.00")))
                 .andExpect(status().isNotFound());
     }
 
@@ -214,7 +188,7 @@ class PayrollIntegrationTest {
 
     @Test
     void ownPayrollIsScopedToTheCallersOwnHistory() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         mockMvc.perform(post("/api/v1/payroll").cookie(adminA).contentType(MediaType.APPLICATION_JSON)
                         .content(generateBody(teacherAUserId, 3, 2026, "0.00")))
                 .andExpect(status().isCreated());
@@ -222,33 +196,21 @@ class PayrollIntegrationTest {
                         .content(generateBody(teacherA2UserId, 3, 2026, "0.00")))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/v1/me/payroll").cookie(login(SCHOOL_A, TEACHER_A)))
+        mockMvc.perform(get("/api/v1/me/payroll").cookie(login(TEACHER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].baseSalary").value(50000.00));
 
-        mockMvc.perform(get("/api/v1/me/payroll").cookie(login(SCHOOL_A, TEACHER_A2)))
+        mockMvc.perform(get("/api/v1/me/payroll").cookie(login(TEACHER_A2)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].baseSalary").value(40000.00));
     }
 
     @Test
-    void ownPayrollNeverLeaksAnotherTenantsRecords() throws Exception {
-        mockMvc.perform(post("/api/v1/payroll").cookie(login(SCHOOL_B, ADMIN_B))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(generateBody(teacherBUserId, 3, 2026, "0.00")))
-                .andExpect(status().isCreated());
-
-        mockMvc.perform(get("/api/v1/me/payroll").cookie(login(SCHOOL_A, TEACHER_A)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
-    }
-
-    @Test
     void studentAndParentCannotReadPayrollHistory() throws Exception {
         for (String email : new String[] {STUDENT_A, PARENT_A}) {
-            mockMvc.perform(get("/api/v1/me/payroll").cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/me/payroll").cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }

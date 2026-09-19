@@ -1,6 +1,5 @@
 package com.smsapp.hostel;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,27 +27,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Hostel blocks + rooms + student allocation against a real PostgreSQL instance
- * with RLS (plan section 2). Covers: tenant isolation on blocks, rooms, the room
- * roster and the portal endpoints; SCHOOL_ADMIN-only create / add / allocate
+ * (plan section 2). Covers: SCHOOL_ADMIN-only create / add / allocate
  * (TEACHER/STUDENT/PARENT 403); a clean 409 on a duplicate room number within a
- * block (and that the same number is fine in another block); a 400 when a room is
- * full; cross-tenant references returning 404 consistently; and ownership
- * isolation on {@code /me/student/hostel} and {@code /me/children/{id}/hostel}.
+ * block (and that the same number is fine in another block); a 400 when a room
+ * is full; nonexistent block/room/student references returning 404
+ * consistently; and ownership isolation on {@code /me/student/hostel} and
+ * {@code /me/children/{id}/hostel}.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class HostelIntegrationTest {
 
-    private static final String SCHOOL_A = "hostel-a";
-    private static final String SCHOOL_B = "hostel-b";
     private static final String ADMIN_A = "admin@hostel-a.example";
     private static final String TEACHER_A = "teacher@hostel-a.example";
     private static final String STUDENT_A = "student@hostel-a.example";   // Anaya, in room A-101
     private static final String PARENT_A = "parent@hostel-a.example";     // guardian of Anaya
     private static final String PARENT_A2 = "parent2@hostel-a.example";   // guardian of Bhavya (no room)
-    private static final String ADMIN_B = "admin@hostel-b.example";
-    private static final String STUDENT_B = "student@hostel-b.example";   // Devi, in room B-101
     private static final String PASSWORD = "secret";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -58,14 +53,11 @@ class HostelIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    private UUID studentAId;    // "Anaya", tenant A, room A-101 (full: capacity 2)
-    private UUID studentA2Id;   // "Bhavya", tenant A, no room
-    private UUID studentA3Id;   // "Charu", tenant A, room A-101 (Anaya's roommate)
-    private UUID studentBId;    // "Devi", tenant B, room B-101
+    private UUID studentAId;    // "Anaya", room A-101 (full: capacity 2)
+    private UUID studentA2Id;   // "Bhavya", no room
+    private UUID studentA3Id;   // "Charu", room A-101 (Anaya's roommate)
     private UUID blockAId;
-    private UUID blockBId;
     private UUID roomA101Id;
-    private UUID roomB101Id;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -75,18 +67,12 @@ class HostelIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
         UUID schoolAId = UUID.randomUUID();
-        UUID schoolBId = UUID.randomUUID();
         studentAId = UUID.randomUUID();
         studentA2Id = UUID.randomUUID();
         studentA3Id = UUID.randomUUID();
-        studentBId = UUID.randomUUID();
         blockAId = UUID.randomUUID();
-        blockBId = UUID.randomUUID();
         roomA101Id = UUID.randomUUID();
-        roomB101Id = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
@@ -94,94 +80,73 @@ class HostelIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students, "
                     + "attendance_records, exam_marks, exams, class_subjects, subjects, sections, classes, "
                     + "invoices, fee_structures, announcements, book_loans, library_books, "
                     + "transport_vehicles, transport_routes, hostel_rooms, hostel_blocks, audit_log CASCADE");
 
-            seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolAId);
-            seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolBId);
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolAId + "', 'Tenant A School')");
 
-            UUID adminRoleA = seedRole(st, tenantA, "SCHOOL_ADMIN");
-            UUID teacherRoleA = seedRole(st, tenantA, "TEACHER");
-            UUID studentRoleA = seedRole(st, tenantA, "STUDENT");
-            UUID parentRoleA = seedRole(st, tenantA, "PARENT");
-            UUID adminRoleB = seedRole(st, tenantB, "SCHOOL_ADMIN");
-            UUID studentRoleB = seedRole(st, tenantB, "STUDENT");
+            UUID adminRoleA = seedRole(st, "SCHOOL_ADMIN");
+            UUID teacherRoleA = seedRole(st, "TEACHER");
+            UUID studentRoleA = seedRole(st, "STUDENT");
+            UUID parentRoleA = seedRole(st, "PARENT");
 
-            seedUser(st, tenantA, ADMIN_A, adminRoleA);
-            seedUser(st, tenantA, TEACHER_A, teacherRoleA);
-            UUID studentAUser = seedUser(st, tenantA, STUDENT_A, studentRoleA);
-            UUID parentAUser = seedUser(st, tenantA, PARENT_A, parentRoleA);
-            UUID parentA2User = seedUser(st, tenantA, PARENT_A2, parentRoleA);
-            seedUser(st, tenantB, ADMIN_B, adminRoleB);
-            UUID studentBUser = seedUser(st, tenantB, STUDENT_B, studentRoleB);
+            seedUser(st, ADMIN_A, adminRoleA);
+            seedUser(st, TEACHER_A, teacherRoleA);
+            UUID studentAUser = seedUser(st, STUDENT_A, studentRoleA);
+            UUID parentAUser = seedUser(st, PARENT_A, parentRoleA);
+            UUID parentA2User = seedUser(st, PARENT_A2, parentRoleA);
 
-            seedBlock(st, tenantA, blockAId, "Block A");
-            seedBlock(st, tenantB, blockBId, "Block B");
-            seedRoom(st, tenantA, roomA101Id, blockAId, "A-101", 2);
-            seedRoom(st, tenantB, roomB101Id, blockBId, "B-101", 3);
+            seedBlock(st, blockAId, "Block A");
+            seedRoom(st, roomA101Id, blockAId, "A-101", 2);
 
-            seedStudent(st, tenantA, schoolAId, studentAId, "Anaya", studentAUser, parentAUser, roomA101Id);
-            seedStudent(st, tenantA, schoolAId, studentA2Id, "Bhavya", null, parentA2User, null);
-            seedStudent(st, tenantA, schoolAId, studentA3Id, "Charu", null, null, roomA101Id);
-            seedStudent(st, tenantB, schoolBId, studentBId, "Devi", studentBUser, null, roomB101Id);
+            seedStudent(st, schoolAId, studentAId, "Anaya", studentAUser, parentAUser, roomA101Id);
+            seedStudent(st, schoolAId, studentA2Id, "Bhavya", null, parentA2User, null);
+            seedStudent(st, schoolAId, studentA3Id, "Charu", null, null, roomA101Id);
         }
     }
 
     // --- seed helpers ------------------------------------------------
 
-    private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
-            throws SQLException {
-        st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                + tenantId + "', '" + name + "', '" + identifier + "')");
-        st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                + schoolId + "', '" + tenantId + "', '" + name + " School')");
-    }
-
-    private static UUID seedRole(Statement st, UUID tenantId, String role) throws SQLException {
+    private static UUID seedRole(Statement st, String role) throws SQLException {
         UUID roleId = UUID.randomUUID();
-        st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                + roleId + "', '" + tenantId + "', '" + role + "')");
+        st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', '" + role + "')");
         return roleId;
     }
 
-    private UUID seedUser(Statement st, UUID tenantId, String email, UUID roleId) throws SQLException {
+    private UUID seedUser(Statement st, String email, UUID roleId) throws SQLException {
         UUID userId = UUID.randomUUID();
-        st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                + userId + "', '" + tenantId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '"
-                + email + "')");
-        st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                + userId + "', '" + roleId + "', '" + tenantId + "')");
+        st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                + userId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '" + email + "')");
+        st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
         return userId;
     }
 
-    private static void seedBlock(Statement st, UUID tenantId, UUID id, String name) throws SQLException {
-        st.execute("INSERT INTO hostel_blocks (id, tenant_id, name) VALUES ('"
-                + id + "', '" + tenantId + "', '" + name + "')");
+    private static void seedBlock(Statement st, UUID id, String name) throws SQLException {
+        st.execute("INSERT INTO hostel_blocks (id, name) VALUES ('" + id + "', '" + name + "')");
     }
 
-    private static void seedRoom(Statement st, UUID tenantId, UUID id, UUID blockId, String roomNumber, int capacity)
+    private static void seedRoom(Statement st, UUID id, UUID blockId, String roomNumber, int capacity)
             throws SQLException {
-        st.execute("INSERT INTO hostel_rooms (id, tenant_id, block_id, room_number, capacity) VALUES ('"
-                + id + "', '" + tenantId + "', '" + blockId + "', '" + roomNumber + "', " + capacity + ")");
+        st.execute("INSERT INTO hostel_rooms (id, block_id, room_number, capacity) VALUES ('"
+                + id + "', '" + blockId + "', '" + roomNumber + "', " + capacity + ")");
     }
 
-    private static void seedStudent(Statement st, UUID tenantId, UUID schoolId, UUID studentId, String name,
+    private static void seedStudent(Statement st, UUID schoolId, UUID studentId, String name,
                                     UUID studentUserId, UUID guardianUserId, UUID hostelRoomId) throws SQLException {
-        st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status, "
-                + "student_user_id, guardian_user_id, hostel_room_id) VALUES ('" + studentId + "', '" + tenantId
+        st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status, "
+                + "student_user_id, guardian_user_id, hostel_room_id) VALUES ('" + studentId
                 + "', '" + schoolId + "', '" + name + "', 'ADM-" + name + "', 'ACTIVE', "
                 + (studentUserId == null ? "NULL" : "'" + studentUserId + "'") + ", "
                 + (guardianUserId == null ? "NULL" : "'" + guardianUserId + "'") + ", "
                 + (hostelRoomId == null ? "NULL" : "'" + hostelRoomId + "'") + ")");
     }
 
-    private Cookie login(String schoolIdentifier, String email) throws Exception {
+    private Cookie login(String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
-                                + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
     }
@@ -204,37 +169,31 @@ class HostelIntegrationTest {
         return UUID.fromString(JSON.readTree(result.getResponse().getContentAsString()).get("id").asText());
     }
 
-    // --- Blocks: SCHOOL_ADMIN only + tenant isolation ---------
+    // --- Blocks: SCHOOL_ADMIN only ---------
 
     @Test
-    void schoolAdminCreatesABlockAndListingIsTenantScoped() throws Exception {
-        createBlock(login(SCHOOL_A, ADMIN_A), "Block C");
+    void schoolAdminCreatesABlock() throws Exception {
+        createBlock(login(ADMIN_A), "Block C");
 
-        mockMvc.perform(get("/api/v1/hostel/blocks").cookie(login(SCHOOL_A, ADMIN_A)))
+        mockMvc.perform(get("/api/v1/hostel/blocks").cookie(login(ADMIN_A)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2)) // Block A (seeded) + Block C
-                .andExpect(jsonPath("$[?(@.name == 'Block B')]").isEmpty());
-
-        mockMvc.perform(get("/api/v1/hostel/blocks").cookie(login(SCHOOL_B, ADMIN_B)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].name").value("Block B"));
+                .andExpect(jsonPath("$.length()").value(2)); // Block A (seeded) + Block C
     }
 
     @Test
     void teacherStudentAndParentCannotCreateABlock() throws Exception {
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
-            mockMvc.perform(post("/api/v1/hostel/blocks").cookie(login(SCHOOL_A, email))
+            mockMvc.perform(post("/api/v1/hostel/blocks").cookie(login(email))
                             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"X\"}"))
                     .andExpect(status().isForbidden());
         }
     }
 
-    // --- Rooms: 409 within block, ok in another block, cross-tenant 404 ---
+    // --- Rooms: 409 within block, ok in another block, existence checks ---
 
     @Test
     void aDuplicateRoomNumberInABlockIs409ButTheSameNumberInAnotherBlockIsFine() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         UUID blockC = createBlock(adminA, "Block C");
 
         // "A-101" already exists in Block A.
@@ -250,22 +209,22 @@ class HostelIntegrationTest {
     }
 
     @Test
-    void addingARoomToAnotherTenantsBlockReturns404() throws Exception {
-        mockMvc.perform(post("/api/v1/hostel/blocks/" + blockBId + "/rooms").cookie(login(SCHOOL_A, ADMIN_A))
+    void addingARoomToANonexistentBlockReturns404() throws Exception {
+        mockMvc.perform(post("/api/v1/hostel/blocks/" + UUID.randomUUID() + "/rooms").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"roomNumber\":\"X-1\",\"capacity\":2}"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void teacherCannotAddARoom() throws Exception {
-        mockMvc.perform(post("/api/v1/hostel/blocks/" + blockAId + "/rooms").cookie(login(SCHOOL_A, TEACHER_A))
+        mockMvc.perform(post("/api/v1/hostel/blocks/" + blockAId + "/rooms").cookie(login(TEACHER_A))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"roomNumber\":\"A-9\",\"capacity\":2}"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    void roomListShowsLiveOccupancyAndIsBlockScoped() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+    void roomListShowsLiveOccupancy() throws Exception {
+        Cookie adminA = login(ADMIN_A);
 
         mockMvc.perform(get("/api/v1/hostel/blocks/" + blockAId + "/rooms").cookie(adminA))
                 .andExpect(status().isOk())
@@ -273,9 +232,11 @@ class HostelIntegrationTest {
                 .andExpect(jsonPath("$[0].roomNumber").value("A-101"))
                 .andExpect(jsonPath("$[0].capacity").value(2))
                 .andExpect(jsonPath("$[0].occupied").value(2)); // Anaya + Charu
+    }
 
-        // Another tenant's block -> 404.
-        mockMvc.perform(get("/api/v1/hostel/blocks/" + blockBId + "/rooms").cookie(adminA))
+    @Test
+    void roomListForANonexistentBlockReturns404() throws Exception {
+        mockMvc.perform(get("/api/v1/hostel/blocks/" + UUID.randomUUID() + "/rooms").cookie(login(ADMIN_A)))
                 .andExpect(status().isNotFound());
     }
 
@@ -283,7 +244,7 @@ class HostelIntegrationTest {
 
     @Test
     void allocatingToAFullRoomReturns400ThenSucceedsOnceThereIsSpace() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
 
         // A-101 is full (capacity 2, Anaya + Charu).
         mockMvc.perform(patch("/api/v1/students/" + studentA2Id + "/hostel-room").cookie(adminA)
@@ -316,21 +277,19 @@ class HostelIntegrationTest {
     void onlySchoolAdminCanAllocateAStudentsRoom() throws Exception {
         String body = "{\"roomId\":null}";
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
-            mockMvc.perform(patch("/api/v1/students/" + studentAId + "/hostel-room").cookie(login(SCHOOL_A, email))
+            mockMvc.perform(patch("/api/v1/students/" + studentAId + "/hostel-room").cookie(login(email))
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isForbidden());
         }
     }
 
     @Test
-    void allocatingAcrossTenantsReturns404Consistently() throws Exception {
-        // Tenant A admin, tenant B room.
-        mockMvc.perform(patch("/api/v1/students/" + studentA2Id + "/hostel-room").cookie(login(SCHOOL_A, ADMIN_A))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"roomId\":\"" + roomB101Id + "\"}"))
+    void allocatingANonexistentRoomOrStudentReturns404Consistently() throws Exception {
+        mockMvc.perform(patch("/api/v1/students/" + studentA2Id + "/hostel-room").cookie(login(ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"roomId\":\"" + UUID.randomUUID() + "\"}"))
                 .andExpect(status().isNotFound());
 
-        // Tenant B admin, tenant A student.
-        mockMvc.perform(patch("/api/v1/students/" + studentAId + "/hostel-room").cookie(login(SCHOOL_B, ADMIN_B))
+        mockMvc.perform(patch("/api/v1/students/" + UUID.randomUUID() + "/hostel-room").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"roomId\":null}"))
                 .andExpect(status().isNotFound());
     }
@@ -338,32 +297,27 @@ class HostelIntegrationTest {
     // --- Room roster (staff) ------------------------------
 
     @Test
-    void roomRosterIsTenantScopedBlockScopedAndStaffOnly() throws Exception {
+    void roomRosterIsBlockScopedAndStaffOnly() throws Exception {
         mockMvc.perform(get("/api/v1/hostel/blocks/" + blockAId + "/rooms/" + roomA101Id + "/students")
-                        .cookie(login(SCHOOL_A, ADMIN_A)))
+                        .cookie(login(ADMIN_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[*].fullName", org.hamcrest.Matchers.containsInAnyOrder("Anaya", "Charu")));
 
         // Teacher may read it too.
         mockMvc.perform(get("/api/v1/hostel/blocks/" + blockAId + "/rooms/" + roomA101Id + "/students")
-                        .cookie(login(SCHOOL_A, TEACHER_A)))
+                        .cookie(login(TEACHER_A)))
                 .andExpect(status().isOk());
 
         // Right room id, wrong block id -> 404.
         mockMvc.perform(get("/api/v1/hostel/blocks/" + UUID.randomUUID() + "/rooms/" + roomA101Id + "/students")
-                        .cookie(login(SCHOOL_A, ADMIN_A)))
-                .andExpect(status().isNotFound());
-
-        // Tenant A cannot read a tenant-B room's roster.
-        mockMvc.perform(get("/api/v1/hostel/blocks/" + blockBId + "/rooms/" + roomB101Id + "/students")
-                        .cookie(login(SCHOOL_A, ADMIN_A)))
+                        .cookie(login(ADMIN_A)))
                 .andExpect(status().isNotFound());
 
         // Student / parent may not use the staff endpoint.
         for (String email : new String[] {STUDENT_A, PARENT_A}) {
             mockMvc.perform(get("/api/v1/hostel/blocks/" + blockAId + "/rooms/" + roomA101Id + "/students")
-                            .cookie(login(SCHOOL_A, email)))
+                            .cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }
@@ -372,47 +326,43 @@ class HostelIntegrationTest {
 
     @Test
     void studentSeesOnlyTheirOwnHostelAllocationWithRoommates() throws Exception {
-        mockMvc.perform(get("/api/v1/me/student/hostel").cookie(login(SCHOOL_A, STUDENT_A)))
+        mockMvc.perform(get("/api/v1/me/student/hostel").cookie(login(STUDENT_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.blockName").value("Block A"))
                 .andExpect(jsonPath("$.roomNumber").value("A-101"))
                 .andExpect(jsonPath("$.roommates").value(org.hamcrest.Matchers.contains("Charu")));
-
-        mockMvc.perform(get("/api/v1/me/student/hostel").cookie(login(SCHOOL_B, STUDENT_B)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.blockName").value("Block B"));
     }
 
     @Test
     void studentWithNoRoomGetsACleanNotFound() throws Exception {
-        mockMvc.perform(patch("/api/v1/students/" + studentAId + "/hostel-room").cookie(login(SCHOOL_A, ADMIN_A))
+        mockMvc.perform(patch("/api/v1/students/" + studentAId + "/hostel-room").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"roomId\":null}"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/v1/me/student/hostel").cookie(login(SCHOOL_A, STUDENT_A)))
+        mockMvc.perform(get("/api/v1/me/student/hostel").cookie(login(STUDENT_A)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void parentSeesTheirOwnChildsHostelButNotAnothersOrAnotherTenants() throws Exception {
-        mockMvc.perform(get("/api/v1/me/children/" + studentAId + "/hostel").cookie(login(SCHOOL_A, PARENT_A)))
+    void parentSeesTheirOwnChildsHostelButNotAnothers() throws Exception {
+        mockMvc.perform(get("/api/v1/me/children/" + studentAId + "/hostel").cookie(login(PARENT_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.roomNumber").value("A-101"));
 
         // Bhavya (studentA2Id) is PARENT_A2's child, not PARENT_A's -> 404.
-        mockMvc.perform(get("/api/v1/me/children/" + studentA2Id + "/hostel").cookie(login(SCHOOL_A, PARENT_A)))
+        mockMvc.perform(get("/api/v1/me/children/" + studentA2Id + "/hostel").cookie(login(PARENT_A)))
                 .andExpect(status().isNotFound());
 
-        // A tenant-A parent asking for a tenant-B student's id -> 404.
-        mockMvc.perform(get("/api/v1/me/children/" + studentBId + "/hostel").cookie(login(SCHOOL_A, PARENT_A)))
+        // A nonexistent child id -> 404.
+        mockMvc.perform(get("/api/v1/me/children/" + UUID.randomUUID() + "/hostel").cookie(login(PARENT_A)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void thePortalHostelEndpointsAreRoleGated() throws Exception {
-        mockMvc.perform(get("/api/v1/me/student/hostel").cookie(login(SCHOOL_A, PARENT_A)))
+        mockMvc.perform(get("/api/v1/me/student/hostel").cookie(login(PARENT_A)))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/v1/me/children/" + studentAId + "/hostel").cookie(login(SCHOOL_A, STUDENT_A)))
+        mockMvc.perform(get("/api/v1/me/children/" + studentAId + "/hostel").cookie(login(STUDENT_A)))
                 .andExpect(status().isForbidden());
     }
 }

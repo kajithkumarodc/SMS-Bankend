@@ -43,11 +43,11 @@ public class AttendanceService {
      * correcting a same-day mistake, not a duplicate error (plan section 2).
      *
      * @throws ApiException 400 if {@code date} is in the future or {@code status} is
-     *         not PRESENT / ABSENT / LATE; 404 if the student is not in the caller's
-     *         tenant (reported as missing, never forbidden -- no existence leak).
+     *         not PRESENT / ABSENT / LATE; 404 if the student does not exist
+     *         (reported as missing, never forbidden -- no existence leak).
      */
     @Transactional
-    public MarkResult mark(UUID tenantId, UUID markedBy, MarkAttendanceRequest request) {
+    public MarkResult mark(UUID markedBy, MarkAttendanceRequest request) {
         String status = AttendanceStatus.normalizeOrNull(request.status());
         if (status == null) {
             throw new ApiException("Status must be PRESENT, ABSENT or LATE", HttpStatus.BAD_REQUEST);
@@ -55,15 +55,14 @@ public class AttendanceService {
         if (request.date().isAfter(LocalDate.now())) {
             throw new ApiException("Attendance date cannot be in the future", HttpStatus.BAD_REQUEST);
         }
-        requireStudent(tenantId, request.studentId());
+        requireStudent(request.studentId());
 
         AttendanceRecord entry = attendanceRepository
-                .findByTenantIdAndStudentIdAndDate(tenantId, request.studentId(), request.date())
+                .findByStudentIdAndDate(request.studentId(), request.date())
                 .orElse(null);
         boolean created = entry == null;
         if (created) {
             entry = new AttendanceRecord();
-            entry.setTenantId(tenantId);
             entry.setStudentId(request.studentId());
             entry.setDate(request.date());
         }
@@ -80,36 +79,35 @@ public class AttendanceService {
     }
 
     @Transactional(readOnly = true)
-    public Page<AttendanceRecord> listByDate(UUID tenantId, LocalDate date, Pageable pageable) {
-        return attendanceRepository.findByTenantIdAndDate(tenantId, date, pageable);
+    public Page<AttendanceRecord> listByDate(LocalDate date, Pageable pageable) {
+        return attendanceRepository.findByDate(date, pageable);
     }
 
     /**
      * Attendance for one section on one date -- the marking roster's current state.
      * May be partial or empty if the section is not fully marked yet.
      *
-     * @throws ApiException 404 if the section is not in the caller's tenant
-     *         (another tenant's section must not be observable).
+     * @throws ApiException 404 if the section does not exist.
      */
     @Transactional(readOnly = true)
-    public List<AttendanceRecord> listForSectionOnDate(UUID tenantId, UUID sectionId, LocalDate date) {
-        if (!sectionRepository.existsByIdAndTenantId(sectionId, tenantId)) {
+    public List<AttendanceRecord> listForSectionOnDate(UUID sectionId, LocalDate date) {
+        if (!sectionRepository.existsById(sectionId)) {
             throw new ApiException("Section not found", HttpStatus.NOT_FOUND);
         }
-        return attendanceRepository.findForSectionOnDate(tenantId, sectionId, date);
+        return attendanceRepository.findForSectionOnDate(sectionId, date);
     }
 
     /**
-     * @throws ApiException 404 if the student is not in the caller's tenant.
+     * @throws ApiException 404 if the student does not exist.
      */
     @Transactional(readOnly = true)
-    public Page<AttendanceRecord> studentHistory(UUID tenantId, UUID studentId, Pageable pageable) {
-        requireStudent(tenantId, studentId);
-        return attendanceRepository.findByTenantIdAndStudentIdOrderByDateDesc(tenantId, studentId, pageable);
+    public Page<AttendanceRecord> studentHistory(UUID studentId, Pageable pageable) {
+        requireStudent(studentId);
+        return attendanceRepository.findByStudentIdOrderByDateDesc(studentId, pageable);
     }
 
-    private void requireStudent(UUID tenantId, UUID studentId) {
-        if (studentRepository.findByIdAndTenantId(studentId, tenantId).isEmpty()) {
+    private void requireStudent(UUID studentId) {
+        if (studentRepository.findById(studentId).isEmpty()) {
             throw new ApiException("Student not found", HttpStatus.NOT_FOUND);
         }
     }

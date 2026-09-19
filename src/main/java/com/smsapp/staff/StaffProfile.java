@@ -1,6 +1,6 @@
 package com.smsapp.staff;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -16,15 +16,14 @@ import java.util.UUID;
 
 /**
  * A staff member's HR profile -- department/designation/salary on top of their
- * plain {@code users} account. {@code (tenant_id, user_id)} is unique (V17):
- * one profile per user per tenant.
+ * plain {@code users} account. {@code user_id} is unique (V18): one profile per user.
  */
 @Entity
 @Table(name = "staff_profiles")
 @Getter
 @Setter
 @NoArgsConstructor
-public class StaffProfile extends TenantScopedEntity {
+public class StaffProfile extends UuidEntity {
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;

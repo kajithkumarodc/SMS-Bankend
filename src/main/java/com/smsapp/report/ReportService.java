@@ -19,9 +19,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * School-level reporting off the operational tables (plan section 2). Every query
- * is tenant-scoped in {@link ReportRepository}; these methods only reshape the
- * aggregate rows into the response DTOs.
+ * School-level reporting off the operational tables (plan section 2). These
+ * methods only reshape the aggregate rows from {@link ReportRepository} into
+ * the response DTOs.
  */
 @Service
 public class ReportService {
@@ -34,11 +34,11 @@ public class ReportService {
 
     /** Daily present/absent/late tallies + attendance % over an inclusive {@code [from, to]} range. */
     @Transactional(readOnly = true)
-    public List<AttendanceTrendPoint> attendanceTrend(UUID tenantId, LocalDate from, LocalDate to) {
+    public List<AttendanceTrendPoint> attendanceTrend(LocalDate from, LocalDate to) {
         // pivot the (date, status, count) rows into one entry per day; the query
         // orders by date so a LinkedHashMap keeps the days in order.
         Map<LocalDate, long[]> perDay = new LinkedHashMap<>();
-        for (DailyStatusCount row : reportRepository.attendanceCountsByDay(tenantId, from, to)) {
+        for (DailyStatusCount row : reportRepository.attendanceCountsByDay(from, to)) {
             long[] counts = perDay.computeIfAbsent(row.getDate(), d -> new long[3]);
             switch (row.getStatus()) {
                 case AttendanceStatus.PRESENT -> counts[0] += row.getCount();
@@ -64,8 +64,8 @@ public class ReportService {
 
     /** Average recorded mark per exam for a class -- highlights the exams/subjects a class is struggling with. */
     @Transactional(readOnly = true)
-    public List<ExamPerformancePoint> academicPerformance(UUID tenantId, UUID classId) {
-        return reportRepository.averageMarksByExamForClass(tenantId, classId).stream()
+    public List<ExamPerformancePoint> academicPerformance(UUID classId) {
+        return reportRepository.averageMarksByExamForClass(classId).stream()
                 .map(row -> new ExamPerformancePoint(
                         row.getExamId(),
                         row.getExamName(),
@@ -79,14 +79,14 @@ public class ReportService {
                 .toList();
     }
 
-    /** Total invoiced vs. collected for the tenant, plus the overdue-invoice defaulter list. */
+    /** Total invoiced vs. collected, plus the overdue-invoice defaulter list. */
     @Transactional(readOnly = true)
-    public FeeCollectionReport feeCollection(UUID tenantId) {
-        CollectionTotals totals = reportRepository.collectionTotals(tenantId);
+    public FeeCollectionReport feeCollection() {
+        CollectionTotals totals = reportRepository.collectionTotals();
         BigDecimal invoiced = zeroIfNull(totals == null ? null : totals.getInvoiced());
         BigDecimal collected = zeroIfNull(totals == null ? null : totals.getCollected());
 
-        List<OverdueInvoice> overdue = reportRepository.overdueInvoices(tenantId, LocalDate.now()).stream()
+        List<OverdueInvoice> overdue = reportRepository.overdueInvoices(LocalDate.now()).stream()
                 .map(row -> new OverdueInvoice(row.getInvoiceId(), row.getStudentId(),
                         row.getFeeStructureName(), row.getAmount(), row.getDueDate()))
                 .toList();

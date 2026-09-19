@@ -15,8 +15,6 @@ import org.springframework.data.web.PagedModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,9 +45,8 @@ public class LibraryController {
     /** Add a book to the catalog. SCHOOL_ADMIN only. */
     @PostMapping("/books")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    public ResponseEntity<BookResponse> addBook(@Valid @RequestBody CreateBookRequest request,
-                                                Authentication authentication) {
-        LibraryBook created = libraryService.addBook(tenantId(authentication), request);
+    public ResponseEntity<BookResponse> addBook(@Valid @RequestBody CreateBookRequest request) {
+        LibraryBook created = libraryService.addBook(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(BookResponse.from(created));
     }
 
@@ -57,60 +54,50 @@ public class LibraryController {
     @GetMapping("/books")
     PagedModel<BookResponse> listBooks(
             @RequestParam(required = false) String q,
-            @PageableDefault(size = 20, sort = "title", direction = Sort.Direction.ASC) Pageable pageable,
-            Authentication authentication) {
-        return new PagedModel<>(libraryService.listBooks(tenantId(authentication), q, pageable)
-                .map(BookResponse::from));
+            @PageableDefault(size = 20, sort = "title", direction = Sort.Direction.ASC) Pageable pageable) {
+        return new PagedModel<>(libraryService.listBooks(q, pageable).map(BookResponse::from));
     }
 
     /**
-     * Issue a book to a student. SCHOOL_ADMIN only. 404 if the book or student is
-     * not in the caller's tenant, 400 if no copies are available.
+     * Issue a book to a student. SCHOOL_ADMIN only. 404 if the book or student
+     * does not exist, 400 if no copies are available.
      */
     @PostMapping("/loans")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    public ResponseEntity<LoanResponse> issue(@Valid @RequestBody IssueLoanRequest request,
-                                              Authentication authentication) {
-        BookLoan loan = libraryService.issue(tenantId(authentication), request);
+    public ResponseEntity<LoanResponse> issue(@Valid @RequestBody IssueLoanRequest request) {
+        BookLoan loan = libraryService.issue(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(LoanResponse.from(loan));
     }
 
     /**
-     * Mark a loan returned. SCHOOL_ADMIN only. 404 if the loan is not in the
-     * caller's tenant, 409 if it has already been returned.
+     * Mark a loan returned. SCHOOL_ADMIN only. 404 if the loan does not exist,
+     * 409 if it has already been returned.
      */
     @PostMapping("/loans/{loanId}/return")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    public LoanResponse returnLoan(@PathVariable UUID loanId, Authentication authentication) {
-        return LoanResponse.from(libraryService.returnLoan(tenantId(authentication), loanId));
+    public LoanResponse returnLoan(@PathVariable UUID loanId) {
+        return LoanResponse.from(libraryService.returnLoan(loanId));
     }
 
     /**
      * A student's loan history, for staff. SCHOOL_ADMIN or TEACHER only -- a student
-     * or parent reads their own via {@code /api/v1/me/...}. 404 if the student is
-     * not in the caller's tenant.
+     * or parent reads their own via {@code /api/v1/me/...}. 404 if the student
+     * does not exist.
      */
     @GetMapping("/loans")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
-    List<LoanHistoryView> loanHistory(@RequestParam UUID studentId, Authentication authentication) {
-        return libraryService.loanHistoryForStudent(tenantId(authentication), studentId).stream()
-                .map(LoanHistoryView::from).toList();
+    List<LoanHistoryView> loanHistory(@RequestParam UUID studentId) {
+        return libraryService.loanHistoryForStudent(studentId).stream().map(LoanHistoryView::from).toList();
     }
 
     /**
-     * Every book currently on loan (not yet returned) across the tenant, soonest
-     * due first. SCHOOL_ADMIN or TEACHER only. Feeds the "Active loans" view where
-     * a book is returned from.
+     * Every book currently on loan (not yet returned), soonest due first.
+     * SCHOOL_ADMIN or TEACHER only. Feeds the "Active loans" view where a book
+     * is returned from.
      */
     @GetMapping("/loans/active")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
-    List<ActiveLoanView> activeLoans(Authentication authentication) {
-        return libraryService.activeLoans(tenantId(authentication)).stream()
-                .map(ActiveLoanView::from).toList();
-    }
-
-    private static UUID tenantId(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        return UUID.fromString(jwt.getClaimAsString("tenant_id"));
+    List<ActiveLoanView> activeLoans() {
+        return libraryService.activeLoans().stream().map(ActiveLoanView::from).toList();
     }
 }

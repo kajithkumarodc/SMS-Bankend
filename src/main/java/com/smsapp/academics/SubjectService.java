@@ -33,21 +33,20 @@ public class SubjectService {
     }
 
     /**
-     * @throws ApiException 404 if the school is not in the caller's tenant, 409 if a
-     *         subject with that name already exists for the school.
+     * @throws ApiException 404 if the school does not exist, 409 if a subject with
+     *         that name already exists for the school.
      */
     @Transactional
-    public Subject create(UUID tenantId, CreateSubjectRequest request) {
+    public Subject create(CreateSubjectRequest request) {
         String name = request.name().trim();
-        if (!schoolRepository.existsByIdAndTenantId(request.schoolId(), tenantId)) {
+        if (!schoolRepository.existsById(request.schoolId())) {
             throw new ApiException("School not found", HttpStatus.NOT_FOUND);
         }
-        if (subjectRepository.existsByTenantIdAndSchoolIdAndName(tenantId, request.schoolId(), name)) {
+        if (subjectRepository.existsBySchoolIdAndName(request.schoolId(), name)) {
             throw new ApiException("A subject named '" + name + "' already exists for this school",
                     HttpStatus.CONFLICT);
         }
         Subject subject = new Subject();
-        subject.setTenantId(tenantId);
         subject.setSchoolId(request.schoolId());
         subject.setName(name);
         Subject saved = subjectRepository.save(subject);
@@ -58,28 +57,27 @@ public class SubjectService {
     }
 
     @Transactional(readOnly = true)
-    public List<Subject> list(UUID tenantId) {
-        return subjectRepository.findByTenantIdOrderByName(tenantId);
+    public List<Subject> list() {
+        return subjectRepository.findAllByOrderByName();
     }
 
     /**
      * Assigns an existing subject to a class.
      *
-     * @throws ApiException 404 if the class or the subject is not in the caller's
-     *         tenant, 409 if the subject is already assigned to the class.
+     * @throws ApiException 404 if the class or the subject does not exist, 409 if
+     *         the subject is already assigned to the class.
      */
     @Transactional
-    public Subject assignToClass(UUID tenantId, UUID classId, UUID subjectId) {
-        if (classRepository.findByIdAndTenantId(classId, tenantId).isEmpty()) {
+    public Subject assignToClass(UUID classId, UUID subjectId) {
+        if (classRepository.findById(classId).isEmpty()) {
             throw new ApiException("Class not found", HttpStatus.NOT_FOUND);
         }
-        Subject subject = subjectRepository.findByIdAndTenantId(subjectId, tenantId)
+        Subject subject = subjectRepository.findById(subjectId)
                 .orElseThrow(() -> new ApiException("Subject not found", HttpStatus.NOT_FOUND));
-        if (classSubjectRepository.existsByTenantIdAndClassIdAndSubjectId(tenantId, classId, subjectId)) {
+        if (classSubjectRepository.existsByClassIdAndSubjectId(classId, subjectId)) {
             throw new ApiException("That subject is already assigned to this class", HttpStatus.CONFLICT);
         }
         ClassSubject link = new ClassSubject();
-        link.setTenantId(tenantId);
         link.setClassId(classId);
         link.setSubjectId(subjectId);
         ClassSubject saved = classSubjectRepository.save(link);
@@ -90,13 +88,13 @@ public class SubjectService {
     }
 
     /**
-     * @throws ApiException 404 if the class is not in the caller's tenant.
+     * @throws ApiException 404 if the class does not exist.
      */
     @Transactional(readOnly = true)
-    public List<Subject> listForClass(UUID tenantId, UUID classId) {
-        if (classRepository.findByIdAndTenantId(classId, tenantId).isEmpty()) {
+    public List<Subject> listForClass(UUID classId) {
+        if (classRepository.findById(classId).isEmpty()) {
             throw new ApiException("Class not found", HttpStatus.NOT_FOUND);
         }
-        return classSubjectRepository.findSubjectsForClass(tenantId, classId);
+        return classSubjectRepository.findSubjectsForClass(classId);
     }
 }

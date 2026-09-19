@@ -40,7 +40,6 @@ class StudentServiceTest {
     @Mock
     private AuditService auditService;
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID schoolId = UUID.randomUUID();
 
     private StudentService service() {
@@ -53,16 +52,15 @@ class StudentServiceTest {
     }
 
     @Test
-    void createsActiveStudentScopedToTenantWhenValid() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(true);
-        when(studentRepository.existsByTenantIdAndAdmissionNumber(tenantId, "ADM-1")).thenReturn(false);
+    void createsActiveStudentWhenValid() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+        when(studentRepository.existsByAdmissionNumber("ADM-1")).thenReturn(false);
         when(studentRepository.saveAndFlush(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service().create(tenantId, request("  Alice Doe  ", " ADM-1 "));
+        service().create(request("  Alice Doe  ", " ADM-1 "));
 
         ArgumentCaptor<Student> saved = ArgumentCaptor.forClass(Student.class);
         verify(studentRepository).saveAndFlush(saved.capture());
-        assertThat(saved.getValue().getTenantId()).isEqualTo(tenantId);
         assertThat(saved.getValue().getSchoolId()).isEqualTo(schoolId);
         assertThat(saved.getValue().getFullName()).isEqualTo("Alice Doe");
         assertThat(saved.getValue().getAdmissionNumber()).isEqualTo("ADM-1");
@@ -70,10 +68,10 @@ class StudentServiceTest {
     }
 
     @Test
-    void rejectsSchoolThatDoesNotBelongToTenantWith404() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(false);
+    void rejectsNonexistentSchoolWith404() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().create(tenantId, request("Alice", "ADM-1")))
+        assertThatThrownBy(() -> service().create(request("Alice", "ADM-1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -81,11 +79,11 @@ class StudentServiceTest {
     }
 
     @Test
-    void rejectsDuplicateAdmissionNumberInTenantWith409() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(true);
-        when(studentRepository.existsByTenantIdAndAdmissionNumber(tenantId, "ADM-1")).thenReturn(true);
+    void rejectsDuplicateAdmissionNumberWith409() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+        when(studentRepository.existsByAdmissionNumber("ADM-1")).thenReturn(true);
 
-        assertThatThrownBy(() -> service().create(tenantId, request("Alice", "ADM-1")))
+        assertThatThrownBy(() -> service().create(request("Alice", "ADM-1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
@@ -94,12 +92,12 @@ class StudentServiceTest {
 
     @Test
     void translatesConcurrentInsertRaceIntoA409NotARawDbError() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(true);
-        when(studentRepository.existsByTenantIdAndAdmissionNumber(tenantId, "ADM-1")).thenReturn(false);
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+        when(studentRepository.existsByAdmissionNumber("ADM-1")).thenReturn(false);
         when(studentRepository.saveAndFlush(any(Student.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-        assertThatThrownBy(() -> service().create(tenantId, request("Alice", "ADM-1")))
+        assertThatThrownBy(() -> service().create(request("Alice", "ADM-1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
     }
@@ -107,9 +105,9 @@ class StudentServiceTest {
     @Test
     void getReportsMissingStudentAs404NotForbidden() {
         UUID studentId = UUID.randomUUID();
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().get(tenantId, studentId))
+        assertThatThrownBy(() -> service().get(studentId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -117,7 +115,6 @@ class StudentServiceTest {
     private Student existing(UUID studentId) {
         Student student = new Student();
         student.setId(studentId);
-        student.setTenantId(tenantId);
         student.setSchoolId(schoolId);
         student.setFullName("Old Name");
         student.setAdmissionNumber("ADM-KEEP");
@@ -130,10 +127,10 @@ class StudentServiceTest {
     void updateChangesEditableFieldsButKeepsAdmissionNumber() {
         UUID studentId = UUID.randomUUID();
         Student student = existing(studentId);
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Student result = service().update(tenantId, studentId,
+        Student result = service().update(studentId,
                 new UpdateStudentRequest("  New Name  ", "  New Guardian  ", "  ", StudentStatus.INACTIVE));
 
         assertThat(result.getFullName()).isEqualTo("New Name");
@@ -146,9 +143,9 @@ class StudentServiceTest {
     @Test
     void updateReportsMissingStudentAs404() {
         UUID studentId = UUID.randomUUID();
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().update(tenantId, studentId,
+        assertThatThrownBy(() -> service().update(studentId,
                 new UpdateStudentRequest("Name", null, null, StudentStatus.ACTIVE)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
@@ -159,9 +156,9 @@ class StudentServiceTest {
     @Test
     void updateRejectsUnknownStatusWith400() {
         UUID studentId = UUID.randomUUID();
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(existing(studentId)));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(existing(studentId)));
 
-        assertThatThrownBy(() -> service().update(tenantId, studentId,
+        assertThatThrownBy(() -> service().update(studentId,
                 new UpdateStudentRequest("Name", null, null, "GRADUATED")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
@@ -173,10 +170,10 @@ class StudentServiceTest {
     void changeStatusDeactivatesWithoutDeleting() {
         UUID studentId = UUID.randomUUID();
         Student student = existing(studentId);
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Student result = service().changeStatus(tenantId, studentId, "inactive");
+        Student result = service().changeStatus(studentId, "inactive");
 
         assertThat(result.getStatus()).isEqualTo(StudentStatus.INACTIVE);
         verify(studentRepository, never()).delete(any());
@@ -185,35 +182,35 @@ class StudentServiceTest {
     @Test
     void changeStatusReportsMissingStudentAs404() {
         UUID studentId = UUID.randomUUID();
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().changeStatus(tenantId, studentId, StudentStatus.INACTIVE))
+        assertThatThrownBy(() -> service().changeStatus(studentId, StudentStatus.INACTIVE))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
-    void assignSectionSetsSectionIdWhenBothStudentAndSectionAreInTenant() {
+    void assignSectionSetsSectionIdWhenBothStudentAndSectionExist() {
         UUID studentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
         Student student = existing(studentId);
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
-        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(true);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(sectionRepository.existsById(sectionId)).thenReturn(true);
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Student result = service().assignSection(tenantId, studentId, sectionId);
+        Student result = service().assignSection(studentId, sectionId);
 
         assertThat(result.getSectionId()).isEqualTo(sectionId);
     }
 
     @Test
-    void assignSectionReportsAnotherTenantsSectionAs404() {
+    void assignSectionReportsANonexistentSectionAs404() {
         UUID studentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(existing(studentId)));
-        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(false);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(existing(studentId)));
+        when(sectionRepository.existsById(sectionId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().assignSection(tenantId, studentId, sectionId))
+        assertThatThrownBy(() -> service().assignSection(studentId, sectionId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -223,20 +220,19 @@ class StudentServiceTest {
     @Test
     void assignSectionReportsMissingStudentAs404() {
         UUID studentId = UUID.randomUUID();
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().assignSection(tenantId, studentId, UUID.randomUUID()))
+        assertThatThrownBy(() -> service().assignSection(studentId, UUID.randomUUID()))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
-    void listInSectionReportsAnotherTenantsSectionAs404() {
+    void listInSectionReportsANonexistentSectionAs404() {
         UUID sectionId = UUID.randomUUID();
-        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(false);
+        when(sectionRepository.existsById(sectionId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().listInSection(tenantId, sectionId,
-                org.springframework.data.domain.Pageable.unpaged()))
+        assertThatThrownBy(() -> service().listInSection(sectionId, org.springframework.data.domain.Pageable.unpaged()))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }

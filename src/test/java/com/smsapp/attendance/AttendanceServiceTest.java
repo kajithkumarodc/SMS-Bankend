@@ -40,7 +40,6 @@ class AttendanceServiceTest {
     @Mock
     private AuditService auditService;
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
     private final UUID teacherId = UUID.randomUUID();
 
@@ -49,8 +48,7 @@ class AttendanceServiceTest {
     }
 
     private void studentExists() {
-        lenient().when(studentRepository.findByIdAndTenantId(studentId, tenantId))
-                .thenReturn(Optional.of(new Student()));
+        lenient().when(studentRepository.findById(studentId)).thenReturn(Optional.of(new Student()));
     }
 
     private MarkAttendanceRequest request(LocalDate date, String status) {
@@ -61,14 +59,12 @@ class AttendanceServiceTest {
     void marksANewRecordWhenNoneExistsForThatStudentAndDate() {
         studentExists();
         LocalDate today = LocalDate.now();
-        when(attendanceRepository.findByTenantIdAndStudentIdAndDate(tenantId, studentId, today))
-                .thenReturn(Optional.empty());
+        when(attendanceRepository.findByStudentIdAndDate(studentId, today)).thenReturn(Optional.empty());
         when(attendanceRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MarkResult result = service().mark(tenantId, teacherId, request(today, "present"));
+        MarkResult result = service().mark(teacherId, request(today, "present"));
 
         assertThat(result.created()).isTrue();
-        assertThat(result.entry().getTenantId()).isEqualTo(tenantId);
         assertThat(result.entry().getStudentId()).isEqualTo(studentId);
         assertThat(result.entry().getDate()).isEqualTo(today);
         assertThat(result.entry().getStatus()).isEqualTo(AttendanceStatus.PRESENT);
@@ -81,16 +77,14 @@ class AttendanceServiceTest {
         LocalDate today = LocalDate.now();
         AttendanceRecord existing = new AttendanceRecord();
         existing.setId(UUID.randomUUID());
-        existing.setTenantId(tenantId);
         existing.setStudentId(studentId);
         existing.setDate(today);
         existing.setStatus(AttendanceStatus.ABSENT);
         existing.setMarkedBy(UUID.randomUUID());
-        when(attendanceRepository.findByTenantIdAndStudentIdAndDate(tenantId, studentId, today))
-                .thenReturn(Optional.of(existing));
+        when(attendanceRepository.findByStudentIdAndDate(studentId, today)).thenReturn(Optional.of(existing));
         when(attendanceRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MarkResult result = service().mark(tenantId, teacherId, request(today, "LATE"));
+        MarkResult result = service().mark(teacherId, request(today, "LATE"));
 
         assertThat(result.created()).isFalse();
         assertThat(result.entry().getId()).isEqualTo(existing.getId());
@@ -102,8 +96,7 @@ class AttendanceServiceTest {
     void rejectsAFutureDateWith400() {
         studentExists();
 
-        assertThatThrownBy(() -> service().mark(tenantId, teacherId,
-                request(LocalDate.now().plusDays(1), "PRESENT")))
+        assertThatThrownBy(() -> service().mark(teacherId, request(LocalDate.now().plusDays(1), "PRESENT")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 
@@ -112,8 +105,7 @@ class AttendanceServiceTest {
 
     @Test
     void rejectsAnUnknownStatusWith400() {
-        assertThatThrownBy(() -> service().mark(tenantId, teacherId,
-                request(LocalDate.now(), "HOLIDAY")))
+        assertThatThrownBy(() -> service().mark(teacherId, request(LocalDate.now(), "HOLIDAY")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 
@@ -121,10 +113,10 @@ class AttendanceServiceTest {
     }
 
     @Test
-    void reportsAStudentOutsideTheTenantAs404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+    void reportsANonexistentStudentAs404() {
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().mark(tenantId, teacherId, request(LocalDate.now(), "PRESENT")))
+        assertThatThrownBy(() -> service().mark(teacherId, request(LocalDate.now(), "PRESENT")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -133,35 +125,33 @@ class AttendanceServiceTest {
 
     @Test
     void studentHistoryReportsAnUnknownStudentAs404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().studentHistory(tenantId, studentId, org.springframework.data.domain.Pageable.unpaged()))
+        assertThatThrownBy(() -> service().studentHistory(studentId, org.springframework.data.domain.Pageable.unpaged()))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
-    void listForSectionOnDateReportsAnotherTenantsSectionAs404() {
+    void listForSectionOnDateReportsANonexistentSectionAs404() {
         UUID sectionId = UUID.randomUUID();
-        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(false);
+        when(sectionRepository.existsById(sectionId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().listForSectionOnDate(tenantId, sectionId, LocalDate.now()))
+        assertThatThrownBy(() -> service().listForSectionOnDate(sectionId, LocalDate.now()))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(attendanceRepository, never()).findForSectionOnDate(any(), any(), any());
+        verify(attendanceRepository, never()).findForSectionOnDate(any(), any());
     }
 
     @Test
-    void listForSectionOnDateReturnsTheSectionsRecordsWhenSectionIsInTenant() {
+    void listForSectionOnDateReturnsTheSectionsRecordsWhenSectionExists() {
         UUID sectionId = UUID.randomUUID();
         AttendanceRecord rec = new AttendanceRecord();
-        rec.setTenantId(tenantId);
         LocalDate today = LocalDate.now();
-        when(sectionRepository.existsByIdAndTenantId(sectionId, tenantId)).thenReturn(true);
-        when(attendanceRepository.findForSectionOnDate(tenantId, sectionId, today))
-                .thenReturn(java.util.List.of(rec));
+        when(sectionRepository.existsById(sectionId)).thenReturn(true);
+        when(attendanceRepository.findForSectionOnDate(sectionId, today)).thenReturn(java.util.List.of(rec));
 
-        assertThat(service().listForSectionOnDate(tenantId, sectionId, today)).containsExactly(rec);
+        assertThat(service().listForSectionOnDate(sectionId, today)).containsExactly(rec);
     }
 }

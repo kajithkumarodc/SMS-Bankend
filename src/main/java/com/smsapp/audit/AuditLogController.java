@@ -7,8 +7,6 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedModel;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,9 +19,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * "Who did what" for a school admin. SCHOOL_ADMIN only; tenant-scoped; paginated;
- * filterable by {@code entityType} and a {@code [from, to]} date range (both
- * inclusive of the whole day).
+ * "Who did what" for a school admin. SCHOOL_ADMIN only; paginated; filterable
+ * by {@code entityType} and a {@code [from, to]} date range (both inclusive
+ * of the whole day).
  */
 @RestController
 @RequestMapping("/api/v1/audit-log")
@@ -41,16 +39,12 @@ public class AuditLogController {
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
-            Authentication authentication) {
-
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        UUID tenantId = UUID.fromString(jwt.getClaimAsString("tenant_id"));
+            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
         OffsetDateTime fromTs = from == null ? null : from.atStartOfDay().atOffset(ZoneOffset.UTC);
         OffsetDateTime toTs = to == null ? null : to.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC);
 
-        return new PagedModel<>(auditLogService.search(tenantId, emptyToNull(entityType), fromTs, toTs, pageable)
+        return new PagedModel<>(auditLogService.search(emptyToNull(entityType), fromTs, toTs, pageable)
                 .map(AuditLogEntry::from));
     }
 

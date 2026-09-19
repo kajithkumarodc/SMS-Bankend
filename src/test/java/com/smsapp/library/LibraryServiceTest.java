@@ -47,7 +47,6 @@ class LibraryServiceTest {
         return new LibraryService(bookRepository, loanRepository, studentRepository, auditService);
     }
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID bookId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
     private final UUID loanId = UUID.randomUUID();
@@ -55,7 +54,6 @@ class LibraryServiceTest {
     private LibraryBook book(int total, int available) {
         LibraryBook b = new LibraryBook();
         b.setId(bookId);
-        b.setTenantId(tenantId);
         b.setTitle("Refactoring");
         b.setAuthor("Fowler");
         b.setTotalCopies(total);
@@ -66,7 +64,6 @@ class LibraryServiceTest {
     private BookLoan loan(LocalDate returnedDate) {
         BookLoan l = new BookLoan();
         l.setId(loanId);
-        l.setTenantId(tenantId);
         l.setBookId(bookId);
         l.setStudentId(studentId);
         l.setIssuedDate(LocalDate.now().minusDays(2));
@@ -85,10 +82,8 @@ class LibraryServiceTest {
             return b;
         });
 
-        LibraryBook created = service().addBook(tenantId,
-                new CreateBookRequest("  Refactoring  ", "  Fowler  ", "  978-0 ", 5));
+        LibraryBook created = service().addBook(new CreateBookRequest("  Refactoring  ", "  Fowler  ", "  978-0 ", 5));
 
-        assertThat(created.getTenantId()).isEqualTo(tenantId);
         assertThat(created.getTitle()).isEqualTo("Refactoring");
         assertThat(created.getAuthor()).isEqualTo("Fowler");
         assertThat(created.getIsbn()).isEqualTo("978-0");
@@ -101,7 +96,7 @@ class LibraryServiceTest {
     void addBookTreatsBlankIsbnAsNull() {
         when(bookRepository.save(any(LibraryBook.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        LibraryBook created = service().addBook(tenantId, new CreateBookRequest("T", "A", "   ", 1));
+        LibraryBook created = service().addBook(new CreateBookRequest("T", "A", "   ", 1));
 
         assertThat(created.getIsbn()).isNull();
     }
@@ -110,11 +105,11 @@ class LibraryServiceTest {
 
     @Test
     void issueDecrementsAvailableCopiesAndSetsA14DayDueDate() {
-        when(bookRepository.findByIdAndTenantId(bookId, tenantId)).thenReturn(Optional.of(book(3, 3)));
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(new Student()));
+        when(bookRepository.findById(bookId)).thenReturn(Optional.of(book(3, 3)));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(new Student()));
         when(loanRepository.save(any(BookLoan.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        BookLoan issued = service().issue(tenantId, new IssueLoanRequest(bookId, studentId));
+        BookLoan issued = service().issue(new IssueLoanRequest(bookId, studentId));
 
         ArgumentCaptor<LibraryBook> savedBook = ArgumentCaptor.forClass(LibraryBook.class);
         verify(bookRepository).save(savedBook.capture());
@@ -129,10 +124,10 @@ class LibraryServiceTest {
 
     @Test
     void issueWhenNoCopiesAvailableReturns400() {
-        when(bookRepository.findByIdAndTenantId(bookId, tenantId)).thenReturn(Optional.of(book(2, 0)));
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(new Student()));
+        when(bookRepository.findById(bookId)).thenReturn(Optional.of(book(2, 0)));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(new Student()));
 
-        assertThatThrownBy(() -> service().issue(tenantId, new IssueLoanRequest(bookId, studentId)))
+        assertThatThrownBy(() -> service().issue(new IssueLoanRequest(bookId, studentId)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 
@@ -140,10 +135,10 @@ class LibraryServiceTest {
     }
 
     @Test
-    void issueForBookNotInTenantReturns404() {
-        when(bookRepository.findByIdAndTenantId(bookId, tenantId)).thenReturn(Optional.empty());
+    void issueForNonexistentBookReturns404() {
+        when(bookRepository.findById(bookId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().issue(tenantId, new IssueLoanRequest(bookId, studentId)))
+        assertThatThrownBy(() -> service().issue(new IssueLoanRequest(bookId, studentId)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -151,11 +146,11 @@ class LibraryServiceTest {
     }
 
     @Test
-    void issueForStudentNotInTenantReturns404() {
-        when(bookRepository.findByIdAndTenantId(bookId, tenantId)).thenReturn(Optional.of(book(3, 3)));
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+    void issueForNonexistentStudentReturns404() {
+        when(bookRepository.findById(bookId)).thenReturn(Optional.of(book(3, 3)));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().issue(tenantId, new IssueLoanRequest(bookId, studentId)))
+        assertThatThrownBy(() -> service().issue(new IssueLoanRequest(bookId, studentId)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -167,10 +162,10 @@ class LibraryServiceTest {
 
     @Test
     void returnSetsReturnedDateAndPutsTheCopyBack() {
-        when(loanRepository.findByIdAndTenantId(loanId, tenantId)).thenReturn(Optional.of(loan(null)));
-        when(bookRepository.findByIdAndTenantId(bookId, tenantId)).thenReturn(Optional.of(book(3, 1)));
+        when(loanRepository.findById(loanId)).thenReturn(Optional.of(loan(null)));
+        when(bookRepository.findById(bookId)).thenReturn(Optional.of(book(3, 1)));
 
-        BookLoan returned = service().returnLoan(tenantId, loanId);
+        BookLoan returned = service().returnLoan(loanId);
 
         assertThat(returned.getReturnedDate()).isEqualTo(LocalDate.now());
 
@@ -182,10 +177,10 @@ class LibraryServiceTest {
 
     @Test
     void returnCapsAvailableCopiesAtTheTotal() {
-        when(loanRepository.findByIdAndTenantId(loanId, tenantId)).thenReturn(Optional.of(loan(null)));
-        when(bookRepository.findByIdAndTenantId(bookId, tenantId)).thenReturn(Optional.of(book(3, 3)));
+        when(loanRepository.findById(loanId)).thenReturn(Optional.of(loan(null)));
+        when(bookRepository.findById(bookId)).thenReturn(Optional.of(book(3, 3)));
 
-        service().returnLoan(tenantId, loanId);
+        service().returnLoan(loanId);
 
         ArgumentCaptor<LibraryBook> savedBook = ArgumentCaptor.forClass(LibraryBook.class);
         verify(bookRepository).save(savedBook.capture());
@@ -194,10 +189,9 @@ class LibraryServiceTest {
 
     @Test
     void returningAnAlreadyReturnedLoanReturns409() {
-        when(loanRepository.findByIdAndTenantId(loanId, tenantId))
-                .thenReturn(Optional.of(loan(LocalDate.now().minusDays(1))));
+        when(loanRepository.findById(loanId)).thenReturn(Optional.of(loan(LocalDate.now().minusDays(1))));
 
-        assertThatThrownBy(() -> service().returnLoan(tenantId, loanId))
+        assertThatThrownBy(() -> service().returnLoan(loanId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
@@ -206,10 +200,10 @@ class LibraryServiceTest {
     }
 
     @Test
-    void returnForLoanNotInTenantReturns404() {
-        when(loanRepository.findByIdAndTenantId(loanId, tenantId)).thenReturn(Optional.empty());
+    void returnForNonexistentLoanReturns404() {
+        when(loanRepository.findById(loanId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().returnLoan(tenantId, loanId))
+        assertThatThrownBy(() -> service().returnLoan(loanId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -217,22 +211,22 @@ class LibraryServiceTest {
     // --- loan history -----------------------------------------
 
     @Test
-    void staffLoanHistoryRejectsAStudentNotInTenantWith404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+    void staffLoanHistoryRejectsANonexistentStudentWith404() {
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().loanHistoryForStudent(tenantId, studentId))
+        assertThatThrownBy(() -> service().loanHistoryForStudent(studentId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(loanRepository, never()).findLoanHistory(any(), any());
+        verify(loanRepository, never()).findLoanHistory(any());
     }
 
     @Test
-    void activeLoansIsScopedToTheTenant() {
-        when(loanRepository.findActiveLoans(tenantId)).thenReturn(List.of());
+    void activeLoansDelegatesToTheRepository() {
+        when(loanRepository.findActiveLoans()).thenReturn(List.of());
 
-        service().activeLoans(tenantId);
+        service().activeLoans();
 
-        verify(loanRepository).findActiveLoans(tenantId);
+        verify(loanRepository).findActiveLoans();
     }
 }

@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/dashboard")
@@ -24,9 +23,6 @@ public class DashboardController {
         Jwt jwt = (Jwt) authentication.getPrincipal();
         List<String> roles = jwt.getClaimAsStringList("roles");
 
-        return dashboardService.summaryFor(
-                UUID.fromString(jwt.getClaimAsString("tenant_id")),
-                jwt.getSubject(),
-                roles == null ? List.of() : roles);
+        return dashboardService.summaryFor(jwt.getSubject(), roles == null ? List.of() : roles);
     }
 }

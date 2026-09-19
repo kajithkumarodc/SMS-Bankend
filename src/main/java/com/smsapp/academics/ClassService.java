@@ -34,20 +34,19 @@ public class ClassService {
     }
 
     /**
-     * @throws ApiException 404 if the school is not in the caller's tenant, 409 if a
-     *         class with that name already exists for the school.
+     * @throws ApiException 404 if the school does not exist, 409 if a class with
+     *         that name already exists for the school.
      */
     @Transactional
-    public SchoolClass createClass(UUID tenantId, CreateClassRequest request) {
+    public SchoolClass createClass(CreateClassRequest request) {
         String name = request.name().trim();
-        if (!schoolRepository.existsByIdAndTenantId(request.schoolId(), tenantId)) {
+        if (!schoolRepository.existsById(request.schoolId())) {
             throw new ApiException("School not found", HttpStatus.NOT_FOUND);
         }
-        if (classRepository.existsByTenantIdAndSchoolIdAndName(tenantId, request.schoolId(), name)) {
+        if (classRepository.existsBySchoolIdAndName(request.schoolId(), name)) {
             throw new ApiException("A class named '" + name + "' already exists for this school", HttpStatus.CONFLICT);
         }
         SchoolClass schoolClass = new SchoolClass();
-        schoolClass.setTenantId(tenantId);
         schoolClass.setSchoolId(request.schoolId());
         schoolClass.setName(name);
         SchoolClass saved = classRepository.save(schoolClass);
@@ -58,20 +57,19 @@ public class ClassService {
     }
 
     /**
-     * @throws ApiException 404 if the class is not in the caller's tenant, 409 if a
-     *         section with that name already exists under the class.
+     * @throws ApiException 404 if the class does not exist, 409 if a section with
+     *         that name already exists under the class.
      */
     @Transactional
-    public Section createSection(UUID tenantId, UUID classId, CreateSectionRequest request) {
+    public Section createSection(UUID classId, CreateSectionRequest request) {
         String name = request.name().trim();
-        if (classRepository.findByIdAndTenantId(classId, tenantId).isEmpty()) {
+        if (classRepository.findById(classId).isEmpty()) {
             throw new ApiException("Class not found", HttpStatus.NOT_FOUND);
         }
-        if (sectionRepository.existsByTenantIdAndClassIdAndName(tenantId, classId, name)) {
+        if (sectionRepository.existsByClassIdAndName(classId, name)) {
             throw new ApiException("A section named '" + name + "' already exists in this class", HttpStatus.CONFLICT);
         }
         Section section = new Section();
-        section.setTenantId(tenantId);
         section.setClassId(classId);
         section.setName(name);
         Section saved = sectionRepository.save(section);
@@ -81,14 +79,14 @@ public class ClassService {
         return saved;
     }
 
-    /** Lists the tenant's classes with their sections nested. */
+    /** Lists all classes with their sections nested. */
     @Transactional(readOnly = true)
-    public List<ClassResponse> listWithSections(UUID tenantId) {
-        Map<UUID, List<SectionResponse>> sectionsByClass = sectionRepository.findByTenantIdOrderByName(tenantId).stream()
+    public List<ClassResponse> listWithSections() {
+        Map<UUID, List<SectionResponse>> sectionsByClass = sectionRepository.findAllByOrderByName().stream()
                 .map(SectionResponse::from)
                 .collect(Collectors.groupingBy(SectionResponse::classId));
 
-        return classRepository.findByTenantIdOrderByName(tenantId).stream()
+        return classRepository.findAllByOrderByName().stream()
                 .map(c -> new ClassResponse(c.getId(), c.getSchoolId(), c.getName(),
                         sectionsByClass.getOrDefault(c.getId(), List.of())))
                 .toList();

@@ -10,9 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
-/** Read side of the audit log. Runs in a transaction so the RLS tenant var is set. */
+/** Read side of the audit log. */
 @Service
 public class AuditLogService {
 
@@ -23,16 +22,13 @@ public class AuditLogService {
     }
 
     /**
-     * Tenant-scoped search with optional {@code entityType} and half-open
-     * {@code [from, to)} time-range filters (null = unbounded). Ordering comes
-     * from the {@link Pageable}.
+     * Search with optional {@code entityType} and half-open {@code [from, to)}
+     * time-range filters (null = unbounded). Ordering comes from the {@link Pageable}.
      */
     @Transactional(readOnly = true)
-    public Page<AuditLog> search(UUID tenantId, String entityType, OffsetDateTime from, OffsetDateTime to,
-                                 Pageable pageable) {
+    public Page<AuditLog> search(String entityType, OffsetDateTime from, OffsetDateTime to, Pageable pageable) {
         Specification<AuditLog> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("tenantId"), tenantId));
             if (entityType != null) {
                 predicates.add(cb.equal(root.get("entityType"), entityType));
             }

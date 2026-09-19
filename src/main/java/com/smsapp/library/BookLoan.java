@@ -1,6 +1,6 @@
 package com.smsapp.library;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -19,7 +19,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class BookLoan extends TenantScopedEntity {
+public class BookLoan extends UuidEntity {
 
     @Column(name = "book_id", nullable = false, updatable = false)
     private UUID bookId;

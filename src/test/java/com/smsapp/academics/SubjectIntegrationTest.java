@@ -25,17 +25,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Subjects + class-subject assignment against a real PostgreSQL instance with RLS:
- * tenant isolation, SCHOOL_ADMIN-only writes, clean 409 on duplicate name /
- * assignment, and cross-tenant assignment fails with 404 (plan section 2 / 7c-d).
+ * Subjects + class-subject assignment against a real PostgreSQL instance:
+ * SCHOOL_ADMIN-only writes, clean 409 on duplicate name / assignment, and a
+ * nonexistent class/subject reference fails with 404 (plan section 2 / 7c-d).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class SubjectIntegrationTest {
 
-    private static final String SCHOOL_A = "subj-school-a";
-    private static final String SCHOOL_B = "subj-school-b";
     private static final String ADMIN_A = "admin@tenant-a.example";
     private static final String TEACHER_A = "teacher@tenant-a.example";
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -47,8 +45,6 @@ class SubjectIntegrationTest {
     private PasswordEncoder passwordEncoder;
 
     private UUID schoolA;
-    private UUID classB;
-    private UUID subjectB;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -58,12 +54,7 @@ class SubjectIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
         schoolA = UUID.randomUUID();
-        UUID schoolB = UUID.randomUUID();
-        classB = UUID.randomUUID();
-        subjectB = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
@@ -71,49 +62,29 @@ class SubjectIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students, "
                     + "attendance_records, class_subjects, subjects, sections, classes CASCADE");
 
-            seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolA);
-            seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolB);
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolA + "', 'Tenant A School')");
 
-            seedUser(st, tenantA, ADMIN_A, "SCHOOL_ADMIN");
-            seedUser(st, tenantA, TEACHER_A, "TEACHER");
-            seedUser(st, tenantB, "admin@tenant-b.example", "SCHOOL_ADMIN");
-
-            // Tenant B already owns a class + a subject -- tenant A must never see or use them.
-            st.execute("INSERT INTO classes (id, tenant_id, school_id, name) VALUES ('"
-                    + classB + "', '" + tenantB + "', '" + schoolB + "', 'Grade 1')");
-            st.execute("INSERT INTO subjects (id, tenant_id, school_id, name) VALUES ('"
-                    + subjectB + "', '" + tenantB + "', '" + schoolB + "', 'History')");
+            seedUser(st, ADMIN_A, "SCHOOL_ADMIN");
+            seedUser(st, TEACHER_A, "TEACHER");
         }
     }
 
-    private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
-            throws SQLException {
-        st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                + tenantId + "', '" + name + "', '" + identifier + "')");
-        st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                + schoolId + "', '" + tenantId + "', '" + name + " School')");
-    }
-
-    private void seedUser(Statement st, UUID tenantId, String email, String role) throws SQLException {
+    private void seedUser(Statement st, String email, String role) throws SQLException {
         UUID userId = UUID.randomUUID();
         UUID roleId = UUID.randomUUID();
-        st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                + userId + "', '" + tenantId + "', '" + email + "', '" + passwordEncoder.encode("secret") + "', '"
-                + email + "')");
-        st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                + roleId + "', '" + tenantId + "', '" + role + "')");
-        st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                + userId + "', '" + roleId + "', '" + tenantId + "')");
+        st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                + userId + "', '" + email + "', '" + passwordEncoder.encode("secret") + "', '" + email + "')");
+        st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', '" + role + "')");
+        st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
     }
 
-    private Cookie login(String schoolIdentifier, String email) throws Exception {
+    private Cookie login(String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
-                                + "\",\"password\":\"secret\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"secret\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
     }
@@ -142,14 +113,14 @@ class SubjectIntegrationTest {
 
     @Test
     void schoolAdminCanCreateASubjectButTeacherCannot() throws Exception {
-        mockMvc.perform(post("/api/v1/subjects").cookie(login(SCHOOL_A, ADMIN_A))
+        mockMvc.perform(post("/api/v1/subjects").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolId\":\"" + schoolA + "\",\"name\":\"Mathematics\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Mathematics"))
                 .andExpect(jsonPath("$.schoolId").value(schoolA.toString()));
 
-        mockMvc.perform(post("/api/v1/subjects").cookie(login(SCHOOL_A, TEACHER_A))
+        mockMvc.perform(post("/api/v1/subjects").cookie(login(TEACHER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"schoolId\":\"" + schoolA + "\",\"name\":\"Science\"}"))
                 .andExpect(status().isForbidden());
@@ -157,7 +128,7 @@ class SubjectIntegrationTest {
 
     @Test
     void duplicateSubjectNameReturns409() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        Cookie admin = login(ADMIN_A);
         createSubjectA(admin, "Mathematics");
 
         var result = mockMvc.perform(post("/api/v1/subjects").cookie(admin).contentType(MediaType.APPLICATION_JSON)
@@ -170,11 +141,10 @@ class SubjectIntegrationTest {
     }
 
     @Test
-    void listSubjectsIsTenantScoped() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+    void listSubjectsReturnsCreatedSubjects() throws Exception {
+        Cookie admin = login(ADMIN_A);
         createSubjectA(admin, "Mathematics");
 
-        // Tenant B has a "History" subject seeded -- it must not appear for tenant A.
         mockMvc.perform(get("/api/v1/subjects").cookie(admin))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
@@ -185,7 +155,7 @@ class SubjectIntegrationTest {
 
     @Test
     void schoolAdminCanAssignASubjectToAClassButTeacherCannot() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        Cookie admin = login(ADMIN_A);
         UUID classA = createClassA(admin, "Grade 5");
         UUID subjectA = createSubjectA(admin, "Mathematics");
 
@@ -195,14 +165,14 @@ class SubjectIntegrationTest {
                 .andExpect(jsonPath("$.id").value(subjectA.toString()))
                 .andExpect(jsonPath("$.name").value("Mathematics"));
 
-        mockMvc.perform(post("/api/v1/classes/" + classA + "/subjects").cookie(login(SCHOOL_A, TEACHER_A))
+        mockMvc.perform(post("/api/v1/classes/" + classA + "/subjects").cookie(login(TEACHER_A))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"subjectId\":\"" + subjectA + "\"}"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     void assigningTheSameSubjectTwiceReturns409() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        Cookie admin = login(ADMIN_A);
         UUID classA = createClassA(admin, "Grade 5");
         UUID subjectA = createSubjectA(admin, "Mathematics");
 
@@ -215,28 +185,28 @@ class SubjectIntegrationTest {
     }
 
     @Test
-    void cannotAssignAnotherTenantsSubjectToOwnClass() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+    void cannotAssignANonexistentSubjectToOwnClass() throws Exception {
+        Cookie admin = login(ADMIN_A);
         UUID classA = createClassA(admin, "Grade 5");
 
         mockMvc.perform(post("/api/v1/classes/" + classA + "/subjects").cookie(admin)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"subjectId\":\"" + subjectB + "\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"subjectId\":\"" + UUID.randomUUID() + "\"}"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void cannotAssignOwnSubjectToAnotherTenantsClass() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+    void cannotAssignOwnSubjectToANonexistentClass() throws Exception {
+        Cookie admin = login(ADMIN_A);
         UUID subjectA = createSubjectA(admin, "Mathematics");
 
-        mockMvc.perform(post("/api/v1/classes/" + classB + "/subjects").cookie(admin)
+        mockMvc.perform(post("/api/v1/classes/" + UUID.randomUUID() + "/subjects").cookie(admin)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"subjectId\":\"" + subjectA + "\"}"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void listClassSubjectsReturnsAssignedSubjectsTenantScoped() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+    void listClassSubjectsReturnsAssignedSubjects() throws Exception {
+        Cookie admin = login(ADMIN_A);
         UUID classA = createClassA(admin, "Grade 5");
         UUID math = createSubjectA(admin, "Mathematics");
         createSubjectA(admin, "Science"); // exists but not assigned
@@ -249,9 +219,11 @@ class SubjectIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Mathematics"));
+    }
 
-        // A tenant-A caller cannot read a tenant-B class's subjects.
-        mockMvc.perform(get("/api/v1/classes/" + classB + "/subjects").cookie(admin))
+    @Test
+    void listClassSubjectsForANonexistentClassReturns404() throws Exception {
+        mockMvc.perform(get("/api/v1/classes/" + UUID.randomUUID() + "/subjects").cookie(login(ADMIN_A)))
                 .andExpect(status().isNotFound());
     }
 }

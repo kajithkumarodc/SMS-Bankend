@@ -18,10 +18,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Transport routes, vehicles and student-route assignment (plan section 2). Every
- * read and write is explicitly scoped by {@code tenant_id} on top of the RLS
- * policy. A cross-tenant route / student reference is reported as 404, never 403,
- * so the API never leaks that the row exists.
+ * Transport routes, vehicles and student-route assignment (plan section 2). A
+ * nonexistent route / student reference is reported as 404, never 403, so the
+ * API never leaks that the row exists.
  */
 @Service
 public class TransportService {
@@ -47,9 +46,8 @@ public class TransportService {
     // --- Routes --------------------------------------------------
 
     @Transactional
-    public TransportRoute createRoute(UUID tenantId, CreateRouteRequest request) {
+    public TransportRoute createRoute(CreateRouteRequest request) {
         TransportRoute route = new TransportRoute();
-        route.setTenantId(tenantId);
         route.setName(request.name().trim());
         TransportRoute saved = routeRepository.save(route);
 
@@ -59,29 +57,28 @@ public class TransportService {
     }
 
     @Transactional(readOnly = true)
-    public List<TransportRoute> listRoutes(UUID tenantId) {
-        return routeRepository.findByTenantIdOrderByName(tenantId);
+    public List<TransportRoute> listRoutes() {
+        return routeRepository.findAllByOrderByName();
     }
 
     // --- Vehicles -----------------------------------------------
 
     /**
-     * @throws ApiException 404 if {@code routeId} is given but not in the caller's
-     *         tenant, 409 if the registration number is already used in the tenant.
+     * @throws ApiException 404 if {@code routeId} is given but does not exist,
+     *         409 if the registration number is already used.
      */
     @Transactional
-    public TransportVehicle addVehicle(UUID tenantId, CreateVehicleRequest request) {
+    public TransportVehicle addVehicle(CreateVehicleRequest request) {
         String registrationNumber = request.registrationNumber().trim();
 
-        if (request.routeId() != null && !routeRepository.existsByIdAndTenantId(request.routeId(), tenantId)) {
+        if (request.routeId() != null && !routeRepository.existsById(request.routeId())) {
             throw new ApiException(ROUTE_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
-        if (vehicleRepository.existsByTenantIdAndRegistrationNumber(tenantId, registrationNumber)) {
+        if (vehicleRepository.existsByRegistrationNumber(registrationNumber)) {
             throw registrationConflict(registrationNumber);
         }
 
         TransportVehicle vehicle = new TransportVehicle();
-        vehicle.setTenantId(tenantId);
         vehicle.setRouteId(request.routeId());
         vehicle.setRegistrationNumber(registrationNumber);
         vehicle.setDriverName(request.driverName().trim());
@@ -103,10 +100,10 @@ public class TransportService {
     }
 
     @Transactional(readOnly = true)
-    public List<TransportVehicle> listVehicles(UUID tenantId, UUID routeId) {
+    public List<TransportVehicle> listVehicles(UUID routeId) {
         return routeId == null
-                ? vehicleRepository.findByTenantIdOrderByRegistrationNumber(tenantId)
-                : vehicleRepository.findByTenantIdAndRouteIdOrderByRegistrationNumber(tenantId, routeId);
+                ? vehicleRepository.findAllByOrderByRegistrationNumber()
+                : vehicleRepository.findByRouteIdOrderByRegistrationNumber(routeId);
     }
 
     // --- Student <-> route -------------------------------------
@@ -114,14 +111,14 @@ public class TransportService {
     /**
      * Assigns (or, with a null {@code routeId}, unassigns) a student's transport route.
      *
-     * @throws ApiException 404 if the student is not in the caller's tenant, or if
-     *         {@code routeId} is given but not in the caller's tenant.
+     * @throws ApiException 404 if the student does not exist, or if {@code routeId}
+     *         is given but does not exist.
      */
     @Transactional
-    public Student assignStudentRoute(UUID tenantId, UUID studentId, UUID routeId) {
-        Student student = studentRepository.findByIdAndTenantId(studentId, tenantId)
+    public Student assignStudentRoute(UUID studentId, UUID routeId) {
+        Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new ApiException(STUDENT_NOT_FOUND, HttpStatus.NOT_FOUND));
-        if (routeId != null && !routeRepository.existsByIdAndTenantId(routeId, tenantId)) {
+        if (routeId != null && !routeRepository.existsById(routeId)) {
             throw new ApiException(ROUTE_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
 
@@ -138,14 +135,14 @@ public class TransportService {
     /**
      * The students assigned to a route, for staff.
      *
-     * @throws ApiException 404 if the route is not in the caller's tenant.
+     * @throws ApiException 404 if the route does not exist.
      */
     @Transactional(readOnly = true)
-    public List<Student> studentsOnRoute(UUID tenantId, UUID routeId) {
-        if (!routeRepository.existsByIdAndTenantId(routeId, tenantId)) {
+    public List<Student> studentsOnRoute(UUID routeId) {
+        if (!routeRepository.existsById(routeId)) {
             throw new ApiException(ROUTE_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
-        return studentRepository.findByTenantIdAndTransportRouteIdOrderByFullName(tenantId, routeId);
+        return studentRepository.findByTransportRouteIdOrderByFullName(routeId);
     }
 
     /**
@@ -156,14 +153,14 @@ public class TransportService {
      *         been removed) -- a clean "not assigned", not an error.
      */
     @Transactional(readOnly = true)
-    public TransportAssignment assignmentForRoute(UUID tenantId, UUID routeId) {
+    public TransportAssignment assignmentForRoute(UUID routeId) {
         if (routeId == null) {
             throw new ApiException("No transport route is assigned", HttpStatus.NOT_FOUND);
         }
-        TransportRoute route = routeRepository.findByIdAndTenantId(routeId, tenantId)
+        TransportRoute route = routeRepository.findById(routeId)
                 .orElseThrow(() -> new ApiException("No transport route is assigned", HttpStatus.NOT_FOUND));
         List<TransportAssignment.Vehicle> vehicles = vehicleRepository
-                .findByTenantIdAndRouteIdOrderByRegistrationNumber(tenantId, routeId)
+                .findByRouteIdOrderByRegistrationNumber(routeId)
                 .stream().map(TransportAssignment.Vehicle::from).toList();
         return new TransportAssignment(route.getId(), route.getName(), vehicles);
     }

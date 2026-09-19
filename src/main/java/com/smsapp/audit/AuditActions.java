@@ -9,7 +9,6 @@ public final class AuditActions {
     // actions
     public static final String LOGIN_SUCCESS = "LOGIN_SUCCESS";
     public static final String LOGIN_FAILED = "LOGIN_FAILED";
-    public static final String TENANT_REGISTERED = "TENANT_REGISTERED";
     public static final String STUDENT_CREATED = "STUDENT_CREATED";
     public static final String STUDENT_UPDATED = "STUDENT_UPDATED";
     public static final String STUDENT_STATUS_CHANGED = "STUDENT_STATUS_CHANGED";
@@ -47,7 +46,6 @@ public final class AuditActions {
     public static final String PAYROLL_RECORD_CREATED = "PAYROLL_RECORD_CREATED";
 
     // entity types
-    public static final String TENANT = "TENANT";
     public static final String USER = "USER";
     public static final String STUDENT = "STUDENT";
     public static final String CLASS = "CLASS";

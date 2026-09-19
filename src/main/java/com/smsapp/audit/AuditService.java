@@ -1,6 +1,5 @@
 package com.smsapp.audit;
 
-import com.smsapp.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -35,28 +34,23 @@ public class AuditService {
         this.auditLogRepository = auditLogRepository;
     }
 
-    /** Records an action by the current user in the current tenant. No-op if there is no tenant context. */
+    /** Records an action by the current user. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void log(String action, String entityType, UUID entityId, Map<String, Object> details) {
-        UUID tenantId = currentTenantId();
-        if (tenantId == null) {
-            return;
-        }
-        write(tenantId, currentActorId(), action, entityType, entityId, details);
+        write(currentActorId(), action, entityType, entityId, details);
     }
 
-    /** Records an action with an explicit tenant and actor -- for flows where the context is not yet established. */
+    /** Records an action with an explicit actor -- for flows where the security context is not yet established. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void logAs(UUID tenantId, UUID actorUserId, String action, String entityType, UUID entityId,
+    public void logAs(UUID actorUserId, String action, String entityType, UUID entityId,
                       Map<String, Object> details) {
-        write(tenantId, actorUserId, action, entityType, entityId, details);
+        write(actorUserId, action, entityType, entityId, details);
     }
 
-    private void write(UUID tenantId, UUID actorUserId, String action, String entityType, UUID entityId,
+    private void write(UUID actorUserId, String action, String entityType, UUID entityId,
                        Map<String, Object> details) {
         try {
             AuditLog entry = new AuditLog();
-            entry.setTenantId(tenantId);
             entry.setActorUserId(actorUserId);
             entry.setAction(action);
             entry.setEntityType(entityType);
@@ -66,11 +60,6 @@ public class AuditService {
         } catch (RuntimeException ex) {
             log.warn("Failed to write audit entry action={} entityType={} entityId={}", action, entityType, entityId, ex);
         }
-    }
-
-    private static UUID currentTenantId() {
-        String tenant = TenantContext.getCurrentTenant();
-        return tenant == null ? null : UUID.fromString(tenant);
     }
 
     private static UUID currentActorId() {

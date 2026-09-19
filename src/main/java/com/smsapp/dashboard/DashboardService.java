@@ -44,47 +44,41 @@ public class DashboardService {
         this.announcementRepository = announcementRepository;
     }
 
-    /**
-     * Builds the summary for the authenticated caller. Runs in a transaction so the
-     * tenant session variable is set (RLS), and additionally filters every query by
-     * {@code tenantId} -- defense in depth per plan section 1.
-     */
+    /** Builds the summary for the authenticated caller. */
     @Transactional(readOnly = true)
-    public DashboardSummary summaryFor(UUID tenantId, String userId, List<String> roles) {
-        String tenant = tenantId.toString();
+    public DashboardSummary summaryFor(String userId, List<String> roles) {
         // School-wide, seen the same by every role -- not ownership-scoped.
-        List<AnnouncementSummary> announcements = recentAnnouncements(tenantId);
+        List<AnnouncementSummary> announcements = recentAnnouncements();
 
         if (roles.contains(Roles.SCHOOL_ADMIN)) {
             DashboardSummary.Counts counts = new DashboardSummary.Counts(
-                    schoolRepository.countByTenantId(tenantId),
-                    userRepository.countByTenantId(tenantId));
-            return DashboardSummary.forSchoolAdmin(userId, tenant, roles, counts, announcements);
+                    schoolRepository.count(), userRepository.count());
+            return DashboardSummary.forSchoolAdmin(userId, roles, counts, announcements);
         }
 
         if (roles.contains(Roles.STUDENT)) {
             Student self = studentRepository
-                    .findByTenantIdAndStudentUserId(tenantId, UUID.fromString(userId))
+                    .findByStudentUserId(UUID.fromString(userId))
                     .orElse(null);
             if (self != null) {
-                return DashboardSummary.forStudent(userId, tenant, roles, toInfo(self),
-                        attendanceSummary(tenantId, self.getId()), announcements);
+                return DashboardSummary.forStudent(userId, roles, toInfo(self),
+                        attendanceSummary(self.getId()), announcements);
             }
-            return DashboardSummary.placeholder(userId, tenant, roles, STUDENT_NOT_LINKED_NOTE, announcements);
+            return DashboardSummary.placeholder(userId, roles, STUDENT_NOT_LINKED_NOTE, announcements);
         }
 
         if (roles.contains(Roles.PARENT)) {
             List<StudentInfo> children = studentRepository
-                    .findByTenantIdAndGuardianUserIdOrderByFullName(tenantId, UUID.fromString(userId))
+                    .findByGuardianUserIdOrderByFullName(UUID.fromString(userId))
                     .stream().map(DashboardService::toInfo).toList();
-            return DashboardSummary.forParent(userId, tenant, roles, children, announcements);
+            return DashboardSummary.forParent(userId, roles, children, announcements);
         }
 
-        return DashboardSummary.placeholder(userId, tenant, roles, PLACEHOLDER_NOTE, announcements);
+        return DashboardSummary.placeholder(userId, roles, PLACEHOLDER_NOTE, announcements);
     }
 
-    private List<AnnouncementSummary> recentAnnouncements(UUID tenantId) {
-        return announcementRepository.findTop3ByTenantIdOrderByCreatedAtDesc(tenantId).stream()
+    private List<AnnouncementSummary> recentAnnouncements() {
+        return announcementRepository.findTop3ByOrderByCreatedAtDesc().stream()
                 .map(DashboardService::toSummary)
                 .toList();
     }
@@ -97,11 +91,11 @@ public class DashboardService {
                 announcement.getCreatedAt().toString());
     }
 
-    private AttendanceSummary attendanceSummary(UUID tenantId, UUID studentId) {
+    private AttendanceSummary attendanceSummary(UUID studentId) {
         long present = 0;
         long absent = 0;
         long late = 0;
-        for (AttendanceRepository.StatusTally tally : attendanceRepository.tallyByStatus(tenantId, studentId)) {
+        for (AttendanceRepository.StatusTally tally : attendanceRepository.tallyByStatus(studentId)) {
             switch (tally.getStatus()) {
                 case AttendanceStatus.PRESENT -> present = tally.getTotal();
                 case AttendanceStatus.ABSENT -> absent = tally.getTotal();

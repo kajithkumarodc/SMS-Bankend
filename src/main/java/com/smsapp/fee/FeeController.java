@@ -38,68 +38,59 @@ public class FeeController {
         this.feeService = feeService;
     }
 
-    /** Create a fee structure. SCHOOL_ADMIN only; a TEACHER gets 403. 404 if the school is not in the tenant. */
+    /** Create a fee structure. SCHOOL_ADMIN only; a TEACHER gets 403. 404 if the school doesn't exist. */
     @PostMapping("/fee-structures")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public ResponseEntity<FeeStructureResponse> createFeeStructure(
-            @Valid @RequestBody CreateFeeStructureRequest request, Authentication authentication) {
-        FeeStructure created = feeService.createFeeStructure(tenantId(authentication), request);
+            @Valid @RequestBody CreateFeeStructureRequest request) {
+        FeeStructure created = feeService.createFeeStructure(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(FeeStructureResponse.from(created));
     }
 
-    /** All fee structures for the caller's tenant (most recent first). */
+    /** All fee structures (most recent first). */
     @GetMapping("/fee-structures")
-    List<FeeStructureResponse> listFeeStructures(Authentication authentication) {
-        return feeService.listFeeStructures(tenantId(authentication)).stream()
-                .map(FeeStructureResponse::from).toList();
+    List<FeeStructureResponse> listFeeStructures() {
+        return feeService.listFeeStructures().stream().map(FeeStructureResponse::from).toList();
     }
 
     /**
      * Generate a PENDING invoice for a student against a fee structure. SCHOOL_ADMIN
-     * only. 404 if the student or the fee structure is not in the caller's tenant.
+     * only. 404 if the student or the fee structure does not exist.
      */
     @PostMapping("/invoices")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    public ResponseEntity<InvoiceResponse> createInvoice(@Valid @RequestBody CreateInvoiceRequest request,
-                                                         Authentication authentication) {
-        Invoice created = feeService.createInvoice(tenantId(authentication), request);
+    public ResponseEntity<InvoiceResponse> createInvoice(@Valid @RequestBody CreateInvoiceRequest request) {
+        Invoice created = feeService.createInvoice(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(InvoiceResponse.from(created));
     }
 
     /**
      * Invoices for one student. SCHOOL_ADMIN or TEACHER only -- a parent uses the
      * ownership-scoped {@code /api/v1/me/children/{studentId}/invoices}. 404 if the
-     * student is not in the caller's tenant.
+     * student does not exist.
      */
     @GetMapping("/invoices")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
-    List<InvoiceResponse> listInvoices(@RequestParam UUID studentId, Authentication authentication) {
-        return feeService.listInvoicesForStudent(tenantId(authentication), studentId).stream()
-                .map(InvoiceResponse::from).toList();
+    List<InvoiceResponse> listInvoices(@RequestParam UUID studentId) {
+        return feeService.listInvoicesForStudent(studentId).stream().map(InvoiceResponse::from).toList();
     }
 
     /**
      * Create a Razorpay Order for an invoice and return only what the browser
      * Checkout widget needs (order id + public key id + amount). A SCHOOL_ADMIN may
-     * check out any invoice in the tenant; a PARENT may check out only their own
-     * child's invoice (enforced in the service -- 404 otherwise). 409 if it is
-     * already paid.
+     * check out any invoice; a PARENT may check out only their own child's invoice
+     * (enforced in the service -- 404 otherwise). 409 if it is already paid.
      */
     @PostMapping("/invoices/{invoiceId}/checkout")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_PARENT)
     public CheckoutResponse checkout(@PathVariable UUID invoiceId, Authentication authentication) {
-        return feeService.startCheckout(tenantId(authentication), invoiceId, parentScope(authentication));
-    }
-
-    private static UUID tenantId(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        return UUID.fromString(jwt.getClaimAsString("tenant_id"));
+        return feeService.startCheckout(invoiceId, parentScope(authentication));
     }
 
     /**
      * The caller's user id when they are acting as a PARENT (so the service can
      * restrict the invoice to their own children), or {@code null} when they hold
-     * SCHOOL_ADMIN and may act on any invoice in the tenant.
+     * SCHOOL_ADMIN and may act on any invoice.
      */
     static UUID parentScope(Authentication authentication) {
         boolean isAdmin = authentication.getAuthorities().stream()

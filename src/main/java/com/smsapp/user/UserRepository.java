@@ -8,11 +8,7 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
 
-    Optional<User> findByTenantIdAndEmail(UUID tenantId, String email);
+    Optional<User> findByEmail(String email);
 
-    long countByTenantId(UUID tenantId);
-
-    boolean existsByIdAndTenantId(UUID id, UUID tenantId);
-
-    List<User> findByTenantIdOrderByFullName(UUID tenantId);
+    List<User> findAllByOrderByFullName();
 }

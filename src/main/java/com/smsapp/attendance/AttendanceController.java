@@ -47,58 +47,45 @@ public class AttendanceController {
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     public ResponseEntity<AttendanceResponse> mark(@Valid @RequestBody MarkAttendanceRequest request,
                                                    Authentication authentication) {
-        MarkResult result = attendanceService.mark(tenantId(authentication), userId(authentication), request);
+        MarkResult result = attendanceService.mark(userId(authentication), request);
         AttendanceResponse body = AttendanceResponse.from(result.entry());
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(body);
     }
 
     /**
-     * Attendance records for {@code date} in the caller's tenant. With {@code sectionId}
-     * the result is scoped to that section (the marking roster's current state -- may be
-     * partial or empty); 404 if the section is not in the caller's tenant. Without it,
-     * the whole tenant's roster for the day, paginated.
+     * Attendance records for {@code date}. With {@code sectionId} the result is
+     * scoped to that section (the marking roster's current state -- may be
+     * partial or empty); 404 if the section does not exist. Without it, the
+     * whole roster for the day, paginated.
      */
     @GetMapping
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     PagedModel<AttendanceResponse> list(
             @RequestParam(required = false) UUID sectionId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @PageableDefault(size = 50) Pageable pageable,
-            Authentication authentication) {
-        UUID tenantId = tenantId(authentication);
+            @PageableDefault(size = 50) Pageable pageable) {
         if (sectionId != null) {
-            List<AttendanceResponse> records = attendanceService.listForSectionOnDate(tenantId, sectionId, date)
+            List<AttendanceResponse> records = attendanceService.listForSectionOnDate(sectionId, date)
                     .stream().map(AttendanceResponse::from).toList();
             return new PagedModel<>(new PageImpl<>(records));
         }
-        return new PagedModel<>(attendanceService.listByDate(tenantId, date, pageable)
-                .map(AttendanceResponse::from));
+        return new PagedModel<>(attendanceService.listByDate(date, pageable).map(AttendanceResponse::from));
     }
 
     /**
      * One student's attendance history (most recent first). SCHOOL_ADMIN or TEACHER
      * only -- a student or parent reads their own via {@code /api/v1/me/student/attendance}
-     * or {@code /api/v1/me/children/{studentId}/attendance}. 404 if the student is not
-     * in the caller's tenant.
+     * or {@code /api/v1/me/children/{studentId}/attendance}. 404 if the student does
+     * not exist.
      */
     @GetMapping("/student/{studentId}")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     PagedModel<AttendanceResponse> studentHistory(@PathVariable UUID studentId,
-                                                  @PageableDefault(size = 50) Pageable pageable,
-                                                  Authentication authentication) {
-        return new PagedModel<>(attendanceService.studentHistory(tenantId(authentication), studentId, pageable)
-                .map(AttendanceResponse::from));
-    }
-
-    private static UUID tenantId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getClaimAsString("tenant_id"));
+                                                  @PageableDefault(size = 50) Pageable pageable) {
+        return new PagedModel<>(attendanceService.studentHistory(studentId, pageable).map(AttendanceResponse::from));
     }
 
     private static UUID userId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getSubject());
-    }
-
-    private static Jwt jwt(Authentication authentication) {
-        return (Jwt) authentication.getPrincipal();
+        return UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
     }
 }

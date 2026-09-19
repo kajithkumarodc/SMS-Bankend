@@ -15,10 +15,9 @@ public class SchoolDirectoryService {
         this.schoolRepository = schoolRepository;
     }
 
-    /** Runs in a transaction so the RLS tenant session variable is set; also filters by tenant explicitly. */
     @Transactional(readOnly = true)
-    public List<SchoolSummary> listForTenant(UUID tenantId) {
-        return schoolRepository.findByTenantIdOrderByName(tenantId).stream()
+    public List<SchoolSummary> list() {
+        return schoolRepository.findAllByOrderByName().stream()
                 .map(school -> new SchoolSummary(school.getId(), school.getName()))
                 .toList();
     }

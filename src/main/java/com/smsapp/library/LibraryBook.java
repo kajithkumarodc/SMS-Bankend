@@ -1,6 +1,6 @@
 package com.smsapp.library;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -17,7 +17,7 @@ import java.time.OffsetDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-public class LibraryBook extends TenantScopedEntity {
+public class LibraryBook extends UuidEntity {
 
     @Column(nullable = false, length = 300)
     private String title;

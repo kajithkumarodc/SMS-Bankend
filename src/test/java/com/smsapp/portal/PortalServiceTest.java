@@ -59,7 +59,6 @@ class PortalServiceTest {
     @Mock
     private HostelService hostelService;
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID studentUserId = UUID.randomUUID();
     private final UUID guardianUserId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
@@ -72,7 +71,6 @@ class PortalServiceTest {
     private Student linkedStudent() {
         Student student = new Student();
         student.setId(studentId);
-        student.setTenantId(tenantId);
         student.setFullName("Asha");
         student.setStudentUserId(studentUserId);
         student.setGuardianUserId(guardianUserId);
@@ -81,32 +79,28 @@ class PortalServiceTest {
 
     @Test
     void ownStudentReturnsTheLinkedRecord() {
-        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
-                .thenReturn(Optional.of(linkedStudent()));
+        when(studentRepository.findByStudentUserId(studentUserId)).thenReturn(Optional.of(linkedStudent()));
 
-        assertThat(service().ownStudent(tenantId, studentUserId).getId()).isEqualTo(studentId);
+        assertThat(service().ownStudent(studentUserId).getId()).isEqualTo(studentId);
     }
 
     @Test
     void ownStudentIs404WhenNoRecordIsLinked() {
-        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
-                .thenReturn(Optional.empty());
+        when(studentRepository.findByStudentUserId(studentUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().ownStudent(tenantId, studentUserId))
+        assertThatThrownBy(() -> service().ownStudent(studentUserId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
     void ownAttendanceIsScopedToTheCallersOwnStudentId() {
-        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
-                .thenReturn(Optional.of(linkedStudent()));
-        when(attendanceService.studentHistory(eq(tenantId), eq(studentId), any(Pageable.class)))
-                .thenReturn(Page.empty());
+        when(studentRepository.findByStudentUserId(studentUserId)).thenReturn(Optional.of(linkedStudent()));
+        when(attendanceService.studentHistory(eq(studentId), any(Pageable.class))).thenReturn(Page.empty());
 
-        service().ownAttendance(tenantId, studentUserId, Pageable.unpaged());
+        service().ownAttendance(studentUserId, Pageable.unpaged());
 
-        verify(attendanceService).studentHistory(tenantId, studentId, Pageable.unpaged());
+        verify(attendanceService).studentHistory(studentId, Pageable.unpaged());
     }
 
     @Test
@@ -114,138 +108,129 @@ class PortalServiceTest {
         Student a = linkedStudent();
         Student b = new Student();
         b.setId(UUID.randomUUID());
-        when(studentRepository.findByTenantIdAndGuardianUserIdOrderByFullName(tenantId, guardianUserId))
-                .thenReturn(List.of(a, b));
+        when(studentRepository.findByGuardianUserIdOrderByFullName(guardianUserId)).thenReturn(List.of(a, b));
 
-        assertThat(service().children(tenantId, guardianUserId)).hasSize(2);
+        assertThat(service().children(guardianUserId)).hasSize(2);
     }
 
     @Test
     void childAttendanceIsAllowedForTheParentsOwnChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId))
                 .thenReturn(Optional.of(linkedStudent()));
-        when(attendanceService.studentHistory(eq(tenantId), eq(studentId), any(Pageable.class)))
+        when(attendanceService.studentHistory(eq(studentId), any(Pageable.class)))
                 .thenReturn(Page.<AttendanceRecord>empty());
 
-        service().childAttendance(tenantId, guardianUserId, studentId, Pageable.unpaged());
+        service().childAttendance(guardianUserId, studentId, Pageable.unpaged());
 
-        verify(attendanceService).studentHistory(tenantId, studentId, Pageable.unpaged());
+        verify(attendanceService).studentHistory(studentId, Pageable.unpaged());
     }
 
     @Test
     void childAttendanceIs404WhenTheStudentIsNotThisParentsChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.empty());
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().childAttendance(tenantId, guardianUserId, studentId, Pageable.unpaged()))
+        assertThatThrownBy(() -> service().childAttendance(guardianUserId, studentId, Pageable.unpaged()))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(attendanceService, never()).studentHistory(any(), any(), any());
+        verify(attendanceService, never()).studentHistory(any(), any());
     }
 
     @Test
     void ownResultsIsScopedToTheCallersOwnStudentId() {
-        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
-                .thenReturn(Optional.of(linkedStudent()));
-        when(examService.studentResults(tenantId, studentId)).thenReturn(List.of());
+        when(studentRepository.findByStudentUserId(studentUserId)).thenReturn(Optional.of(linkedStudent()));
+        when(examService.studentResults(studentId)).thenReturn(List.of());
 
-        service().ownResults(tenantId, studentUserId);
+        service().ownResults(studentUserId);
 
-        verify(examService).studentResults(tenantId, studentId);
+        verify(examService).studentResults(studentId);
     }
 
     @Test
     void ownResultsIs404WhenNoRecordIsLinked() {
-        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
-                .thenReturn(Optional.empty());
+        when(studentRepository.findByStudentUserId(studentUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().ownResults(tenantId, studentUserId))
+        assertThatThrownBy(() -> service().ownResults(studentUserId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(examService, never()).studentResults(any(), any());
+        verify(examService, never()).studentResults(any());
     }
 
     @Test
     void childResultsIsAllowedForTheParentsOwnChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId))
                 .thenReturn(Optional.of(linkedStudent()));
-        when(examService.studentResults(tenantId, studentId)).thenReturn(List.<StudentExamResult>of());
+        when(examService.studentResults(studentId)).thenReturn(List.<StudentExamResult>of());
 
-        service().childResults(tenantId, guardianUserId, studentId);
+        service().childResults(guardianUserId, studentId);
 
-        verify(examService).studentResults(tenantId, studentId);
+        verify(examService).studentResults(studentId);
     }
 
     @Test
     void childResultsIs404WhenTheStudentIsNotThisParentsChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.empty());
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().childResults(tenantId, guardianUserId, studentId))
+        assertThatThrownBy(() -> service().childResults(guardianUserId, studentId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(examService, never()).studentResults(any(), any());
+        verify(examService, never()).studentResults(any());
     }
 
     @Test
     void childInvoicesIsAllowedForTheParentsOwnChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId))
                 .thenReturn(Optional.of(linkedStudent()));
-        when(invoiceRepository.findByTenantIdAndStudentIdOrderByCreatedAtDesc(tenantId, studentId))
-                .thenReturn(List.<Invoice>of());
+        when(invoiceRepository.findByStudentIdOrderByCreatedAtDesc(studentId)).thenReturn(List.<Invoice>of());
 
-        service().childInvoices(tenantId, guardianUserId, studentId);
+        service().childInvoices(guardianUserId, studentId);
 
-        verify(invoiceRepository).findByTenantIdAndStudentIdOrderByCreatedAtDesc(tenantId, studentId);
+        verify(invoiceRepository).findByStudentIdOrderByCreatedAtDesc(studentId);
     }
 
     @Test
     void childInvoicesIs404WhenTheStudentIsNotThisParentsChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.empty());
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().childInvoices(tenantId, guardianUserId, studentId))
+        assertThatThrownBy(() -> service().childInvoices(guardianUserId, studentId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(invoiceRepository, never()).findByTenantIdAndStudentIdOrderByCreatedAtDesc(any(), any());
+        verify(invoiceRepository, never()).findByStudentIdOrderByCreatedAtDesc(any());
     }
 
     @Test
     void ownLibraryIsScopedToTheCallersOwnStudentId() {
-        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
-                .thenReturn(Optional.of(linkedStudent()));
-        when(bookLoanRepository.findLoanHistory(tenantId, studentId)).thenReturn(List.<LoanWithBook>of());
+        when(studentRepository.findByStudentUserId(studentUserId)).thenReturn(Optional.of(linkedStudent()));
+        when(bookLoanRepository.findLoanHistory(studentId)).thenReturn(List.<LoanWithBook>of());
 
-        service().ownLibrary(tenantId, studentUserId);
+        service().ownLibrary(studentUserId);
 
-        verify(bookLoanRepository).findLoanHistory(tenantId, studentId);
+        verify(bookLoanRepository).findLoanHistory(studentId);
     }
 
     @Test
     void childLibraryIsAllowedForTheParentsOwnChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId))
                 .thenReturn(Optional.of(linkedStudent()));
-        when(bookLoanRepository.findLoanHistory(tenantId, studentId)).thenReturn(List.<LoanWithBook>of());
+        when(bookLoanRepository.findLoanHistory(studentId)).thenReturn(List.<LoanWithBook>of());
 
-        service().childLibrary(tenantId, guardianUserId, studentId);
+        service().childLibrary(guardianUserId, studentId);
 
-        verify(bookLoanRepository).findLoanHistory(tenantId, studentId);
+        verify(bookLoanRepository).findLoanHistory(studentId);
     }
 
     @Test
     void childLibraryIs404WhenTheStudentIsNotThisParentsChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.empty());
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().childLibrary(tenantId, guardianUserId, studentId))
+        assertThatThrownBy(() -> service().childLibrary(guardianUserId, studentId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(bookLoanRepository, never()).findLoanHistory(any(), any());
+        verify(bookLoanRepository, never()).findLoanHistory(any());
     }
 
     @Test
@@ -253,13 +238,12 @@ class PortalServiceTest {
         UUID routeId = UUID.randomUUID();
         Student self = linkedStudent();
         self.setTransportRouteId(routeId);
-        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
-                .thenReturn(Optional.of(self));
+        when(studentRepository.findByStudentUserId(studentUserId)).thenReturn(Optional.of(self));
         TransportAssignment assignment = new TransportAssignment(routeId, "Route 1", List.of());
-        when(transportService.assignmentForRoute(tenantId, routeId)).thenReturn(assignment);
+        when(transportService.assignmentForRoute(routeId)).thenReturn(assignment);
 
-        assertThat(service().ownTransport(tenantId, studentUserId)).isSameAs(assignment);
-        verify(transportService).assignmentForRoute(tenantId, routeId);
+        assertThat(service().ownTransport(studentUserId)).isSameAs(assignment);
+        verify(transportService).assignmentForRoute(routeId);
     }
 
     @Test
@@ -267,26 +251,24 @@ class PortalServiceTest {
         UUID routeId = UUID.randomUUID();
         Student child = linkedStudent();
         child.setTransportRouteId(routeId);
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.of(child));
-        when(transportService.assignmentForRoute(tenantId, routeId))
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.of(child));
+        when(transportService.assignmentForRoute(routeId))
                 .thenReturn(new TransportAssignment(routeId, "Route 1", List.of()));
 
-        service().childTransport(tenantId, guardianUserId, studentId);
+        service().childTransport(guardianUserId, studentId);
 
-        verify(transportService).assignmentForRoute(tenantId, routeId);
+        verify(transportService).assignmentForRoute(routeId);
     }
 
     @Test
     void childTransportIs404WhenTheStudentIsNotThisParentsChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.empty());
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().childTransport(tenantId, guardianUserId, studentId))
+        assertThatThrownBy(() -> service().childTransport(guardianUserId, studentId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(transportService, never()).assignmentForRoute(any(), any());
+        verify(transportService, never()).assignmentForRoute(any());
     }
 
     @Test
@@ -294,14 +276,13 @@ class PortalServiceTest {
         UUID roomId = UUID.randomUUID();
         Student self = linkedStudent();
         self.setHostelRoomId(roomId);
-        when(studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId))
-                .thenReturn(Optional.of(self));
+        when(studentRepository.findByStudentUserId(studentUserId)).thenReturn(Optional.of(self));
         HostelAllocation allocation =
                 new HostelAllocation(UUID.randomUUID(), "Block A", roomId, "A-101", 3, List.of());
-        when(hostelService.allocationForRoom(tenantId, studentId, roomId)).thenReturn(allocation);
+        when(hostelService.allocationForRoom(studentId, roomId)).thenReturn(allocation);
 
-        assertThat(service().ownHostel(tenantId, studentUserId)).isSameAs(allocation);
-        verify(hostelService).allocationForRoom(tenantId, studentId, roomId);
+        assertThat(service().ownHostel(studentUserId)).isSameAs(allocation);
+        verify(hostelService).allocationForRoom(studentId, roomId);
     }
 
     @Test
@@ -309,25 +290,23 @@ class PortalServiceTest {
         UUID roomId = UUID.randomUUID();
         Student child = linkedStudent();
         child.setHostelRoomId(roomId);
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.of(child));
-        when(hostelService.allocationForRoom(tenantId, studentId, roomId))
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.of(child));
+        when(hostelService.allocationForRoom(studentId, roomId))
                 .thenReturn(new HostelAllocation(UUID.randomUUID(), "Block A", roomId, "A-101", 3, List.of()));
 
-        service().childHostel(tenantId, guardianUserId, studentId);
+        service().childHostel(guardianUserId, studentId);
 
-        verify(hostelService).allocationForRoom(tenantId, studentId, roomId);
+        verify(hostelService).allocationForRoom(studentId, roomId);
     }
 
     @Test
     void childHostelIs404WhenTheStudentIsNotThisParentsChild() {
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.empty());
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().childHostel(tenantId, guardianUserId, studentId))
+        assertThatThrownBy(() -> service().childHostel(guardianUserId, studentId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(hostelService, never()).allocationForRoom(any(), any(), any());
+        verify(hostelService, never()).allocationForRoom(any(), any());
     }
 }

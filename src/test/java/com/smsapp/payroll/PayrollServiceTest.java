@@ -43,12 +43,10 @@ class PayrollServiceTest {
         return new PayrollService(payrollRecordRepository, staffProfileRepository, auditService);
     }
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID staffUserId = UUID.randomUUID();
 
     private StaffProfile profile(BigDecimal salary) {
         StaffProfile profile = new StaffProfile();
-        profile.setTenantId(tenantId);
         profile.setUserId(staffUserId);
         profile.setSalaryAmount(salary);
         return profile;
@@ -56,17 +54,16 @@ class PayrollServiceTest {
 
     @Test
     void generateComputesNetPayFromTheProfilesSalaryAndAudits() {
-        when(staffProfileRepository.findByTenantIdAndUserId(tenantId, staffUserId))
+        when(staffProfileRepository.findByUserId(staffUserId))
                 .thenReturn(Optional.of(profile(new BigDecimal("50000.00"))));
-        when(payrollRecordRepository.existsByTenantIdAndStaffUserIdAndMonthAndYear(tenantId, staffUserId, 3, 2026))
-                .thenReturn(false);
+        when(payrollRecordRepository.existsByStaffUserIdAndMonthAndYear(staffUserId, 3, 2026)).thenReturn(false);
         when(payrollRecordRepository.saveAndFlush(any(PayrollRecord.class))).thenAnswer(inv -> {
             PayrollRecord r = inv.getArgument(0);
             r.setId(UUID.randomUUID());
             return r;
         });
 
-        PayrollRecord created = service().generate(tenantId,
+        PayrollRecord created = service().generate(
                 new GeneratePayrollRequest(staffUserId, 3, 2026, new BigDecimal("5000.00")));
 
         assertThat(created.getBaseSalary()).isEqualByComparingTo("50000.00");
@@ -79,22 +76,20 @@ class PayrollServiceTest {
 
     @Test
     void generateWithZeroDeductionsMakesNetPayEqualBaseSalary() {
-        when(staffProfileRepository.findByTenantIdAndUserId(tenantId, staffUserId))
+        when(staffProfileRepository.findByUserId(staffUserId))
                 .thenReturn(Optional.of(profile(new BigDecimal("30000.00"))));
         when(payrollRecordRepository.saveAndFlush(any(PayrollRecord.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PayrollRecord created = service().generate(tenantId,
-                new GeneratePayrollRequest(staffUserId, 1, 2026, BigDecimal.ZERO));
+        PayrollRecord created = service().generate(new GeneratePayrollRequest(staffUserId, 1, 2026, BigDecimal.ZERO));
 
         assertThat(created.getNetPay()).isEqualByComparingTo("30000.00");
     }
 
     @Test
     void generateForAStaffMemberWithNoProfileReturns404() {
-        when(staffProfileRepository.findByTenantIdAndUserId(tenantId, staffUserId)).thenReturn(Optional.empty());
+        when(staffProfileRepository.findByUserId(staffUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().generate(tenantId,
-                new GeneratePayrollRequest(staffUserId, 3, 2026, BigDecimal.ZERO)))
+        assertThatThrownBy(() -> service().generate(new GeneratePayrollRequest(staffUserId, 3, 2026, BigDecimal.ZERO)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -103,13 +98,11 @@ class PayrollServiceTest {
 
     @Test
     void generateADuplicateForTheSameStaffMonthAndYearReturns409() {
-        when(staffProfileRepository.findByTenantIdAndUserId(tenantId, staffUserId))
+        when(staffProfileRepository.findByUserId(staffUserId))
                 .thenReturn(Optional.of(profile(new BigDecimal("50000.00"))));
-        when(payrollRecordRepository.existsByTenantIdAndStaffUserIdAndMonthAndYear(tenantId, staffUserId, 3, 2026))
-                .thenReturn(true);
+        when(payrollRecordRepository.existsByStaffUserIdAndMonthAndYear(staffUserId, 3, 2026)).thenReturn(true);
 
-        assertThatThrownBy(() -> service().generate(tenantId,
-                new GeneratePayrollRequest(staffUserId, 3, 2026, BigDecimal.ZERO)))
+        assertThatThrownBy(() -> service().generate(new GeneratePayrollRequest(staffUserId, 3, 2026, BigDecimal.ZERO)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
@@ -118,26 +111,23 @@ class PayrollServiceTest {
 
     @Test
     void generateTranslatesAConcurrentInsertRaceIntoAClean409() {
-        when(staffProfileRepository.findByTenantIdAndUserId(tenantId, staffUserId))
+        when(staffProfileRepository.findByUserId(staffUserId))
                 .thenReturn(Optional.of(profile(new BigDecimal("50000.00"))));
-        when(payrollRecordRepository.existsByTenantIdAndStaffUserIdAndMonthAndYear(tenantId, staffUserId, 3, 2026))
-                .thenReturn(false);
+        when(payrollRecordRepository.existsByStaffUserIdAndMonthAndYear(staffUserId, 3, 2026)).thenReturn(false);
         when(payrollRecordRepository.saveAndFlush(any(PayrollRecord.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-        assertThatThrownBy(() -> service().generate(tenantId,
-                new GeneratePayrollRequest(staffUserId, 3, 2026, BigDecimal.ZERO)))
+        assertThatThrownBy(() -> service().generate(new GeneratePayrollRequest(staffUserId, 3, 2026, BigDecimal.ZERO)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
     }
 
     @Test
     void ownPayrollDelegatesToTheRepository() {
-        when(payrollRecordRepository.findByTenantIdAndStaffUserIdOrderByYearDescMonthDesc(tenantId, staffUserId))
-                .thenReturn(List.of());
+        when(payrollRecordRepository.findByStaffUserIdOrderByYearDescMonthDesc(staffUserId)).thenReturn(List.of());
 
-        service().ownPayroll(tenantId, staffUserId);
+        service().ownPayroll(staffUserId);
 
-        verify(payrollRecordRepository).findByTenantIdAndStaffUserIdOrderByYearDescMonthDesc(tenantId, staffUserId);
+        verify(payrollRecordRepository).findByStaffUserIdOrderByYearDescMonthDesc(staffUserId);
     }
 }

@@ -25,7 +25,7 @@ public class AuthController {
     @PostMapping("/login")
     ResponseEntity<AuthService.LoginResponse> login(@Valid @RequestBody LoginPayload payload) {
         AuthService.LoginResponse response = authService.login(
-                new AuthService.LoginRequest(payload.schoolIdentifier(), payload.email(), payload.password()));
+                new AuthService.LoginRequest(payload.email(), payload.password()));
 
         // The token is returned in the body (convenient for non-browser clients) and
         // also set as an httpOnly cookie so browser code never has to hold it.
@@ -41,7 +41,6 @@ public class AuthController {
                 .build();
     }
 
-    public record LoginPayload(@NotBlank String schoolIdentifier, @Email @NotBlank String email,
-                               @NotBlank String password) {
+    public record LoginPayload(@Email @NotBlank String email, @NotBlank String password) {
     }
 }

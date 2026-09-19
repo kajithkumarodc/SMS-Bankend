@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** {@code GET /api/v1/schools} returns only the caller's tenant's schools (RLS + explicit filter). */
+/** {@code GET /api/v1/schools} lists every school, ordered by name. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -43,29 +43,24 @@ class SchoolDirectoryIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
                 System.getProperty("DB_USERNAME", "postgres"),
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students CASCADE");
-            st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('" + tenantA + "', 'A', 'dir-a')");
-            st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('" + tenantB + "', 'B', 'dir-b')");
-            st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('" + UUID.randomUUID() + "', '" + tenantA + "', 'Main Campus')");
-            st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('" + UUID.randomUUID() + "', '" + tenantA + "', 'West Campus')");
-            st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('" + UUID.randomUUID() + "', '" + tenantB + "', 'Other Tenant Campus')");
-            st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('" + UUID.randomUUID()
-                    + "', '" + tenantA + "', 'admin@dir-a.example', '" + passwordEncoder.encode("secret") + "', 'Admin A')");
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students CASCADE");
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + UUID.randomUUID() + "', 'Main Campus')");
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + UUID.randomUUID() + "', 'West Campus')");
+            st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('" + UUID.randomUUID()
+                    + "', 'admin@dir-a.example', '" + passwordEncoder.encode("secret") + "', 'Admin A')");
         }
     }
 
     @Test
-    void listsOnlyCallersTenantSchoolsOrderedByName() throws Exception {
+    void listsSchoolsOrderedByName() throws Exception {
         Cookie session = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"dir-a\",\"email\":\"admin@dir-a.example\",\"password\":\"secret\"}"))
+                        .content("{\"email\":\"admin@dir-a.example\",\"password\":\"secret\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
 

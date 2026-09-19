@@ -28,28 +28,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Library catalog + issue/return against a real PostgreSQL instance with RLS
- * (plan section 2). Covers: tenant isolation on the catalog, the staff loan
- * history and the portal endpoints; SCHOOL_ADMIN-only add/issue/return
- * (TEACHER/STUDENT/PARENT may read the catalog but 403 on writes);
- * {@code available_copies} increment/decrement; 400 when issuing with no copies;
- * 409 when returning an already-returned loan; and ownership isolation on
- * {@code /me/student/library} and {@code /me/children/{id}/library}.
+ * Library catalog + issue/return against a real PostgreSQL instance (plan
+ * section 2). Covers: SCHOOL_ADMIN-only add/issue/return (TEACHER/STUDENT/
+ * PARENT may read the catalog but 403 on writes); {@code available_copies}
+ * increment/decrement; 400 when issuing with no copies; 409 when returning an
+ * already-returned loan; a nonexistent book/student/loan reference is 404; and
+ * ownership isolation on {@code /me/student/library} and
+ * {@code /me/children/{id}/library}.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class LibraryIntegrationTest {
 
-    private static final String SCHOOL_A = "lib-a";
-    private static final String SCHOOL_B = "lib-b";
     private static final String ADMIN_A = "admin@lib-a.example";
     private static final String TEACHER_A = "teacher@lib-a.example";
     private static final String STUDENT_A = "student@lib-a.example";   // linked to studentAId
     private static final String PARENT_A = "parent@lib-a.example";     // guardian of studentAId
     private static final String PARENT_A2 = "parent2@lib-a.example";   // guardian of studentA2Id
-    private static final String ADMIN_B = "admin@lib-b.example";
-    private static final String STUDENT_B = "student@lib-b.example";   // linked to studentBId
     private static final String PASSWORD = "secret";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -59,12 +55,10 @@ class LibraryIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    private UUID studentAId;    // "Anaya", tenant A, linked to STUDENT_A + guardian PARENT_A
-    private UUID studentA2Id;   // "Bhavya", tenant A, guardian PARENT_A2
-    private UUID studentBId;    // "Chandra", tenant B, linked to STUDENT_B
-    private UUID bookAId;       // "Refactoring" / "Fowler", tenant A, 1 copy, on loan to studentA
+    private UUID studentAId;    // "Anaya", linked to STUDENT_A + guardian PARENT_A
+    private UUID studentA2Id;   // "Bhavya", guardian PARENT_A2
+    private UUID bookAId;       // "Refactoring" / "Fowler", 1 copy, on loan to studentA
     private UUID loanAId;       // the open loan of bookA to studentA
-    private UUID bookBId;       // tenant B book
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -74,17 +68,11 @@ class LibraryIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
         UUID schoolAId = UUID.randomUUID();
-        UUID schoolBId = UUID.randomUUID();
         studentAId = UUID.randomUUID();
         studentA2Id = UUID.randomUUID();
-        studentBId = UUID.randomUUID();
         bookAId = UUID.randomUUID();
         loanAId = UUID.randomUUID();
-        bookBId = UUID.randomUUID();
-        UUID loanBId = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
@@ -92,98 +80,75 @@ class LibraryIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students, "
                     + "attendance_records, exam_marks, exams, class_subjects, subjects, sections, classes, "
                     + "invoices, fee_structures, announcements, book_loans, library_books, audit_log CASCADE");
 
-            seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolAId);
-            seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolBId);
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolAId + "', 'Tenant A School')");
 
-            // One role row per (tenant, role); a tenant may have many users in a role.
-            UUID adminRoleA = seedRole(st, tenantA, "SCHOOL_ADMIN");
-            UUID teacherRoleA = seedRole(st, tenantA, "TEACHER");
-            UUID studentRoleA = seedRole(st, tenantA, "STUDENT");
-            UUID parentRoleA = seedRole(st, tenantA, "PARENT");
-            UUID adminRoleB = seedRole(st, tenantB, "SCHOOL_ADMIN");
-            UUID studentRoleB = seedRole(st, tenantB, "STUDENT");
+            UUID adminRoleA = seedRole(st, "SCHOOL_ADMIN");
+            UUID teacherRoleA = seedRole(st, "TEACHER");
+            UUID studentRoleA = seedRole(st, "STUDENT");
+            UUID parentRoleA = seedRole(st, "PARENT");
 
-            seedUser(st, tenantA, ADMIN_A, adminRoleA);
-            seedUser(st, tenantA, TEACHER_A, teacherRoleA);
-            UUID studentAUser = seedUser(st, tenantA, STUDENT_A, studentRoleA);
-            UUID parentAUser = seedUser(st, tenantA, PARENT_A, parentRoleA);
-            UUID parentA2User = seedUser(st, tenantA, PARENT_A2, parentRoleA);
-            seedUser(st, tenantB, ADMIN_B, adminRoleB);
-            UUID studentBUser = seedUser(st, tenantB, STUDENT_B, studentRoleB);
+            seedUser(st, ADMIN_A, adminRoleA);
+            seedUser(st, TEACHER_A, teacherRoleA);
+            UUID studentAUser = seedUser(st, STUDENT_A, studentRoleA);
+            UUID parentAUser = seedUser(st, PARENT_A, parentRoleA);
+            UUID parentA2User = seedUser(st, PARENT_A2, parentRoleA);
 
-            seedStudent(st, tenantA, schoolAId, studentAId, "Anaya", studentAUser, parentAUser);
-            seedStudent(st, tenantA, schoolAId, studentA2Id, "Bhavya", null, parentA2User);
-            seedStudent(st, tenantB, schoolBId, studentBId, "Chandra", studentBUser, null);
+            seedStudent(st, schoolAId, studentAId, "Anaya", studentAUser, parentAUser);
+            seedStudent(st, schoolAId, studentA2Id, "Bhavya", null, parentA2User);
 
-            // Tenant A: a 1-copy book, already issued to studentA (so 0 available).
-            seedBook(st, tenantA, bookAId, "Refactoring", "Fowler", 1, 0);
-            seedLoan(st, tenantA, loanAId, bookAId, studentAId, LocalDate.now().minusDays(3), null);
-
-            // Tenant B: its own book + loan -- must never appear in tenant A's views.
-            seedBook(st, tenantB, bookBId, "The Pragmatic Programmer", "Hunt", 2, 1);
-            seedLoan(st, tenantB, loanBId, bookBId, studentBId, LocalDate.now().minusDays(1), null);
+            // A 1-copy book, already issued to studentA (so 0 available).
+            seedBook(st, bookAId, "Refactoring", "Fowler", 1, 0);
+            seedLoan(st, loanAId, bookAId, studentAId, LocalDate.now().minusDays(3), null);
         }
     }
 
     // --- seed helpers ------------------------------------------------
 
-    private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
-            throws SQLException {
-        st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                + tenantId + "', '" + name + "', '" + identifier + "')");
-        st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                + schoolId + "', '" + tenantId + "', '" + name + " School')");
-    }
-
-    private static UUID seedRole(Statement st, UUID tenantId, String role) throws SQLException {
+    private static UUID seedRole(Statement st, String role) throws SQLException {
         UUID roleId = UUID.randomUUID();
-        st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                + roleId + "', '" + tenantId + "', '" + role + "')");
+        st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', '" + role + "')");
         return roleId;
     }
 
-    private UUID seedUser(Statement st, UUID tenantId, String email, UUID roleId) throws SQLException {
+    private UUID seedUser(Statement st, String email, UUID roleId) throws SQLException {
         UUID userId = UUID.randomUUID();
-        st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                + userId + "', '" + tenantId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '"
-                + email + "')");
-        st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                + userId + "', '" + roleId + "', '" + tenantId + "')");
+        st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                + userId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '" + email + "')");
+        st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
         return userId;
     }
 
-    private static void seedStudent(Statement st, UUID tenantId, UUID schoolId, UUID studentId, String name,
+    private static void seedStudent(Statement st, UUID schoolId, UUID studentId, String name,
                                     UUID studentUserId, UUID guardianUserId) throws SQLException {
-        st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status, "
-                + "student_user_id, guardian_user_id) VALUES ('" + studentId + "', '" + tenantId + "', '" + schoolId
+        st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status, "
+                + "student_user_id, guardian_user_id) VALUES ('" + studentId + "', '" + schoolId
                 + "', '" + name + "', 'ADM-" + name + "', 'ACTIVE', "
                 + (studentUserId == null ? "NULL" : "'" + studentUserId + "'") + ", "
                 + (guardianUserId == null ? "NULL" : "'" + guardianUserId + "'") + ")");
     }
 
-    private static void seedBook(Statement st, UUID tenantId, UUID id, String title, String author,
-                                 int total, int available) throws SQLException {
-        st.execute("INSERT INTO library_books (id, tenant_id, title, author, total_copies, available_copies) VALUES ('"
-                + id + "', '" + tenantId + "', '" + title + "', '" + author + "', " + total + ", " + available + ")");
+    private static void seedBook(Statement st, UUID id, String title, String author, int total, int available)
+            throws SQLException {
+        st.execute("INSERT INTO library_books (id, title, author, total_copies, available_copies) VALUES ('"
+                + id + "', '" + title + "', '" + author + "', " + total + ", " + available + ")");
     }
 
-    private static void seedLoan(Statement st, UUID tenantId, UUID id, UUID bookId, UUID studentId,
-                                 LocalDate issued, LocalDate returned) throws SQLException {
-        st.execute("INSERT INTO book_loans (id, tenant_id, book_id, student_id, issued_date, due_date, returned_date) "
-                + "VALUES ('" + id + "', '" + tenantId + "', '" + bookId + "', '" + studentId + "', '" + issued
+    private static void seedLoan(Statement st, UUID id, UUID bookId, UUID studentId, LocalDate issued,
+                                 LocalDate returned) throws SQLException {
+        st.execute("INSERT INTO book_loans (id, book_id, student_id, issued_date, due_date, returned_date) "
+                + "VALUES ('" + id + "', '" + bookId + "', '" + studentId + "', '" + issued
                 + "', '" + issued.plusDays(14) + "', "
                 + (returned == null ? "NULL" : "'" + returned + "'") + ")");
     }
 
-    private Cookie login(String schoolIdentifier, String email) throws Exception {
+    private Cookie login(String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
-                                + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
     }
@@ -222,10 +187,10 @@ class LibraryIntegrationTest {
 
     @Test
     void schoolAdminAddsABookAndEveryRoleCanBrowseTheCatalog() throws Exception {
-        addBook(login(SCHOOL_A, ADMIN_A), "Clean Code", "Martin", 4);
+        addBook(login(ADMIN_A), "Clean Code", "Martin", 4);
 
         for (String email : new String[] {ADMIN_A, TEACHER_A, STUDENT_A, PARENT_A}) {
-            mockMvc.perform(get("/api/v1/library/books").cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/library/books").cookie(login(email)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content[?(@.title == 'Clean Code')].author",
                             org.hamcrest.Matchers.hasItem("Martin")));
@@ -236,32 +201,26 @@ class LibraryIntegrationTest {
     void teacherStudentAndParentCannotAddBooks() throws Exception {
         String body = "{\"title\":\"X\",\"author\":\"Y\",\"totalCopies\":1}";
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
-            mockMvc.perform(post("/api/v1/library/books").cookie(login(SCHOOL_A, email))
+            mockMvc.perform(post("/api/v1/library/books").cookie(login(email))
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isForbidden());
         }
     }
 
     @Test
-    void catalogSearchMatchesTitleOrAuthorAndIsTenantScoped() throws Exception {
+    void catalogSearchMatchesTitleOrAuthor() throws Exception {
         JsonNode aResults = JSON.readTree(mockMvc.perform(
-                        get("/api/v1/library/books").param("q", "fowler").cookie(login(SCHOOL_A, ADMIN_A)))
+                        get("/api/v1/library/books").param("q", "fowler").cookie(login(ADMIN_A)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(aResults.get("content")).hasSize(1);
         assertThat(aResults.get("content").get(0).get("title").asText()).isEqualTo("Refactoring");
-
-        // Tenant A cannot find tenant B's "The Pragmatic Programmer".
-        JsonNode crossTenant = JSON.readTree(mockMvc.perform(
-                        get("/api/v1/library/books").param("q", "pragmatic").cookie(login(SCHOOL_A, ADMIN_A)))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-        assertThat(crossTenant.get("content")).isEmpty();
     }
 
     // --- Issue / return: available_copies bookkeeping ----------
 
     @Test
     void issuingDecrementsAndReturningIncrementsAvailableCopies() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        Cookie admin = login(ADMIN_A);
         UUID bookId = addBook(admin, "Domain-Driven Design", "Evans", 2);
         assertThat(availableCopies(admin, bookId)).isEqualTo(2);
 
@@ -285,7 +244,7 @@ class LibraryIntegrationTest {
 
     @Test
     void issuedDueDateIs14DaysOut() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        Cookie admin = login(ADMIN_A);
         UUID bookId = addBook(admin, "Working Effectively with Legacy Code", "Feathers", 1);
 
         var result = mockMvc.perform(post("/api/v1/library/loans").cookie(admin)
@@ -299,7 +258,7 @@ class LibraryIntegrationTest {
 
     @Test
     void returningAnAlreadyReturnedLoanReturns409() throws Exception {
-        Cookie admin = login(SCHOOL_A, ADMIN_A);
+        Cookie admin = login(ADMIN_A);
 
         mockMvc.perform(post("/api/v1/library/loans/" + loanAId + "/return").cookie(admin))
                 .andExpect(status().isOk());
@@ -311,7 +270,7 @@ class LibraryIntegrationTest {
     void onlySchoolAdminCanIssueOrReturn() throws Exception {
         String issueBody = "{\"bookId\":\"" + bookAId + "\",\"studentId\":\"" + studentAId + "\"}";
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
-            Cookie session = login(SCHOOL_A, email);
+            Cookie session = login(email);
             mockMvc.perform(post("/api/v1/library/loans").cookie(session)
                             .contentType(MediaType.APPLICATION_JSON).content(issueBody))
                     .andExpect(status().isForbidden());
@@ -321,40 +280,34 @@ class LibraryIntegrationTest {
     }
 
     @Test
-    void cannotIssueAnotherTenantsBookOrStudentAndCannotReturnAnotherTenantsLoan() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+    void cannotIssueANonexistentBookOrStudentAndCannotReturnANonexistentLoan() throws Exception {
+        Cookie adminA = login(ADMIN_A);
         UUID bookId = addBook(adminA, "Test-Driven Development", "Beck", 3);
 
-        // Another tenant's book.
+        // Nonexistent book.
         mockMvc.perform(post("/api/v1/library/loans").cookie(adminA).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"bookId\":\"" + bookBId + "\",\"studentId\":\"" + studentAId + "\"}"))
+                        .content("{\"bookId\":\"" + UUID.randomUUID() + "\",\"studentId\":\"" + studentAId + "\"}"))
                 .andExpect(status().isNotFound());
-        // Another tenant's student.
+        // Nonexistent student.
         mockMvc.perform(post("/api/v1/library/loans").cookie(adminA).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"bookId\":\"" + bookId + "\",\"studentId\":\"" + studentBId + "\"}"))
+                        .content("{\"bookId\":\"" + bookId + "\",\"studentId\":\"" + UUID.randomUUID() + "\"}"))
                 .andExpect(status().isNotFound());
-        // Tenant B admin cannot return tenant A's loan.
-        mockMvc.perform(post("/api/v1/library/loans/" + loanAId + "/return").cookie(login(SCHOOL_B, ADMIN_B)))
+        // Nonexistent loan.
+        mockMvc.perform(post("/api/v1/library/loans/" + UUID.randomUUID() + "/return").cookie(adminA))
                 .andExpect(status().isNotFound());
     }
 
     // --- Active loans (staff) --------------------------------
 
     @Test
-    void activeLoansListsOpenLoansTenantScopedExcludesReturnedAndIsStaffOnly() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+    void activeLoansListsOpenLoansExcludesReturnedAndIsStaffOnly() throws Exception {
+        Cookie adminA = login(ADMIN_A);
 
         mockMvc.perform(get("/api/v1/library/loans/active").cookie(adminA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].bookTitle").value("Refactoring"))
                 .andExpect(jsonPath("$[0].studentName").value("Anaya"));
-
-        // Tenant B's open loan never shows for tenant A.
-        mockMvc.perform(get("/api/v1/library/loans/active").cookie(login(SCHOOL_B, ADMIN_B)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].bookTitle").value("The Pragmatic Programmer"));
 
         // A returned loan drops off the list.
         mockMvc.perform(post("/api/v1/library/loans/" + loanAId + "/return").cookie(adminA))
@@ -364,10 +317,10 @@ class LibraryIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(0));
 
         // Teacher may read it; student / parent may not.
-        mockMvc.perform(get("/api/v1/library/loans/active").cookie(login(SCHOOL_A, TEACHER_A)))
+        mockMvc.perform(get("/api/v1/library/loans/active").cookie(login(TEACHER_A)))
                 .andExpect(status().isOk());
         for (String email : new String[] {STUDENT_A, PARENT_A}) {
-            mockMvc.perform(get("/api/v1/library/loans/active").cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/library/loans/active").cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }
@@ -375,8 +328,8 @@ class LibraryIntegrationTest {
     // --- Staff loan history -----------------------------------
 
     @Test
-    void staffLoanHistoryIsTenantScopedAndStaffOnly() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+    void staffLoanHistoryIsStaffOnly() throws Exception {
+        Cookie adminA = login(ADMIN_A);
 
         mockMvc.perform(get("/api/v1/library/loans").param("studentId", studentAId.toString()).cookie(adminA))
                 .andExpect(status().isOk())
@@ -385,17 +338,17 @@ class LibraryIntegrationTest {
 
         // Teacher may also read it.
         mockMvc.perform(get("/api/v1/library/loans").param("studentId", studentAId.toString())
-                        .cookie(login(SCHOOL_A, TEACHER_A)))
+                        .cookie(login(TEACHER_A)))
                 .andExpect(status().isOk());
 
-        // Tenant A cannot read a tenant-B student's loan history.
-        mockMvc.perform(get("/api/v1/library/loans").param("studentId", studentBId.toString()).cookie(adminA))
+        // A nonexistent student id is 404.
+        mockMvc.perform(get("/api/v1/library/loans").param("studentId", UUID.randomUUID().toString()).cookie(adminA))
                 .andExpect(status().isNotFound());
 
         // STUDENT / PARENT may not use the staff endpoint at all.
         for (String email : new String[] {STUDENT_A, PARENT_A}) {
             mockMvc.perform(get("/api/v1/library/loans").param("studentId", studentAId.toString())
-                            .cookie(login(SCHOOL_A, email)))
+                            .cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }
@@ -404,41 +357,35 @@ class LibraryIntegrationTest {
 
     @Test
     void studentSeesOnlyTheirOwnLibraryHistory() throws Exception {
-        mockMvc.perform(get("/api/v1/me/student/library").cookie(login(SCHOOL_A, STUDENT_A)))
+        mockMvc.perform(get("/api/v1/me/student/library").cookie(login(STUDENT_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].bookTitle").value("Refactoring"));
-
-        // Tenant B student sees only their own (Tenant B) loan, never tenant A's.
-        mockMvc.perform(get("/api/v1/me/student/library").cookie(login(SCHOOL_B, STUDENT_B)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].bookTitle").value("The Pragmatic Programmer"));
     }
 
     @Test
-    void parentSeesTheirOwnChildsLibraryHistoryButNotAnothersOrAnotherTenants() throws Exception {
+    void parentSeesTheirOwnChildsLibraryHistoryButNotAnothers() throws Exception {
         // PARENT_A is Anaya's (studentAId) guardian.
-        mockMvc.perform(get("/api/v1/me/children/" + studentAId + "/library").cookie(login(SCHOOL_A, PARENT_A)))
+        mockMvc.perform(get("/api/v1/me/children/" + studentAId + "/library").cookie(login(PARENT_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].bookTitle").value("Refactoring"));
 
-        // Bhavya (studentA2Id) is PARENT_A2's child, not PARENT_A's -> 404, same tenant.
-        mockMvc.perform(get("/api/v1/me/children/" + studentA2Id + "/library").cookie(login(SCHOOL_A, PARENT_A)))
+        // Bhavya (studentA2Id) is PARENT_A2's child, not PARENT_A's -> 404.
+        mockMvc.perform(get("/api/v1/me/children/" + studentA2Id + "/library").cookie(login(PARENT_A)))
                 .andExpect(status().isNotFound());
 
-        // A tenant-A parent asking for a tenant-B student's id gets 404, never a leak.
-        mockMvc.perform(get("/api/v1/me/children/" + studentBId + "/library").cookie(login(SCHOOL_A, PARENT_A)))
+        // A nonexistent child id is 404, never a leak.
+        mockMvc.perform(get("/api/v1/me/children/" + UUID.randomUUID() + "/library").cookie(login(PARENT_A)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void thePortalLibraryEndpointsAreRoleGated() throws Exception {
         // A PARENT cannot use the STUDENT self endpoint, and vice versa.
-        mockMvc.perform(get("/api/v1/me/student/library").cookie(login(SCHOOL_A, PARENT_A)))
+        mockMvc.perform(get("/api/v1/me/student/library").cookie(login(PARENT_A)))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/v1/me/children/" + studentAId + "/library").cookie(login(SCHOOL_A, STUDENT_A)))
+        mockMvc.perform(get("/api/v1/me/children/" + studentAId + "/library").cookie(login(STUDENT_A)))
                 .andExpect(status().isForbidden());
     }
 }

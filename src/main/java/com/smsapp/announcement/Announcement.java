@@ -1,6 +1,6 @@
 package com.smsapp.announcement;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -18,7 +18,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Announcement extends TenantScopedEntity {
+public class Announcement extends UuidEntity {
 
     @Column(nullable = false, length = 200)
     private String title;

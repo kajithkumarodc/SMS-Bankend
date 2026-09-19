@@ -5,7 +5,6 @@ import com.smsapp.user.Roles;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,20 +46,15 @@ public class DevToolsController {
 
     /**
      * DEV-ONLY. Flip an invoice to {@code PAID} as if a verified Razorpay
-     * {@code order.paid} webhook had arrived. Tenant-scoped and idempotent. A
-     * SCHOOL_ADMIN may do this for any invoice in the tenant; a PARENT only for
-     * their own child's invoice (so the parent-facing "Pay Now" demo flow can
-     * stand in for the webhook locally). 404 otherwise.
+     * {@code order.paid} webhook had arrived. Idempotent. A SCHOOL_ADMIN may do
+     * this for any invoice; a PARENT only for their own child's invoice (so the
+     * parent-facing "Pay Now" demo flow can stand in for the webhook locally).
+     * 404 otherwise.
      */
     @PostMapping("/invoices/{invoiceId}/simulate-payment-success")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_PARENT)
     public InvoiceResponse simulatePaymentSuccess(@PathVariable UUID invoiceId, Authentication authentication) {
-        return InvoiceResponse.from(feeService.simulatePaymentSuccess(
-                tenantId(authentication), invoiceId, FeeController.parentScope(authentication)));
-    }
-
-    private static UUID tenantId(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        return UUID.fromString(jwt.getClaimAsString("tenant_id"));
+        return InvoiceResponse.from(
+                feeService.simulatePaymentSuccess(invoiceId, FeeController.parentScope(authentication)));
     }
 }

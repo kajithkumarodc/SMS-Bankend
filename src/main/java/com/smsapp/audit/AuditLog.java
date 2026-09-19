@@ -1,6 +1,6 @@
 package com.smsapp.audit;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -24,7 +24,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class AuditLog extends TenantScopedEntity {
+public class AuditLog extends UuidEntity {
 
     /** The acting user, or null for system / unattributable actions. */
     @Column(name = "actor_user_id", updatable = false)

@@ -1,6 +1,6 @@
 package com.smsapp.payroll;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -17,14 +17,14 @@ import java.util.UUID;
  * One staff member's payroll record for one month/year. {@code netPay} is always
  * {@code baseSalary - deductions}, computed by {@link PayrollService} (also
  * enforced by a DB CHECK constraint in migration V17, defense in depth).
- * {@code (tenant_id, staff_user_id, month, year)} is unique.
+ * {@code (staff_user_id, month, year)} is unique (V18).
  */
 @Entity
 @Table(name = "payroll_records")
 @Getter
 @Setter
 @NoArgsConstructor
-public class PayrollRecord extends TenantScopedEntity {
+public class PayrollRecord extends UuidEntity {
 
     @Column(name = "staff_user_id", nullable = false)
     private UUID staffUserId;

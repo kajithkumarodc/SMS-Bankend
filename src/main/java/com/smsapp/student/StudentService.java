@@ -35,26 +35,21 @@ public class StudentService {
     }
 
     /**
-     * Creates a student for {@code tenantId}. Runs in a transaction so the RLS
-     * session variable is set; every lookup is also explicitly tenant-filtered.
-     *
-     * @throws ApiException 404 if the school does not belong to the caller's tenant
-     *                      (a school from another tenant must not be observable),
-     *                      409 if {@code admissionNumber} is already taken in the tenant.
+     * @throws ApiException 404 if the school does not exist, 409 if
+     *                      {@code admissionNumber} is already taken.
      */
     @Transactional
-    public Student create(UUID tenantId, CreateStudentRequest request) {
+    public Student create(CreateStudentRequest request) {
         String admissionNumber = request.admissionNumber().trim();
 
-        if (!schoolRepository.existsByIdAndTenantId(request.schoolId(), tenantId)) {
+        if (!schoolRepository.existsById(request.schoolId())) {
             throw new ApiException("School not found", HttpStatus.NOT_FOUND);
         }
-        if (studentRepository.existsByTenantIdAndAdmissionNumber(tenantId, admissionNumber)) {
+        if (studentRepository.existsByAdmissionNumber(admissionNumber)) {
             throw admissionConflict(admissionNumber);
         }
 
         Student student = new Student();
-        student.setTenantId(tenantId);
         student.setSchoolId(request.schoolId());
         student.setFullName(request.fullName().trim());
         student.setAdmissionNumber(admissionNumber);
@@ -77,41 +72,38 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Student> list(UUID tenantId, Pageable pageable) {
-        return studentRepository.findByTenantId(tenantId, pageable);
+    public Page<Student> list(Pageable pageable) {
+        return studentRepository.findAll(pageable);
     }
 
-    /** Lists students in one section, still tenant-scoped underneath. Used as an optional filter on the list. */
+    /** Lists students in one section. Used as an optional filter on the list. */
     @Transactional(readOnly = true)
-    public Page<Student> listBySection(UUID tenantId, UUID sectionId, Pageable pageable) {
-        return studentRepository.findByTenantIdAndSectionId(tenantId, sectionId, pageable);
+    public Page<Student> listBySection(UUID sectionId, Pageable pageable) {
+        return studentRepository.findBySectionId(sectionId, pageable);
     }
 
     /**
      * Lists students in one section for the attendance-marking roster.
      *
-     * @throws ApiException 404 if the section is not in the caller's tenant
-     *         (another tenant's section must not be observable).
+     * @throws ApiException 404 if the section does not exist.
      */
     @Transactional(readOnly = true)
-    public Page<Student> listInSection(UUID tenantId, UUID sectionId, Pageable pageable) {
-        if (!sectionRepository.existsByIdAndTenantId(sectionId, tenantId)) {
+    public Page<Student> listInSection(UUID sectionId, Pageable pageable) {
+        if (!sectionRepository.existsById(sectionId)) {
             throw new ApiException("Section not found", HttpStatus.NOT_FOUND);
         }
-        return studentRepository.findByTenantIdAndSectionId(tenantId, sectionId, pageable);
+        return studentRepository.findBySectionId(sectionId, pageable);
     }
 
     /**
      * Assigns (or reassigns) a student to a section. SCHOOL_ADMIN only.
      *
-     * @throws ApiException 404 if the student is not in the caller's tenant, or if the
-     *         section is not in the caller's tenant (another tenant's section must not
-     *         be observable -- reported as missing, never forbidden).
+     * @throws ApiException 404 if the student or the section does not exist.
      */
     @Transactional
-    public Student assignSection(UUID tenantId, UUID studentId, UUID sectionId) {
-        Student student = requireStudent(tenantId, studentId);
-        if (!sectionRepository.existsByIdAndTenantId(sectionId, tenantId)) {
+    public Student assignSection(UUID studentId, UUID sectionId) {
+        Student student = requireStudent(studentId);
+        if (!sectionRepository.existsById(sectionId)) {
             throw new ApiException("Section not found", HttpStatus.NOT_FOUND);
         }
         UUID previousSectionId = student.getSectionId();
@@ -125,13 +117,13 @@ public class StudentService {
     }
 
     /**
-     * @throws ApiException 404 if no such student in the caller's tenant. A student
-     *         belonging to another tenant is reported as missing, never as forbidden,
-     *         so the API does not leak that the record exists (plan section 2 / 7d).
+     * @throws ApiException 404 if no such student. A nonexistent id is reported as
+     *         missing, never as forbidden, so the API does not leak whether the
+     *         record exists (plan section 2 / 7d).
      */
     @Transactional(readOnly = true)
-    public Student get(UUID tenantId, UUID id) {
-        return studentRepository.findByIdAndTenantId(id, tenantId)
+    public Student get(UUID id) {
+        return studentRepository.findById(id)
                 .orElseThrow(() -> new ApiException("Student not found", HttpStatus.NOT_FOUND));
     }
 
@@ -139,18 +131,17 @@ public class StudentService {
      * Updates a student's editable fields for a SCHOOL_ADMIN.
      *
      * <p>{@code admissionNumber} is intentionally NOT editable here: it is the
-     * tenant-unique business key (UNIQUE(tenant_id, admission_number) in V5), so
-     * allowing a change would re-open the duplicate-check / 409 path and risk
-     * rewriting a student's identity. Admission-number corrections, if ever
-     * needed, should be a separate, deliberate operation.
+     * unique business key (UNIQUE(admission_number) since V18), so allowing a
+     * change would re-open the duplicate-check / 409 path and risk rewriting a
+     * student's identity. Admission-number corrections, if ever needed, should be
+     * a separate, deliberate operation.
      *
-     * @throws ApiException 404 if no such student in the caller's tenant (cross-tenant
-     *         records are reported as missing, same as {@link #get}), 400 if {@code status}
-     *         is not one of ACTIVE / INACTIVE.
+     * @throws ApiException 404 if no such student, 400 if {@code status} is not
+     *         one of ACTIVE / INACTIVE.
      */
     @Transactional
-    public Student update(UUID tenantId, UUID id, UpdateStudentRequest request) {
-        Student student = requireStudent(tenantId, id);
+    public Student update(UUID id, UpdateStudentRequest request) {
+        Student student = requireStudent(id);
         Map<String, Object> before = editableSnapshot(student);
 
         student.setFullName(request.fullName().trim());
@@ -177,12 +168,12 @@ public class StudentService {
      * Soft delete / reactivate: sets {@code status} without removing the row, so a
      * student who has left stays in the historical record (plan section 2).
      *
-     * @throws ApiException 404 if no such student in the caller's tenant, 400 if
-     *         {@code status} is not one of ACTIVE / INACTIVE.
+     * @throws ApiException 404 if no such student, 400 if {@code status} is not
+     *         one of ACTIVE / INACTIVE.
      */
     @Transactional
-    public Student changeStatus(UUID tenantId, UUID id, String status) {
-        Student student = requireStudent(tenantId, id);
+    public Student changeStatus(UUID id, String status) {
+        Student student = requireStudent(id);
         String previousStatus = student.getStatus();
         student.setStatus(requireValidStatus(status));
         Student saved = studentRepository.save(student);
@@ -192,8 +183,8 @@ public class StudentService {
         return saved;
     }
 
-    private Student requireStudent(UUID tenantId, UUID id) {
-        return studentRepository.findByIdAndTenantId(id, tenantId)
+    private Student requireStudent(UUID id) {
+        return studentRepository.findById(id)
                 .orElseThrow(() -> new ApiException("Student not found", HttpStatus.NOT_FOUND));
     }
 

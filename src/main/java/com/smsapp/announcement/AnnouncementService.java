@@ -14,9 +14,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * School-wide announcements. Reads are tenant-wide (everyone in the school sees
- * the same list -- not ownership-scoped); writes are SCHOOL_ADMIN only, enforced
- * at the controller. Every query is tenant-scoped on top of the RLS policy.
+ * School-wide announcements. Reads are visible to everyone (not ownership-scoped);
+ * writes are SCHOOL_ADMIN only, enforced at the controller.
  */
 @Service
 public class AnnouncementService {
@@ -30,9 +29,8 @@ public class AnnouncementService {
     }
 
     @Transactional
-    public Announcement create(UUID tenantId, UUID createdByUserId, CreateAnnouncementRequest request) {
+    public Announcement create(UUID createdByUserId, CreateAnnouncementRequest request) {
         Announcement announcement = new Announcement();
-        announcement.setTenantId(tenantId);
         announcement.setTitle(request.title().trim());
         announcement.setBody(request.body().trim());
         announcement.setCreatedBy(createdByUserId);
@@ -44,17 +42,16 @@ public class AnnouncementService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Announcement> list(UUID tenantId, Pageable pageable) {
-        return announcementRepository.findByTenantIdOrderByCreatedAtDesc(tenantId, pageable);
+    public Page<Announcement> list(Pageable pageable) {
+        return announcementRepository.findAllByOrderByCreatedAtDesc(pageable);
     }
 
     /**
-     * @throws ApiException 404 if the announcement is not in the caller's tenant
-     *         (so a cross-tenant id is indistinguishable from a missing one).
+     * @throws ApiException 404 if no such announcement.
      */
     @Transactional
-    public void delete(UUID tenantId, UUID id) {
-        Announcement announcement = announcementRepository.findByIdAndTenantId(id, tenantId)
+    public void delete(UUID id) {
+        Announcement announcement = announcementRepository.findById(id)
                 .orElseThrow(() -> new ApiException("Announcement not found", HttpStatus.NOT_FOUND));
         announcementRepository.delete(announcement);
 

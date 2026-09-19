@@ -25,10 +25,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Self-service reads for the student and parent portals. Adds an OWNERSHIP layer
- * on top of tenant isolation: a STUDENT may only reach their own linked record,
- * and a PARENT only children whose {@code guardian_user_id} is that parent --
- * both scoped by the query itself, never by trusting an id from the request.
+ * Self-service reads for the student and parent portals. Adds an OWNERSHIP layer:
+ * a STUDENT may only reach their own linked record, and a PARENT only children
+ * whose {@code guardian_user_id} is that parent -- both scoped by the query
+ * itself, never by trusting an id from the request.
  */
 @Service
 public class PortalService {
@@ -61,43 +61,42 @@ public class PortalService {
      *         (a clean "not found", not an error).
      */
     @Transactional(readOnly = true)
-    public Student ownStudent(UUID tenantId, UUID studentUserId) {
-        return studentRepository.findByTenantIdAndStudentUserId(tenantId, studentUserId)
+    public Student ownStudent(UUID studentUserId) {
+        return studentRepository.findByStudentUserId(studentUserId)
                 .orElseThrow(() -> new ApiException("No student record is linked to your account",
                         HttpStatus.NOT_FOUND));
     }
 
     /** The caller's own attendance history, strictly scoped to their own student id. */
     @Transactional(readOnly = true)
-    public Page<AttendanceRecord> ownAttendance(UUID tenantId, UUID studentUserId, Pageable pageable) {
-        Student self = ownStudent(tenantId, studentUserId);
-        return attendanceService.studentHistory(tenantId, self.getId(), pageable);
+    public Page<AttendanceRecord> ownAttendance(UUID studentUserId, Pageable pageable) {
+        Student self = ownStudent(studentUserId);
+        return attendanceService.studentHistory(self.getId(), pageable);
     }
 
     /** All students linked to this PARENT login (may be empty; supports multiple children). */
     @Transactional(readOnly = true)
-    public List<Student> children(UUID tenantId, UUID guardianUserId) {
-        return studentRepository.findByTenantIdAndGuardianUserIdOrderByFullName(tenantId, guardianUserId);
+    public List<Student> children(UUID guardianUserId) {
+        return studentRepository.findByGuardianUserIdOrderByFullName(guardianUserId);
     }
 
     /**
      * A parent's own child's attendance. The {@code studentId} from the URL is only
      * honoured if that student's {@code guardian_user_id} is this parent -- otherwise
-     * 404, so it never leaks that another tenant's / another parent's student exists.
+     * 404, so it never leaks that another parent's student exists.
      */
     @Transactional(readOnly = true)
-    public Page<AttendanceRecord> childAttendance(UUID tenantId, UUID guardianUserId, UUID studentId,
-                                                 Pageable pageable) {
-        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+    public Page<AttendanceRecord> childAttendance(UUID guardianUserId, UUID studentId, Pageable pageable) {
+        Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
-        return attendanceService.studentHistory(tenantId, child.getId(), pageable);
+        return attendanceService.studentHistory(child.getId(), pageable);
     }
 
     /** The caller's own exam results, strictly scoped to their own student id. */
     @Transactional(readOnly = true)
-    public List<StudentExamResult> ownResults(UUID tenantId, UUID studentUserId) {
-        Student self = ownStudent(tenantId, studentUserId);
-        return examService.studentResults(tenantId, self.getId());
+    public List<StudentExamResult> ownResults(UUID studentUserId) {
+        Student self = ownStudent(studentUserId);
+        return examService.studentResults(self.getId());
     }
 
     /**
@@ -105,29 +104,29 @@ public class PortalService {
      * honoured if that student's {@code guardian_user_id} is this parent -- otherwise 404.
      */
     @Transactional(readOnly = true)
-    public List<StudentExamResult> childResults(UUID tenantId, UUID guardianUserId, UUID studentId) {
-        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+    public List<StudentExamResult> childResults(UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
-        return examService.studentResults(tenantId, child.getId());
+        return examService.studentResults(child.getId());
     }
 
     /**
      * A parent's own child's invoices (fee dues). The {@code studentId} from the URL is
      * only honoured if that student's {@code guardian_user_id} is this parent -- otherwise
-     * 404, so it never leaks that another parent's / another tenant's student exists.
+     * 404, so it never leaks that another parent's student exists.
      */
     @Transactional(readOnly = true)
-    public List<Invoice> childInvoices(UUID tenantId, UUID guardianUserId, UUID studentId) {
-        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+    public List<Invoice> childInvoices(UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
-        return invoiceRepository.findByTenantIdAndStudentIdOrderByCreatedAtDesc(tenantId, child.getId());
+        return invoiceRepository.findByStudentIdOrderByCreatedAtDesc(child.getId());
     }
 
     /** The caller's own library loan history, strictly scoped to their own student id. */
     @Transactional(readOnly = true)
-    public List<LoanWithBook> ownLibrary(UUID tenantId, UUID studentUserId) {
-        Student self = ownStudent(tenantId, studentUserId);
-        return bookLoanRepository.findLoanHistory(tenantId, self.getId());
+    public List<LoanWithBook> ownLibrary(UUID studentUserId) {
+        Student self = ownStudent(studentUserId);
+        return bookLoanRepository.findLoanHistory(self.getId());
     }
 
     /**
@@ -136,10 +135,10 @@ public class PortalService {
      * otherwise 404.
      */
     @Transactional(readOnly = true)
-    public List<LoanWithBook> childLibrary(UUID tenantId, UUID guardianUserId, UUID studentId) {
-        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+    public List<LoanWithBook> childLibrary(UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
-        return bookLoanRepository.findLoanHistory(tenantId, child.getId());
+        return bookLoanRepository.findLoanHistory(child.getId());
     }
 
     /**
@@ -149,9 +148,9 @@ public class PortalService {
      *         transport route assigned.
      */
     @Transactional(readOnly = true)
-    public TransportAssignment ownTransport(UUID tenantId, UUID studentUserId) {
-        Student self = ownStudent(tenantId, studentUserId);
-        return transportService.assignmentForRoute(tenantId, self.getTransportRouteId());
+    public TransportAssignment ownTransport(UUID studentUserId) {
+        Student self = ownStudent(studentUserId);
+        return transportService.assignmentForRoute(self.getTransportRouteId());
     }
 
     /**
@@ -163,10 +162,10 @@ public class PortalService {
      *         transport route assigned.
      */
     @Transactional(readOnly = true)
-    public TransportAssignment childTransport(UUID tenantId, UUID guardianUserId, UUID studentId) {
-        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+    public TransportAssignment childTransport(UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
-        return transportService.assignmentForRoute(tenantId, child.getTransportRouteId());
+        return transportService.assignmentForRoute(child.getTransportRouteId());
     }
 
     /**
@@ -176,9 +175,9 @@ public class PortalService {
      *         hostel room allocated.
      */
     @Transactional(readOnly = true)
-    public HostelAllocation ownHostel(UUID tenantId, UUID studentUserId) {
-        Student self = ownStudent(tenantId, studentUserId);
-        return hostelService.allocationForRoom(tenantId, self.getId(), self.getHostelRoomId());
+    public HostelAllocation ownHostel(UUID studentUserId) {
+        Student self = ownStudent(studentUserId);
+        return hostelService.allocationForRoom(self.getId(), self.getHostelRoomId());
     }
 
     /**
@@ -190,9 +189,9 @@ public class PortalService {
      *         room allocated.
      */
     @Transactional(readOnly = true)
-    public HostelAllocation childHostel(UUID tenantId, UUID guardianUserId, UUID studentId) {
-        Student child = studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId)
+    public HostelAllocation childHostel(UUID guardianUserId, UUID studentId) {
+        Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
-        return hostelService.allocationForRoom(tenantId, child.getId(), child.getHostelRoomId());
+        return hostelService.allocationForRoom(child.getId(), child.getHostelRoomId());
     }
 }

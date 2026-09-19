@@ -24,9 +24,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * School-wide announcements. Anyone signed in to the tenant may read them
- * (admin, teacher, student, parent -- they are meant to be seen by everyone);
- * only a SCHOOL_ADMIN may post or remove one.
+ * School-wide announcements. Anyone signed in may read them (admin, teacher,
+ * student, parent -- they are meant to be seen by everyone); only a
+ * SCHOOL_ADMIN may post or remove one.
  */
 @RestController
 @RequestMapping("/api/v1/announcements")
@@ -43,37 +43,26 @@ public class AnnouncementController {
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public ResponseEntity<AnnouncementResponse> create(@Valid @RequestBody CreateAnnouncementRequest request,
                                                        Authentication authentication) {
-        Announcement created = announcementService.create(
-                tenantId(authentication), userId(authentication), request);
+        Announcement created = announcementService.create(userId(authentication), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(AnnouncementResponse.from(created));
     }
 
-    /** Announcements for the caller's tenant, newest first, paginated. Any authenticated role. */
+    /** Announcements, newest first, paginated. Any authenticated role. */
     @GetMapping
     PagedModel<AnnouncementResponse> list(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
-            Authentication authentication) {
-        return new PagedModel<>(announcementService.list(tenantId(authentication), pageable)
-                .map(AnnouncementResponse::from));
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return new PagedModel<>(announcementService.list(pageable).map(AnnouncementResponse::from));
     }
 
-    /** Remove an announcement. SCHOOL_ADMIN only. 404 if it is not in the caller's tenant. */
+    /** Remove an announcement. SCHOOL_ADMIN only. 404 if it doesn't exist. */
     @DeleteMapping("/{id}")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    public ResponseEntity<Void> delete(@PathVariable UUID id, Authentication authentication) {
-        announcementService.delete(tenantId(authentication), id);
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        announcementService.delete(id);
         return ResponseEntity.noContent().build();
     }
 
-    private static UUID tenantId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getClaimAsString("tenant_id"));
-    }
-
     private static UUID userId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getSubject());
-    }
-
-    private static Jwt jwt(Authentication authentication) {
-        return (Jwt) authentication.getPrincipal();
+        return UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
     }
 }

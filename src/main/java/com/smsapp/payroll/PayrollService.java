@@ -18,8 +18,7 @@ import java.util.UUID;
 
 /**
  * A minimal payroll core (plan section 2, HR & payroll): generate one monthly
- * record per staff member, {@code netPay = baseSalary - deductions}. Every read
- * and write is explicitly scoped by {@code tenant_id} on top of the RLS policy.
+ * record per staff member, {@code netPay = baseSalary - deductions}.
  */
 @Service
 public class PayrollService {
@@ -41,16 +40,16 @@ public class PayrollService {
      * {@code baseSalary} is read from that staff member's current profile so the
      * record always reflects their real, on-file salary.
      *
-     * @throws ApiException 404 if the staff member has no profile in the caller's
-     *         tenant, 409 if a record already exists for that staff member + month + year.
+     * @throws ApiException 404 if the staff member has no profile, 409 if a record
+     *         already exists for that staff member + month + year.
      */
     @Transactional
-    public PayrollRecord generate(UUID tenantId, GeneratePayrollRequest request) {
-        StaffProfile profile = staffProfileRepository.findByTenantIdAndUserId(tenantId, request.staffUserId())
+    public PayrollRecord generate(GeneratePayrollRequest request) {
+        StaffProfile profile = staffProfileRepository.findByUserId(request.staffUserId())
                 .orElseThrow(() -> new ApiException("Staff profile not found", HttpStatus.NOT_FOUND));
 
-        if (payrollRecordRepository.existsByTenantIdAndStaffUserIdAndMonthAndYear(
-                tenantId, request.staffUserId(), request.month(), request.year())) {
+        if (payrollRecordRepository.existsByStaffUserIdAndMonthAndYear(
+                request.staffUserId(), request.month(), request.year())) {
             throw payrollConflict(request.staffUserId(), request.month(), request.year());
         }
 
@@ -59,7 +58,6 @@ public class PayrollService {
         BigDecimal netPay = baseSalary.subtract(deductions);
 
         PayrollRecord record = new PayrollRecord();
-        record.setTenantId(tenantId);
         record.setStaffUserId(request.staffUserId());
         record.setMonth(request.month());
         record.setYear(request.year());
@@ -84,8 +82,8 @@ public class PayrollService {
 
     /** A staff member's own payroll history, newest first. */
     @Transactional(readOnly = true)
-    public List<PayrollRecord> ownPayroll(UUID tenantId, UUID staffUserId) {
-        return payrollRecordRepository.findByTenantIdAndStaffUserIdOrderByYearDescMonthDesc(tenantId, staffUserId);
+    public List<PayrollRecord> ownPayroll(UUID staffUserId) {
+        return payrollRecordRepository.findByStaffUserIdOrderByYearDescMonthDesc(staffUserId);
     }
 
     private static ApiException payrollConflict(UUID staffUserId, int month, int year) {

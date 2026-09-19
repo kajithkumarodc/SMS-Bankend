@@ -1,6 +1,6 @@
 package com.smsapp.staff;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -23,7 +23,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class LeaveRequest extends TenantScopedEntity {
+public class LeaveRequest extends UuidEntity {
 
     @Column(name = "staff_user_id", nullable = false)
     private UUID staffUserId;

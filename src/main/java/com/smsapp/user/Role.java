@@ -1,6 +1,6 @@
 package com.smsapp.user;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -13,7 +13,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Role extends TenantScopedEntity {
+public class Role extends UuidEntity {
 
     @Column(nullable = false, length = 50)
     private String name;

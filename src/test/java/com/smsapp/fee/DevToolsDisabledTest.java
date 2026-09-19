@@ -42,7 +42,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = "app.dev-tools-enabled=false")
 class DevToolsDisabledTest {
 
-    private static final String SCHOOL = "devtools-off";
     private static final String ADMIN = "admin@devtools-off.example";
     private static final String PASSWORD = "secret";
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -64,7 +63,6 @@ class DevToolsDisabledTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        UUID tenantId = UUID.randomUUID();
         UUID schoolId = UUID.randomUUID();
         UUID roleId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
@@ -77,33 +75,26 @@ class DevToolsDisabledTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, students, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students, "
                     + "attendance_records, exam_marks, exams, class_subjects, subjects, sections, classes, "
                     + "invoices, fee_structures, audit_log CASCADE");
 
-            st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                    + tenantId + "', 'Dev Off', '" + SCHOOL + "')");
-            st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                    + schoolId + "', '" + tenantId + "', 'Dev Off School')");
-            st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                    + roleId + "', '" + tenantId + "', 'SCHOOL_ADMIN')");
-            st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                    + userId + "', '" + tenantId + "', '" + ADMIN + "', '" + passwordEncoder.encode(PASSWORD)
-                    + "', '" + ADMIN + "')");
-            st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                    + userId + "', '" + roleId + "', '" + tenantId + "')");
-            st.execute("INSERT INTO students (id, tenant_id, school_id, full_name, admission_number, status) VALUES ('"
-                    + studentId + "', '" + tenantId + "', '" + schoolId + "', 'Anaya', 'ADM-Anaya', 'ACTIVE')");
-            st.execute("INSERT INTO fee_structures (id, tenant_id, school_id, name, amount, due_date) VALUES ('"
-                    + feeStructureId + "', '" + tenantId + "', '" + schoolId + "', 'Term 1', 5000.00, '2026-06-01')");
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolId + "', 'Dev Off School')");
+            st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', 'SCHOOL_ADMIN')");
+            st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                    + userId + "', '" + ADMIN + "', '" + passwordEncoder.encode(PASSWORD) + "', '" + ADMIN + "')");
+            st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
+            st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status) VALUES ('"
+                    + studentId + "', '" + schoolId + "', 'Anaya', 'ADM-Anaya', 'ACTIVE')");
+            st.execute("INSERT INTO fee_structures (id, school_id, name, amount, due_date) VALUES ('"
+                    + feeStructureId + "', '" + schoolId + "', 'Term 1', 5000.00, '2026-06-01')");
         }
     }
 
     private Cookie loginAsAdmin() throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + SCHOOL + "\",\"email\":\"" + ADMIN
-                                + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + ADMIN + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
     }

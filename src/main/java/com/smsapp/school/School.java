@@ -1,6 +1,6 @@
 package com.smsapp.school;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -15,7 +15,7 @@ import java.time.OffsetDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-public class School extends TenantScopedEntity {
+public class School extends UuidEntity {
 
     @Column(nullable = false, length = 200)
     private String name;

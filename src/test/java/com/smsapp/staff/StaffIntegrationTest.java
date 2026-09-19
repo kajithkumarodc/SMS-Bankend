@@ -28,28 +28,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Staff profiles + leave requests against a real PostgreSQL instance with RLS
- * (plan section 2). Covers: tenant isolation on profiles and leave requests;
- * SCHOOL_ADMIN-only create/update/approve (TEACHER/STUDENT/PARENT 403); a clean
- * 409 on a duplicate user or employee code; cross-tenant references returning
- * 404 consistently; the leave-request ownership check (a TEACHER may only file
- * for themselves, 403 for someone else, SCHOOL_ADMIN may file for anyone); and
- * ownership isolation on {@code /me/leave-requests}.
+ * Staff profiles + leave requests against a real PostgreSQL instance (plan
+ * section 2). Covers: SCHOOL_ADMIN-only create/update/approve (TEACHER/
+ * STUDENT/PARENT 403); a clean 409 on a duplicate user or employee code; a
+ * nonexistent user/profile/leave-request reference returning 404
+ * consistently; the leave-request ownership check (a TEACHER may only file
+ * for themselves, 403 for someone else, SCHOOL_ADMIN may file for anyone);
+ * and ownership isolation on {@code /me/leave-requests}.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class StaffIntegrationTest {
 
-    private static final String SCHOOL_A = "staff-a";
-    private static final String SCHOOL_B = "staff-b";
     private static final String ADMIN_A = "admin@staff-a.example";
     private static final String TEACHER_A = "teacher@staff-a.example";   // has a staff profile
     private static final String TEACHER_A2 = "teacher2@staff-a.example"; // has a staff profile
     private static final String STUDENT_A = "student@staff-a.example";
     private static final String PARENT_A = "parent@staff-a.example";
-    private static final String ADMIN_B = "admin@staff-b.example";
-    private static final String TEACHER_B = "teacher@staff-b.example";
     private static final String PASSWORD = "secret";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -61,8 +57,6 @@ class StaffIntegrationTest {
 
     private UUID teacherAUserId;
     private UUID teacherA2UserId;
-    private UUID teacherBUserId;
-    private UUID adminBUserId; // no staff profile seeded -- free to attach one in tests
     private UUID studentAUserId;
 
     @DynamicPropertySource
@@ -73,10 +67,7 @@ class StaffIntegrationTest {
 
     @BeforeEach
     void seed() throws SQLException {
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
         UUID schoolAId = UUID.randomUUID();
-        UUID schoolBId = UUID.randomUUID();
 
         try (var connection = DriverManager.getConnection(
                 System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
@@ -84,72 +75,54 @@ class StaffIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
 
-            st.execute("TRUNCATE tenants, schools, users, roles, permissions, user_roles, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, "
                     + "staff_profiles, leave_requests, payroll_records, audit_log CASCADE");
 
-            seedTenant(st, tenantA, "Tenant A", SCHOOL_A, schoolAId);
-            seedTenant(st, tenantB, "Tenant B", SCHOOL_B, schoolBId);
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolAId + "', 'Tenant A School')");
 
-            UUID adminRoleA = seedRole(st, tenantA, "SCHOOL_ADMIN");
-            UUID teacherRoleA = seedRole(st, tenantA, "TEACHER");
-            UUID studentRoleA = seedRole(st, tenantA, "STUDENT");
-            UUID parentRoleA = seedRole(st, tenantA, "PARENT");
-            UUID adminRoleB = seedRole(st, tenantB, "SCHOOL_ADMIN");
-            UUID teacherRoleB = seedRole(st, tenantB, "TEACHER");
+            UUID adminRoleA = seedRole(st, "SCHOOL_ADMIN");
+            UUID teacherRoleA = seedRole(st, "TEACHER");
+            UUID studentRoleA = seedRole(st, "STUDENT");
+            UUID parentRoleA = seedRole(st, "PARENT");
 
-            seedUser(st, tenantA, ADMIN_A, adminRoleA);
-            teacherAUserId = seedUser(st, tenantA, TEACHER_A, teacherRoleA);
-            teacherA2UserId = seedUser(st, tenantA, TEACHER_A2, teacherRoleA);
-            studentAUserId = seedUser(st, tenantA, STUDENT_A, studentRoleA);
-            seedUser(st, tenantA, PARENT_A, parentRoleA);
-            adminBUserId = seedUser(st, tenantB, ADMIN_B, adminRoleB);
-            teacherBUserId = seedUser(st, tenantB, TEACHER_B, teacherRoleB);
+            seedUser(st, ADMIN_A, adminRoleA);
+            teacherAUserId = seedUser(st, TEACHER_A, teacherRoleA);
+            teacherA2UserId = seedUser(st, TEACHER_A2, teacherRoleA);
+            studentAUserId = seedUser(st, STUDENT_A, studentRoleA);
+            seedUser(st, PARENT_A, parentRoleA);
 
-            seedStaffProfile(st, tenantA, teacherAUserId, "EMP-A1", new java.math.BigDecimal("50000.00"));
-            seedStaffProfile(st, tenantA, teacherA2UserId, "EMP-A2", new java.math.BigDecimal("40000.00"));
-            seedStaffProfile(st, tenantB, teacherBUserId, "EMP-B1", new java.math.BigDecimal("45000.00"));
+            seedStaffProfile(st, teacherAUserId, "EMP-A1", new java.math.BigDecimal("50000.00"));
+            seedStaffProfile(st, teacherA2UserId, "EMP-A2", new java.math.BigDecimal("40000.00"));
         }
     }
 
     // --- seed helpers ------------------------------------------------
 
-    private static void seedTenant(Statement st, UUID tenantId, String name, String identifier, UUID schoolId)
-            throws SQLException {
-        st.execute("INSERT INTO tenants (id, name, identifier) VALUES ('"
-                + tenantId + "', '" + name + "', '" + identifier + "')");
-        st.execute("INSERT INTO schools (id, tenant_id, name) VALUES ('"
-                + schoolId + "', '" + tenantId + "', '" + name + " School')");
-    }
-
-    private static UUID seedRole(Statement st, UUID tenantId, String role) throws SQLException {
+    private static UUID seedRole(Statement st, String role) throws SQLException {
         UUID roleId = UUID.randomUUID();
-        st.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('"
-                + roleId + "', '" + tenantId + "', '" + role + "')");
+        st.execute("INSERT INTO roles (id, name) VALUES ('" + roleId + "', '" + role + "')");
         return roleId;
     }
 
-    private UUID seedUser(Statement st, UUID tenantId, String email, UUID roleId) throws SQLException {
+    private UUID seedUser(Statement st, String email, UUID roleId) throws SQLException {
         UUID userId = UUID.randomUUID();
-        st.execute("INSERT INTO users (id, tenant_id, email, password_hash, full_name) VALUES ('"
-                + userId + "', '" + tenantId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '"
-                + email + "')");
-        st.execute("INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ('"
-                + userId + "', '" + roleId + "', '" + tenantId + "')");
+        st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
+                + userId + "', '" + email + "', '" + passwordEncoder.encode(PASSWORD) + "', '" + email + "')");
+        st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
         return userId;
     }
 
-    private static void seedStaffProfile(Statement st, UUID tenantId, UUID userId, String employeeCode,
-                                         java.math.BigDecimal salary) throws SQLException {
-        st.execute("INSERT INTO staff_profiles (id, tenant_id, user_id, employee_code, date_of_joining, "
-                + "salary_amount, status) VALUES ('" + UUID.randomUUID() + "', '" + tenantId + "', '" + userId
+    private static void seedStaffProfile(Statement st, UUID userId, String employeeCode, java.math.BigDecimal salary)
+            throws SQLException {
+        st.execute("INSERT INTO staff_profiles (id, user_id, employee_code, date_of_joining, "
+                + "salary_amount, status) VALUES ('" + UUID.randomUUID() + "', '" + userId
                 + "', '" + employeeCode + "', '2020-01-01', " + salary + ", 'ACTIVE')");
     }
 
-    private Cookie login(String schoolIdentifier, String email) throws Exception {
+    private Cookie login(String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolIdentifier\":\"" + schoolIdentifier + "\",\"email\":\"" + email
-                                + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getCookie("access_token");
     }
@@ -171,11 +144,11 @@ class StaffIntegrationTest {
         throw new IllegalStateException("No staff profile found for user " + userId);
     }
 
-    // --- Staff profiles: SCHOOL_ADMIN only + tenant isolation ---
+    // --- Staff profiles: SCHOOL_ADMIN only ---
 
     @Test
-    void schoolAdminCreatesAProfileAndListingIsTenantScoped() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+    void schoolAdminCreatesAProfile() throws Exception {
+        Cookie adminA = login(ADMIN_A);
 
         mockMvc.perform(post("/api/v1/staff").cookie(adminA).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":\"" + studentAUserId + "\",\"employeeCode\":\"EMP-A3\","
@@ -187,13 +160,7 @@ class StaffIntegrationTest {
 
         mockMvc.perform(get("/api/v1/staff").cookie(adminA))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(3)) // A1, A2 (seeded) + A3
-                .andExpect(jsonPath("$[?(@.employeeCode == 'EMP-B1')]").isEmpty());
-
-        mockMvc.perform(get("/api/v1/staff").cookie(login(SCHOOL_B, ADMIN_B)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].employeeCode").value("EMP-B1"));
+                .andExpect(jsonPath("$.length()").value(3)); // A1, A2 (seeded) + A3
     }
 
     @Test
@@ -201,26 +168,26 @@ class StaffIntegrationTest {
         String body = "{\"userId\":\"" + studentAUserId + "\",\"employeeCode\":\"EMP-X\","
                 + "\"dateOfJoining\":\"2022-01-01\",\"salaryAmount\":10000.00}";
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
-            mockMvc.perform(post("/api/v1/staff").cookie(login(SCHOOL_A, email))
+            mockMvc.perform(post("/api/v1/staff").cookie(login(email))
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isForbidden());
-            mockMvc.perform(get("/api/v1/staff").cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/staff").cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }
 
     @Test
-    void creatingAProfileForAUserNotInTheTenantReturns404() throws Exception {
-        mockMvc.perform(post("/api/v1/staff").cookie(login(SCHOOL_A, ADMIN_A))
+    void creatingAProfileForANonexistentUserReturns404() throws Exception {
+        mockMvc.perform(post("/api/v1/staff").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"userId\":\"" + teacherBUserId + "\",\"employeeCode\":\"EMP-X\","
+                        .content("{\"userId\":\"" + UUID.randomUUID() + "\",\"employeeCode\":\"EMP-X\","
                                 + "\"dateOfJoining\":\"2022-01-01\",\"salaryAmount\":10000.00}"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void aUserWhoAlreadyHasAProfileReturnsAClean409() throws Exception {
-        mockMvc.perform(post("/api/v1/staff").cookie(login(SCHOOL_A, ADMIN_A))
+        mockMvc.perform(post("/api/v1/staff").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":\"" + teacherAUserId + "\",\"employeeCode\":\"EMP-DUP\","
                                 + "\"dateOfJoining\":\"2022-01-01\",\"salaryAmount\":10000.00}"))
@@ -228,27 +195,19 @@ class StaffIntegrationTest {
     }
 
     @Test
-    void aDuplicateEmployeeCodeReturnsAClean409ButTheConstraintIsPerTenant() throws Exception {
-        // "EMP-A1" is already seeded in tenant A.
-        mockMvc.perform(post("/api/v1/staff").cookie(login(SCHOOL_A, ADMIN_A))
+    void aDuplicateEmployeeCodeReturnsAClean409() throws Exception {
+        // "EMP-A1" is already seeded.
+        mockMvc.perform(post("/api/v1/staff").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":\"" + studentAUserId + "\",\"employeeCode\":\"EMP-A1\","
                                 + "\"dateOfJoining\":\"2022-01-01\",\"salaryAmount\":10000.00}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("EMP-A1")));
-
-        // Tenant B may reuse the same employee code -- the unique key is (tenant_id, employee_code).
-        // adminBUserId has no staff profile yet, so this only exercises the employee-code uniqueness.
-        mockMvc.perform(post("/api/v1/staff").cookie(login(SCHOOL_B, ADMIN_B))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"userId\":\"" + adminBUserId + "\",\"employeeCode\":\"EMP-A1\","
-                                + "\"dateOfJoining\":\"2022-01-01\",\"salaryAmount\":10000.00}"))
-                .andExpect(status().isCreated());
     }
 
     @Test
     void schoolAdminUpdatesAProfileAndATeacherCannot() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         UUID profileId = staffProfileId(adminA, teacherAUserId);
 
         mockMvc.perform(put("/api/v1/staff/" + profileId).cookie(adminA).contentType(MediaType.APPLICATION_JSON)
@@ -258,7 +217,7 @@ class StaffIntegrationTest {
                 .andExpect(jsonPath("$.department").value("Science"))
                 .andExpect(jsonPath("$.salaryAmount").value(65000.00));
 
-        mockMvc.perform(put("/api/v1/staff/" + profileId).cookie(login(SCHOOL_A, TEACHER_A))
+        mockMvc.perform(put("/api/v1/staff/" + profileId).cookie(login(TEACHER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"department\":\"X\",\"dateOfJoining\":\"2020-01-01\","
                                 + "\"salaryAmount\":1.00,\"status\":\"ACTIVE\"}"))
@@ -266,11 +225,8 @@ class StaffIntegrationTest {
     }
 
     @Test
-    void updatingAProfileFromAnotherTenantReturns404() throws Exception {
-        Cookie adminB = login(SCHOOL_B, ADMIN_B);
-        UUID profileBId = staffProfileId(adminB, teacherBUserId);
-
-        mockMvc.perform(put("/api/v1/staff/" + profileBId).cookie(login(SCHOOL_A, ADMIN_A))
+    void updatingANonexistentProfileReturns404() throws Exception {
+        mockMvc.perform(put("/api/v1/staff/" + UUID.randomUUID()).cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"dateOfJoining\":\"2020-01-01\",\"salaryAmount\":1.00,\"status\":\"ACTIVE\"}"))
                 .andExpect(status().isNotFound());
@@ -280,8 +236,8 @@ class StaffIntegrationTest {
 
     @Test
     void aTeacherCanFileTheirOwnLeaveRequest() throws Exception {
-        Cookie teacherA = login(SCHOOL_A, TEACHER_A);
-        UUID profileId = staffProfileId(login(SCHOOL_A, ADMIN_A), teacherAUserId);
+        Cookie teacherA = login(TEACHER_A);
+        UUID profileId = staffProfileId(login(ADMIN_A), teacherAUserId);
 
         mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(teacherA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -294,8 +250,8 @@ class StaffIntegrationTest {
 
     @Test
     void aTeacherCannotFileLeaveOnBehalfOfAnotherStaffMember() throws Exception {
-        Cookie teacherA = login(SCHOOL_A, TEACHER_A);
-        UUID otherProfileId = staffProfileId(login(SCHOOL_A, ADMIN_A), teacherA2UserId);
+        Cookie teacherA = login(TEACHER_A);
+        UUID otherProfileId = staffProfileId(login(ADMIN_A), teacherA2UserId);
 
         mockMvc.perform(post("/api/v1/staff/" + otherProfileId + "/leave-requests").cookie(teacherA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -305,7 +261,7 @@ class StaffIntegrationTest {
 
     @Test
     void aSchoolAdminMayFileLeaveOnBehalfOfAnyStaffMember() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         UUID profileId = staffProfileId(adminA, teacherA2UserId);
 
         mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(adminA)
@@ -317,21 +273,18 @@ class StaffIntegrationTest {
 
     @Test
     void studentAndParentCannotFileALeaveRequest() throws Exception {
-        UUID profileId = staffProfileId(login(SCHOOL_A, ADMIN_A), teacherAUserId);
+        UUID profileId = staffProfileId(login(ADMIN_A), teacherAUserId);
         String body = "{\"leaveType\":\"SICK\",\"startDate\":\"2026-03-01\",\"endDate\":\"2026-03-03\"}";
         for (String email : new String[] {STUDENT_A, PARENT_A}) {
-            mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(login(SCHOOL_A, email))
+            mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(login(email))
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isForbidden());
         }
     }
 
     @Test
-    void filingLeaveAgainstAProfileNotInTheTenantReturns404() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
-        UUID profileBId = staffProfileId(login(SCHOOL_B, ADMIN_B), teacherBUserId);
-
-        mockMvc.perform(post("/api/v1/staff/" + profileBId + "/leave-requests").cookie(adminA)
+    void filingLeaveAgainstANonexistentProfileReturns404() throws Exception {
+        mockMvc.perform(post("/api/v1/staff/" + UUID.randomUUID() + "/leave-requests").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"leaveType\":\"SICK\",\"startDate\":\"2026-03-01\",\"endDate\":\"2026-03-03\"}"))
                 .andExpect(status().isNotFound());
@@ -339,8 +292,8 @@ class StaffIntegrationTest {
 
     @Test
     void onlySchoolAdminCanApproveOrRejectALeaveRequest() throws Exception {
-        Cookie teacherA = login(SCHOOL_A, TEACHER_A);
-        UUID profileId = staffProfileId(login(SCHOOL_A, ADMIN_A), teacherAUserId);
+        Cookie teacherA = login(TEACHER_A);
+        UUID profileId = staffProfileId(login(ADMIN_A), teacherAUserId);
         var result = mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(teacherA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"leaveType\":\"SICK\",\"startDate\":\"2026-03-01\",\"endDate\":\"2026-03-03\"}"))
@@ -352,7 +305,7 @@ class StaffIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"APPROVED\"}"))
                 .andExpect(status().isForbidden());
 
-        mockMvc.perform(patch("/api/v1/leave-requests/" + leaveId).cookie(login(SCHOOL_A, ADMIN_A))
+        mockMvc.perform(patch("/api/v1/leave-requests/" + leaveId).cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"APPROVED\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("APPROVED"));
@@ -360,7 +313,7 @@ class StaffIntegrationTest {
 
     @Test
     void approvingWithAnInvalidStatusReturns400() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         UUID profileId = staffProfileId(adminA, teacherAUserId);
         var result = mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(adminA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -375,17 +328,8 @@ class StaffIntegrationTest {
     }
 
     @Test
-    void approvingALeaveRequestFromAnotherTenantReturns404() throws Exception {
-        Cookie adminB = login(SCHOOL_B, ADMIN_B);
-        UUID profileBId = staffProfileId(adminB, teacherBUserId);
-        var result = mockMvc.perform(post("/api/v1/staff/" + profileBId + "/leave-requests").cookie(adminB)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"leaveType\":\"SICK\",\"startDate\":\"2026-03-01\",\"endDate\":\"2026-03-03\"}"))
-                .andExpect(status().isCreated())
-                .andReturn();
-        UUID leaveBId = UUID.fromString(readJson(result.getResponse().getContentAsString()).get("id").asText());
-
-        mockMvc.perform(patch("/api/v1/leave-requests/" + leaveBId).cookie(login(SCHOOL_A, ADMIN_A))
+    void approvingANonexistentLeaveRequestReturns404() throws Exception {
+        mockMvc.perform(patch("/api/v1/leave-requests/" + UUID.randomUUID()).cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"APPROVED\"}"))
                 .andExpect(status().isNotFound());
     }
@@ -394,7 +338,7 @@ class StaffIntegrationTest {
 
     @Test
     void ownLeaveRequestsAreScopedToTheCallersOwnHistory() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         UUID teacherAProfile = staffProfileId(adminA, teacherAUserId);
         UUID teacherA2Profile = staffProfileId(adminA, teacherA2UserId);
 
@@ -407,12 +351,12 @@ class StaffIntegrationTest {
                         .content("{\"leaveType\":\"CASUAL\",\"startDate\":\"2026-04-01\",\"endDate\":\"2026-04-01\"}"))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/v1/me/leave-requests").cookie(login(SCHOOL_A, TEACHER_A)))
+        mockMvc.perform(get("/api/v1/me/leave-requests").cookie(login(TEACHER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].leaveType").value("SICK"));
 
-        mockMvc.perform(get("/api/v1/me/leave-requests").cookie(login(SCHOOL_A, TEACHER_A2)))
+        mockMvc.perform(get("/api/v1/me/leave-requests").cookie(login(TEACHER_A2)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].leaveType").value("CASUAL"));
@@ -421,7 +365,7 @@ class StaffIntegrationTest {
     @Test
     void studentAndParentCannotReadLeaveRequestHistory() throws Exception {
         for (String email : new String[] {STUDENT_A, PARENT_A}) {
-            mockMvc.perform(get("/api/v1/me/leave-requests").cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/me/leave-requests").cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }
@@ -429,8 +373,8 @@ class StaffIntegrationTest {
     // --- /staff/eligible-users --------------------------------------
 
     @Test
-    void eligibleUsersExcludesUsersWhoAlreadyHaveAProfileAndIsTenantScoped() throws Exception {
-        mockMvc.perform(get("/api/v1/staff/eligible-users").cookie(login(SCHOOL_A, ADMIN_A)))
+    void eligibleUsersExcludesUsersWhoAlreadyHaveAProfile() throws Exception {
+        mockMvc.perform(get("/api/v1/staff/eligible-users").cookie(login(ADMIN_A)))
                 .andExpect(status().isOk())
                 // ADMIN_A + STUDENT_A + PARENT_A have no profile; TEACHER_A/TEACHER_A2 already do.
                 .andExpect(jsonPath("$.length()").value(3))
@@ -441,7 +385,7 @@ class StaffIntegrationTest {
     @Test
     void onlySchoolAdminCanListEligibleUsers() throws Exception {
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
-            mockMvc.perform(get("/api/v1/staff/eligible-users").cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/staff/eligible-users").cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }
@@ -450,7 +394,7 @@ class StaffIntegrationTest {
 
     @Test
     void aTeacherSeesTheirOwnStaffProfile() throws Exception {
-        mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(SCHOOL_A, TEACHER_A)))
+        mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(TEACHER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.employeeCode").value("EMP-A1"))
                 .andExpect(jsonPath("$.userId").value(teacherAUserId.toString()));
@@ -458,23 +402,23 @@ class StaffIntegrationTest {
 
     @Test
     void aUserWithNoStaffProfileGetsACleanNotFound() throws Exception {
-        mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(SCHOOL_A, ADMIN_A)))
+        mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(ADMIN_A)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void studentAndParentCannotReadOwnStaffProfile() throws Exception {
         for (String email : new String[] {STUDENT_A, PARENT_A}) {
-            mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/me/staff-profile").cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }
 
-    // --- GET /leave-requests: SCHOOL_ADMIN view, filters, tenant scope --
+    // --- GET /leave-requests: SCHOOL_ADMIN view, filters --
 
     @Test
-    void listLeaveRequestsWithNoFilterReturnsTheWholeTenant() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+    void listLeaveRequestsWithNoFilterReturnsAll() throws Exception {
+        Cookie adminA = login(ADMIN_A);
         UUID profileId = staffProfileId(adminA, teacherAUserId);
         mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(adminA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -484,16 +428,11 @@ class StaffIntegrationTest {
         mockMvc.perform(get("/api/v1/leave-requests").cookie(adminA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
-
-        // Tenant B's admin sees none of tenant A's requests.
-        mockMvc.perform(get("/api/v1/leave-requests").cookie(login(SCHOOL_B, ADMIN_B)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
     void listLeaveRequestsFiltersByStatusForThePendingQueue() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         UUID profileId = staffProfileId(adminA, teacherAUserId);
         var result = mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(adminA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -519,7 +458,7 @@ class StaffIntegrationTest {
 
     @Test
     void listLeaveRequestsFiltersByStaffMemberForTheDetailView() throws Exception {
-        Cookie adminA = login(SCHOOL_A, ADMIN_A);
+        Cookie adminA = login(ADMIN_A);
         UUID profileId = staffProfileId(adminA, teacherAUserId);
         UUID profileId2 = staffProfileId(adminA, teacherA2UserId);
         mockMvc.perform(post("/api/v1/staff/" + profileId + "/leave-requests").cookie(adminA)
@@ -539,14 +478,14 @@ class StaffIntegrationTest {
 
     @Test
     void listLeaveRequestsWithAnInvalidStatusReturns400() throws Exception {
-        mockMvc.perform(get("/api/v1/leave-requests").param("status", "CANCELLED").cookie(login(SCHOOL_A, ADMIN_A)))
+        mockMvc.perform(get("/api/v1/leave-requests").param("status", "CANCELLED").cookie(login(ADMIN_A)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void teacherStudentAndParentCannotListLeaveRequests() throws Exception {
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
-            mockMvc.perform(get("/api/v1/leave-requests").cookie(login(SCHOOL_A, email)))
+            mockMvc.perform(get("/api/v1/leave-requests").cookie(login(email)))
                     .andExpect(status().isForbidden());
         }
     }

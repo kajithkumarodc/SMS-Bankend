@@ -1,6 +1,6 @@
 package com.smsapp.hostel;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -14,14 +14,14 @@ import java.util.UUID;
 
 /**
  * One room in a block. {@code capacity} caps how many students may be allocated;
- * {@code (tenant_id, block_id, room_number)} is unique (V16).
+ * {@code (block_id, room_number)} is unique (V18).
  */
 @Entity
 @Table(name = "hostel_rooms")
 @Getter
 @Setter
 @NoArgsConstructor
-public class HostelRoom extends TenantScopedEntity {
+public class HostelRoom extends UuidEntity {
 
     @Column(name = "block_id", nullable = false, updatable = false)
     private UUID blockId;

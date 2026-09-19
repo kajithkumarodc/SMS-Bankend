@@ -2,7 +2,6 @@ package com.smsapp.config;
 
 import com.smsapp.auth.AuthCookieFactory;
 import com.smsapp.auth.CookieBearerTokenResolver;
-import com.smsapp.tenant.TenantRequestFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,7 +16,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -64,13 +62,6 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/actuator/health",
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                 .permitAll()
-                // Self-service tenant onboarding (plan sections 1/3): the one deliberate
-                // exception to "every endpoint requires a JWT" -- there is, by definition,
-                // no tenant and no user yet. Bean Validation on the request body is the
-                // application-layer defense; IP-based rate limiting belongs at the
-                // infrastructure/gateway level (see OnboardingController).
-                .requestMatchers("/api/v1/onboarding/register-school")
-                .permitAll()
                 // Razorpay's server-to-server payment webhook cannot present a JWT.
                 // It is authenticated instead by its HMAC signature, which the
                 // handler verifies before touching any data (see RazorpayWebhookController).
@@ -80,8 +71,7 @@ public class SecurityConfig {
             )
             .oauth2ResourceServer(oauth2 -> oauth2
                 .bearerTokenResolver(new CookieBearerTokenResolver(authCookieFactory.cookieName()))
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-            .addFilterAfter(new TenantRequestFilter(), BearerTokenAuthenticationFilter.class);
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
 
         return http.build();
     }

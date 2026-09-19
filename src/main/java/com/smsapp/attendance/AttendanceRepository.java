@@ -11,17 +11,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Every query is explicitly filtered by {@code tenant_id} -- defense in depth on
- * top of the database RLS policy (plan section 1, "use both together").
- */
 public interface AttendanceRepository extends JpaRepository<AttendanceRecord, UUID> {
 
-    Page<AttendanceRecord> findByTenantIdAndDate(UUID tenantId, LocalDate date, Pageable pageable);
+    Page<AttendanceRecord> findByDate(LocalDate date, Pageable pageable);
 
-    Page<AttendanceRecord> findByTenantIdAndStudentIdOrderByDateDesc(UUID tenantId, UUID studentId, Pageable pageable);
+    Page<AttendanceRecord> findByStudentIdOrderByDateDesc(UUID studentId, Pageable pageable);
 
-    Optional<AttendanceRecord> findByTenantIdAndStudentIdAndDate(UUID tenantId, UUID studentId, LocalDate date);
+    Optional<AttendanceRecord> findByStudentIdAndDate(UUID studentId, LocalDate date);
 
     /**
      * Attendance for every student currently assigned to {@code sectionId}, on {@code date}.
@@ -29,16 +25,13 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, UU
      * or empty when the section has not been fully marked yet.
      */
     @Query("select a from AttendanceRecord a, Student s "
-            + "where a.studentId = s.id and a.tenantId = :tenantId "
-            + "and s.sectionId = :sectionId and a.date = :date")
-    List<AttendanceRecord> findForSectionOnDate(@Param("tenantId") UUID tenantId,
-                                                @Param("sectionId") UUID sectionId,
-                                                @Param("date") LocalDate date);
+            + "where a.studentId = s.id and s.sectionId = :sectionId and a.date = :date")
+    List<AttendanceRecord> findForSectionOnDate(@Param("sectionId") UUID sectionId, @Param("date") LocalDate date);
 
     /** Portal dashboard: one student's attendance tallied by status. */
     @Query("select a.status as status, count(a) as total from AttendanceRecord a "
-            + "where a.tenantId = :tenantId and a.studentId = :studentId group by a.status")
-    List<StatusTally> tallyByStatus(@Param("tenantId") UUID tenantId, @Param("studentId") UUID studentId);
+            + "where a.studentId = :studentId group by a.status")
+    List<StatusTally> tallyByStatus(@Param("studentId") UUID studentId);
 
     interface StatusTally {
         String getStatus();

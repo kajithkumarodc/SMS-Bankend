@@ -17,7 +17,6 @@ public class MeController {
         Jwt jwt = (Jwt) authentication.getPrincipal();
         return Map.of(
                 "userId", jwt.getSubject(),
-                "tenantId", jwt.getClaimAsString("tenant_id"),
                 "roles", jwt.getClaimAsStringList("roles"));
     }
 }

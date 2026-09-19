@@ -44,15 +44,15 @@ public class ExamService {
     }
 
     /**
-     * @throws ApiException 404 if the class or the subject is not in the caller's
-     *         tenant, 400 if {@code maxMarks} is not positive.
+     * @throws ApiException 404 if the class or the subject does not exist, 400 if
+     *         {@code maxMarks} is not positive.
      */
     @Transactional
-    public Exam createExam(UUID tenantId, CreateExamRequest request) {
-        if (classRepository.findByIdAndTenantId(request.classId(), tenantId).isEmpty()) {
+    public Exam createExam(CreateExamRequest request) {
+        if (classRepository.findById(request.classId()).isEmpty()) {
             throw new ApiException("Class not found", HttpStatus.NOT_FOUND);
         }
-        if (subjectRepository.findByIdAndTenantId(request.subjectId(), tenantId).isEmpty()) {
+        if (subjectRepository.findById(request.subjectId()).isEmpty()) {
             throw new ApiException("Subject not found", HttpStatus.NOT_FOUND);
         }
         if (request.maxMarks().compareTo(BigDecimal.ZERO) <= 0) {
@@ -60,7 +60,6 @@ public class ExamService {
         }
 
         Exam exam = new Exam();
-        exam.setTenantId(tenantId);
         exam.setClassId(request.classId());
         exam.setSubjectId(request.subjectId());
         exam.setName(request.name().trim());
@@ -76,28 +75,28 @@ public class ExamService {
     }
 
     /**
-     * @throws ApiException 404 if the class is not in the caller's tenant.
+     * @throws ApiException 404 if the class does not exist.
      */
     @Transactional(readOnly = true)
-    public List<Exam> listForClass(UUID tenantId, UUID classId) {
-        if (classRepository.findByIdAndTenantId(classId, tenantId).isEmpty()) {
+    public List<Exam> listForClass(UUID classId) {
+        if (classRepository.findById(classId).isEmpty()) {
             throw new ApiException("Class not found", HttpStatus.NOT_FOUND);
         }
-        return examRepository.findByTenantIdAndClassIdOrderByExamDateDesc(tenantId, classId);
+        return examRepository.findByClassIdOrderByExamDateDesc(classId);
     }
 
     /**
      * Records (or corrects) one student's marks for an exam. Re-recording updates the
      * existing row rather than failing -- a teacher fixing a mistake (plan section 2).
      *
-     * @throws ApiException 404 if the exam or the student is not in the caller's tenant,
-     *         400 if {@code marksObtained} is outside {@code [0, exam.maxMarks]}.
+     * @throws ApiException 404 if the exam or the student does not exist, 400 if
+     *         {@code marksObtained} is outside {@code [0, exam.maxMarks]}.
      */
     @Transactional
-    public MarkResult recordMark(UUID tenantId, UUID examId, RecordMarkRequest request) {
-        Exam exam = examRepository.findByIdAndTenantId(examId, tenantId)
+    public MarkResult recordMark(UUID examId, RecordMarkRequest request) {
+        Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ApiException("Exam not found", HttpStatus.NOT_FOUND));
-        if (studentRepository.findByIdAndTenantId(request.studentId(), tenantId).isEmpty()) {
+        if (studentRepository.findById(request.studentId()).isEmpty()) {
             throw new ApiException("Student not found", HttpStatus.NOT_FOUND);
         }
         BigDecimal marks = request.marksObtained();
@@ -107,12 +106,11 @@ public class ExamService {
         }
 
         ExamMark mark = examMarkRepository
-                .findByTenantIdAndExamIdAndStudentId(tenantId, examId, request.studentId())
+                .findByExamIdAndStudentId(examId, request.studentId())
                 .orElse(null);
         boolean created = mark == null;
         if (created) {
             mark = new ExamMark();
-            mark.setTenantId(tenantId);
             mark.setExamId(examId);
             mark.setStudentId(request.studentId());
         }
@@ -128,24 +126,24 @@ public class ExamService {
     }
 
     /**
-     * @throws ApiException 404 if the exam is not in the caller's tenant.
+     * @throws ApiException 404 if the exam does not exist.
      */
     @Transactional(readOnly = true)
-    public List<ExamMark> gradebook(UUID tenantId, UUID examId) {
-        if (examRepository.findByIdAndTenantId(examId, tenantId).isEmpty()) {
+    public List<ExamMark> gradebook(UUID examId) {
+        if (examRepository.findById(examId).isEmpty()) {
             throw new ApiException("Exam not found", HttpStatus.NOT_FOUND);
         }
-        return examMarkRepository.findByTenantIdAndExamIdOrderByCreatedAt(tenantId, examId);
+        return examMarkRepository.findByExamIdOrderByCreatedAt(examId);
     }
 
     /**
-     * @throws ApiException 404 if the student is not in the caller's tenant.
+     * @throws ApiException 404 if the student does not exist.
      */
     @Transactional(readOnly = true)
-    public List<StudentExamResult> studentResults(UUID tenantId, UUID studentId) {
-        if (studentRepository.findByIdAndTenantId(studentId, tenantId).isEmpty()) {
+    public List<StudentExamResult> studentResults(UUID studentId) {
+        if (studentRepository.findById(studentId).isEmpty()) {
             throw new ApiException("Student not found", HttpStatus.NOT_FOUND);
         }
-        return examMarkRepository.findResultsForStudent(tenantId, studentId);
+        return examMarkRepository.findResultsForStudent(studentId);
     }
 }

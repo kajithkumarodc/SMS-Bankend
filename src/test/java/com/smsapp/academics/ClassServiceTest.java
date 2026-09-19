@@ -40,7 +40,6 @@ class ClassServiceTest {
 
     private static final String GRADE_5 = "Grade 5";
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID schoolId = UUID.randomUUID();
 
     private ClassService service() {
@@ -50,7 +49,6 @@ class ClassServiceTest {
     private SchoolClass schoolClass(UUID id, String name) {
         SchoolClass c = new SchoolClass();
         c.setId(id);
-        c.setTenantId(tenantId);
         c.setSchoolId(schoolId);
         c.setName(name);
         return c;
@@ -59,30 +57,28 @@ class ClassServiceTest {
     private Section section(UUID id, UUID classId, String name) {
         Section s = new Section();
         s.setId(id);
-        s.setTenantId(tenantId);
         s.setClassId(classId);
         s.setName(name);
         return s;
     }
 
     @Test
-    void createsClassScopedToTenant() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(true);
-        when(classRepository.existsByTenantIdAndSchoolIdAndName(tenantId, schoolId, GRADE_5)).thenReturn(false);
+    void createsClass() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+        when(classRepository.existsBySchoolIdAndName(schoolId, GRADE_5)).thenReturn(false);
         when(classRepository.save(any(SchoolClass.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        SchoolClass created = service().createClass(tenantId, new CreateClassRequest(schoolId, "  Grade 5  "));
+        SchoolClass created = service().createClass(new CreateClassRequest(schoolId, "  Grade 5  "));
 
-        assertThat(created.getTenantId()).isEqualTo(tenantId);
         assertThat(created.getSchoolId()).isEqualTo(schoolId);
         assertThat(created.getName()).isEqualTo(GRADE_5);
     }
 
     @Test
-    void rejectsClassForSchoolOutsideTenantWith404() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(false);
+    void rejectsClassForNonexistentSchoolWith404() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().createClass(tenantId, new CreateClassRequest(schoolId, GRADE_5)))
+        assertThatThrownBy(() -> service().createClass(new CreateClassRequest(schoolId, GRADE_5)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -91,10 +87,10 @@ class ClassServiceTest {
 
     @Test
     void rejectsDuplicateClassNameWith409() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(true);
-        when(classRepository.existsByTenantIdAndSchoolIdAndName(tenantId, schoolId, GRADE_5)).thenReturn(true);
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+        when(classRepository.existsBySchoolIdAndName(schoolId, GRADE_5)).thenReturn(true);
 
-        assertThatThrownBy(() -> service().createClass(tenantId, new CreateClassRequest(schoolId, GRADE_5)))
+        assertThatThrownBy(() -> service().createClass(new CreateClassRequest(schoolId, GRADE_5)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
@@ -102,25 +98,24 @@ class ClassServiceTest {
     }
 
     @Test
-    void createsSectionUnderAnOwnedClass() {
+    void createsSectionUnderAnExistingClass() {
         UUID classId = UUID.randomUUID();
-        when(classRepository.findByIdAndTenantId(classId, tenantId)).thenReturn(Optional.of(schoolClass(classId, GRADE_5)));
-        when(sectionRepository.existsByTenantIdAndClassIdAndName(tenantId, classId, "A")).thenReturn(false);
+        when(classRepository.findById(classId)).thenReturn(Optional.of(schoolClass(classId, GRADE_5)));
+        when(sectionRepository.existsByClassIdAndName(classId, "A")).thenReturn(false);
         when(sectionRepository.save(any(Section.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Section created = service().createSection(tenantId, classId, new CreateSectionRequest(" A "));
+        Section created = service().createSection(classId, new CreateSectionRequest(" A "));
 
-        assertThat(created.getTenantId()).isEqualTo(tenantId);
         assertThat(created.getClassId()).isEqualTo(classId);
         assertThat(created.getName()).isEqualTo("A");
     }
 
     @Test
-    void rejectsSectionUnderAnotherTenantsClassWith404() {
+    void rejectsSectionUnderANonexistentClassWith404() {
         UUID classId = UUID.randomUUID();
-        when(classRepository.findByIdAndTenantId(classId, tenantId)).thenReturn(Optional.empty());
+        when(classRepository.findById(classId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().createSection(tenantId, classId, new CreateSectionRequest("A")))
+        assertThatThrownBy(() -> service().createSection(classId, new CreateSectionRequest("A")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -130,10 +125,10 @@ class ClassServiceTest {
     @Test
     void rejectsDuplicateSectionNameWith409() {
         UUID classId = UUID.randomUUID();
-        when(classRepository.findByIdAndTenantId(classId, tenantId)).thenReturn(Optional.of(schoolClass(classId, GRADE_5)));
-        when(sectionRepository.existsByTenantIdAndClassIdAndName(tenantId, classId, "A")).thenReturn(true);
+        when(classRepository.findById(classId)).thenReturn(Optional.of(schoolClass(classId, GRADE_5)));
+        when(sectionRepository.existsByClassIdAndName(classId, "A")).thenReturn(true);
 
-        assertThatThrownBy(() -> service().createSection(tenantId, classId, new CreateSectionRequest("A")))
+        assertThatThrownBy(() -> service().createSection(classId, new CreateSectionRequest("A")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
     }
@@ -142,13 +137,13 @@ class ClassServiceTest {
     void listWithSectionsNestsSectionsUnderTheirClass() {
         UUID class5 = UUID.randomUUID();
         UUID class6 = UUID.randomUUID();
-        when(classRepository.findByTenantIdOrderByName(tenantId))
+        when(classRepository.findAllByOrderByName())
                 .thenReturn(List.of(schoolClass(class5, GRADE_5), schoolClass(class6, "Grade 6")));
-        when(sectionRepository.findByTenantIdOrderByName(tenantId)).thenReturn(List.of(
+        when(sectionRepository.findAllByOrderByName()).thenReturn(List.of(
                 section(UUID.randomUUID(), class5, "A"),
                 section(UUID.randomUUID(), class5, "B")));
 
-        List<ClassResponse> result = service().listWithSections(tenantId);
+        List<ClassResponse> result = service().listWithSections();
 
         assertThat(result).hasSize(2);
         assertThat(result.get(0).sections()).extracting(AcademicsDtos.SectionResponse::name)

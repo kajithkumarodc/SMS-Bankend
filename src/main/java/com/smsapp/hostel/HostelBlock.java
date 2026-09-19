@@ -1,6 +1,6 @@
 package com.smsapp.hostel;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -17,7 +17,7 @@ import java.time.OffsetDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-public class HostelBlock extends TenantScopedEntity {
+public class HostelBlock extends UuidEntity {
 
     @Column(nullable = false, length = 200)
     private String name;

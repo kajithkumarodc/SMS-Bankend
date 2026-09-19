@@ -9,7 +9,6 @@ import com.smsapp.transport.TransportDtos.CreateRouteRequest;
 import com.smsapp.transport.TransportDtos.CreateVehicleRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -47,14 +46,12 @@ class TransportServiceTest {
         return new TransportService(routeRepository, vehicleRepository, studentRepository, auditService);
     }
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID routeId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
 
     private TransportRoute route() {
         TransportRoute route = new TransportRoute();
         route.setId(routeId);
-        route.setTenantId(tenantId);
         route.setName("Route 1 - North Zone");
         return route;
     }
@@ -69,9 +66,8 @@ class TransportServiceTest {
             return r;
         });
 
-        TransportRoute created = service().createRoute(tenantId, new CreateRouteRequest("  Route 1 - North Zone  "));
+        TransportRoute created = service().createRoute(new CreateRouteRequest("  Route 1 - North Zone  "));
 
-        assertThat(created.getTenantId()).isEqualTo(tenantId);
         assertThat(created.getName()).isEqualTo("Route 1 - North Zone");
         verify(auditService).log(eq(AuditActions.TRANSPORT_ROUTE_CREATED), eq(AuditActions.TRANSPORT_ROUTE),
                 eq(routeId), anyMap());
@@ -81,15 +77,15 @@ class TransportServiceTest {
 
     @Test
     void addVehicleStoresTheFieldsTreatsBlankContactAsNullAndAudits() {
-        when(routeRepository.existsByIdAndTenantId(routeId, tenantId)).thenReturn(true);
-        when(vehicleRepository.existsByTenantIdAndRegistrationNumber(tenantId, "KA01AB1234")).thenReturn(false);
+        when(routeRepository.existsById(routeId)).thenReturn(true);
+        when(vehicleRepository.existsByRegistrationNumber("KA01AB1234")).thenReturn(false);
         when(vehicleRepository.saveAndFlush(any(TransportVehicle.class))).thenAnswer(inv -> {
             TransportVehicle v = inv.getArgument(0);
             v.setId(UUID.randomUUID());
             return v;
         });
 
-        TransportVehicle created = service().addVehicle(tenantId,
+        TransportVehicle created = service().addVehicle(
                 new CreateVehicleRequest("  KA01AB1234 ", "  Ravi Kumar ", "   ", 40, routeId));
 
         assertThat(created.getRegistrationNumber()).isEqualTo("KA01AB1234");
@@ -102,10 +98,10 @@ class TransportServiceTest {
     }
 
     @Test
-    void addVehicleWithARouteNotInTheTenantReturns404() {
-        when(routeRepository.existsByIdAndTenantId(routeId, tenantId)).thenReturn(false);
+    void addVehicleWithANonexistentRouteReturns404() {
+        when(routeRepository.existsById(routeId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().addVehicle(tenantId,
+        assertThatThrownBy(() -> service().addVehicle(
                 new CreateVehicleRequest("KA01AB1234", "Ravi", null, 40, routeId)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
@@ -115,10 +111,9 @@ class TransportServiceTest {
 
     @Test
     void addVehicleWithADuplicateRegistrationNumberReturns409() {
-        when(vehicleRepository.existsByTenantIdAndRegistrationNumber(tenantId, "KA01AB1234")).thenReturn(true);
+        when(vehicleRepository.existsByRegistrationNumber("KA01AB1234")).thenReturn(true);
 
-        assertThatThrownBy(() -> service().addVehicle(tenantId,
-                new CreateVehicleRequest("KA01AB1234", "Ravi", null, 40, null)))
+        assertThatThrownBy(() -> service().addVehicle(new CreateVehicleRequest("KA01AB1234", "Ravi", null, 40, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
@@ -127,27 +122,25 @@ class TransportServiceTest {
 
     @Test
     void addVehicleTranslatesAConcurrentInsertRaceIntoAClean409() {
-        when(vehicleRepository.existsByTenantIdAndRegistrationNumber(tenantId, "KA01AB1234")).thenReturn(false);
+        when(vehicleRepository.existsByRegistrationNumber("KA01AB1234")).thenReturn(false);
         when(vehicleRepository.saveAndFlush(any(TransportVehicle.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-        assertThatThrownBy(() -> service().addVehicle(tenantId,
-                new CreateVehicleRequest("KA01AB1234", "Ravi", null, 40, null)))
+        assertThatThrownBy(() -> service().addVehicle(new CreateVehicleRequest("KA01AB1234", "Ravi", null, 40, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
     }
 
     @Test
     void listVehiclesFiltersByRouteWhenGivenOtherwiseListsAll() {
-        when(vehicleRepository.findByTenantIdOrderByRegistrationNumber(tenantId)).thenReturn(List.of());
-        when(vehicleRepository.findByTenantIdAndRouteIdOrderByRegistrationNumber(tenantId, routeId))
-                .thenReturn(List.of());
+        when(vehicleRepository.findAllByOrderByRegistrationNumber()).thenReturn(List.of());
+        when(vehicleRepository.findByRouteIdOrderByRegistrationNumber(routeId)).thenReturn(List.of());
 
-        service().listVehicles(tenantId, null);
-        service().listVehicles(tenantId, routeId);
+        service().listVehicles(null);
+        service().listVehicles(routeId);
 
-        verify(vehicleRepository).findByTenantIdOrderByRegistrationNumber(tenantId);
-        verify(vehicleRepository).findByTenantIdAndRouteIdOrderByRegistrationNumber(tenantId, routeId);
+        verify(vehicleRepository).findAllByOrderByRegistrationNumber();
+        verify(vehicleRepository).findByRouteIdOrderByRegistrationNumber(routeId);
     }
 
     // --- student <-> route ------------------------------------
@@ -156,11 +149,11 @@ class TransportServiceTest {
     void assignStudentRouteSetsTheRouteAndAudits() {
         Student student = new Student();
         student.setId(studentId);
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
-        when(routeRepository.existsByIdAndTenantId(routeId, tenantId)).thenReturn(true);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(routeRepository.existsById(routeId)).thenReturn(true);
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Student saved = service().assignStudentRoute(tenantId, studentId, routeId);
+        Student saved = service().assignStudentRoute(studentId, routeId);
 
         assertThat(saved.getTransportRouteId()).isEqualTo(routeId);
         verify(auditService).log(eq(AuditActions.TRANSPORT_ROUTE_ASSIGNED), eq(AuditActions.STUDENT),
@@ -172,20 +165,20 @@ class TransportServiceTest {
         Student student = new Student();
         student.setId(studentId);
         student.setTransportRouteId(routeId);
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Student saved = service().assignStudentRoute(tenantId, studentId, null);
+        Student saved = service().assignStudentRoute(studentId, null);
 
         assertThat(saved.getTransportRouteId()).isNull();
-        verify(routeRepository, never()).existsByIdAndTenantId(any(), any());
+        verify(routeRepository, never()).existsById(any());
     }
 
     @Test
-    void assignStudentRouteWithAStudentNotInTheTenantReturns404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+    void assignStudentRouteWithANonexistentStudentReturns404() {
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().assignStudentRoute(tenantId, studentId, routeId))
+        assertThatThrownBy(() -> service().assignStudentRoute(studentId, routeId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -193,13 +186,13 @@ class TransportServiceTest {
     }
 
     @Test
-    void assignStudentRouteWithARouteNotInTheTenantReturns404() {
+    void assignStudentRouteWithANonexistentRouteReturns404() {
         Student student = new Student();
         student.setId(studentId);
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(student));
-        when(routeRepository.existsByIdAndTenantId(routeId, tenantId)).thenReturn(false);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(routeRepository.existsById(routeId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().assignStudentRoute(tenantId, studentId, routeId))
+        assertThatThrownBy(() -> service().assignStudentRoute(studentId, routeId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -207,30 +200,30 @@ class TransportServiceTest {
     }
 
     @Test
-    void studentsOnRouteRejectsARouteNotInTheTenantWith404() {
-        when(routeRepository.existsByIdAndTenantId(routeId, tenantId)).thenReturn(false);
+    void studentsOnRouteRejectsANonexistentRouteWith404() {
+        when(routeRepository.existsById(routeId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().studentsOnRoute(tenantId, routeId))
+        assertThatThrownBy(() -> service().studentsOnRoute(routeId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
-        verify(studentRepository, never()).findByTenantIdAndTransportRouteIdOrderByFullName(any(), any());
+        verify(studentRepository, never()).findByTransportRouteIdOrderByFullName(any());
     }
 
     // --- assignment view --------------------------------------
 
     @Test
     void assignmentForRouteIs404WhenTheStudentHasNoRoute() {
-        assertThatThrownBy(() -> service().assignmentForRoute(tenantId, null))
+        assertThatThrownBy(() -> service().assignmentForRoute(null))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
-    void assignmentForRouteIs404WhenTheRouteIsNotInTheTenant() {
-        when(routeRepository.findByIdAndTenantId(routeId, tenantId)).thenReturn(Optional.empty());
+    void assignmentForRouteIs404WhenTheRouteDoesNotExist() {
+        when(routeRepository.findById(routeId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().assignmentForRoute(tenantId, routeId))
+        assertThatThrownBy(() -> service().assignmentForRoute(routeId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -242,11 +235,10 @@ class TransportServiceTest {
         vehicle.setDriverName("Ravi Kumar");
         vehicle.setDriverContact("+91 90000 00000");
         vehicle.setCapacity(40);
-        when(routeRepository.findByIdAndTenantId(routeId, tenantId)).thenReturn(Optional.of(route()));
-        when(vehicleRepository.findByTenantIdAndRouteIdOrderByRegistrationNumber(tenantId, routeId))
-                .thenReturn(List.of(vehicle));
+        when(routeRepository.findById(routeId)).thenReturn(Optional.of(route()));
+        when(vehicleRepository.findByRouteIdOrderByRegistrationNumber(routeId)).thenReturn(List.of(vehicle));
 
-        TransportAssignment assignment = service().assignmentForRoute(tenantId, routeId);
+        TransportAssignment assignment = service().assignmentForRoute(routeId);
 
         assertThat(assignment.routeId()).isEqualTo(routeId);
         assertThat(assignment.routeName()).isEqualTo("Route 1 - North Zone");
@@ -255,15 +247,5 @@ class TransportServiceTest {
             assertThat(v.driverName()).isEqualTo("Ravi Kumar");
             assertThat(v.capacity()).isEqualTo(40);
         });
-    }
-
-    @Test
-    void createRouteSavesUnderTheCallersTenant() {
-        ArgumentCaptor<TransportRoute> saved = ArgumentCaptor.forClass(TransportRoute.class);
-        when(routeRepository.save(saved.capture())).thenAnswer(inv -> inv.getArgument(0));
-
-        service().createRoute(tenantId, new CreateRouteRequest("Route 2"));
-
-        assertThat(saved.getValue().getTenantId()).isEqualTo(tenantId);
     }
 }

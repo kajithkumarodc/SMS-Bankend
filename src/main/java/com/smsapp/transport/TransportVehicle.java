@@ -1,6 +1,6 @@
 package com.smsapp.transport;
 
-import com.smsapp.common.TenantScopedEntity;
+import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -14,14 +14,14 @@ import java.util.UUID;
 
 /**
  * One vehicle. {@code routeId} is null when the vehicle is unassigned.
- * {@code (tenant_id, registration_number)} is unique (V15).
+ * {@code registration_number} is unique (V18).
  */
 @Entity
 @Table(name = "transport_vehicles")
 @Getter
 @Setter
 @NoArgsConstructor
-public class TransportVehicle extends TenantScopedEntity {
+public class TransportVehicle extends UuidEntity {
 
     /** The route this vehicle runs, or null if unassigned. */
     @Column(name = "route_id")

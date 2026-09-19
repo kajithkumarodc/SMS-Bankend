@@ -30,8 +30,6 @@ class ReportServiceTest {
         return new ReportService(reportRepository);
     }
 
-    private final UUID tenantId = UUID.randomUUID();
-
     private static DailyStatusCount row(LocalDate date, String status, long count) {
         return new DailyStatusCount() {
             public LocalDate getDate() {
@@ -53,10 +51,10 @@ class ReportServiceTest {
     @Test
     void attendanceTrendComputesPercentageFromPresentAbsentLate() {
         LocalDate day = LocalDate.of(2026, 3, 2);
-        when(reportRepository.attendanceCountsByDay(any(), any(), any()))
+        when(reportRepository.attendanceCountsByDay(any(), any()))
                 .thenReturn(List.of(row(day, "PRESENT", 3), row(day, "ABSENT", 1)));
 
-        List<AttendanceTrendPoint> trend = service().attendanceTrend(tenantId, day, day);
+        List<AttendanceTrendPoint> trend = service().attendanceTrend(day, day);
 
         assertThat(trend).hasSize(1);
         AttendanceTrendPoint point = trend.get(0);
@@ -71,10 +69,10 @@ class ReportServiceTest {
     @Test
     void attendanceTrendCountsLateAsAttended() {
         LocalDate day = LocalDate.of(2026, 3, 2);
-        when(reportRepository.attendanceCountsByDay(any(), any(), any()))
+        when(reportRepository.attendanceCountsByDay(any(), any()))
                 .thenReturn(List.of(row(day, "PRESENT", 2), row(day, "LATE", 1), row(day, "ABSENT", 1)));
 
-        AttendanceTrendPoint point = service().attendanceTrend(tenantId, day, day).get(0);
+        AttendanceTrendPoint point = service().attendanceTrend(day, day).get(0);
 
         assertThat(point.late()).isEqualTo(1);
         assertThat(point.total()).isEqualTo(4);
@@ -85,11 +83,11 @@ class ReportServiceTest {
     void attendanceTrendKeepsOneEntryPerDayInDateOrder() {
         LocalDate d1 = LocalDate.of(2026, 3, 1);
         LocalDate d2 = LocalDate.of(2026, 3, 2);
-        when(reportRepository.attendanceCountsByDay(any(), any(), any())).thenReturn(List.of(
+        when(reportRepository.attendanceCountsByDay(any(), any())).thenReturn(List.of(
                 row(d1, "PRESENT", 1), row(d1, "ABSENT", 1),
                 row(d2, "PRESENT", 4)));
 
-        List<AttendanceTrendPoint> trend = service().attendanceTrend(tenantId, d1, d2);
+        List<AttendanceTrendPoint> trend = service().attendanceTrend(d1, d2);
 
         assertThat(trend).extracting(AttendanceTrendPoint::date).containsExactly(d1, d2);
         assertThat(trend.get(0).attendancePercentage()).isEqualTo(50.0);
@@ -98,9 +96,9 @@ class ReportServiceTest {
 
     @Test
     void attendanceTrendIsEmptyWhenNothingMarked() {
-        when(reportRepository.attendanceCountsByDay(any(), any(), any())).thenReturn(List.of());
+        when(reportRepository.attendanceCountsByDay(any(), any())).thenReturn(List.of());
 
-        assertThat(service().attendanceTrend(tenantId, LocalDate.now(), LocalDate.now())).isEmpty();
+        assertThat(service().attendanceTrend(LocalDate.now(), LocalDate.now())).isEmpty();
     }
 
     // --- academic performance --------------------------------------
@@ -109,7 +107,7 @@ class ReportServiceTest {
     void academicPerformanceRoundsTheAverageToTwoDecimals() {
         UUID examId = UUID.randomUUID();
         UUID subjectId = UUID.randomUUID();
-        when(reportRepository.averageMarksByExamForClass(any(), any())).thenReturn(List.of(new ExamAverage() {
+        when(reportRepository.averageMarksByExamForClass(any())).thenReturn(List.of(new ExamAverage() {
             public UUID getExamId() {
                 return examId;
             }
@@ -139,7 +137,7 @@ class ReportServiceTest {
             }
         }));
 
-        ExamPerformancePoint point = service().academicPerformance(tenantId, UUID.randomUUID()).get(0);
+        ExamPerformancePoint point = service().academicPerformance(UUID.randomUUID()).get(0);
 
         assertThat(point.examName()).isEqualTo("Mid-term");
         assertThat(point.averageMarks()).isEqualTo(70.67);
@@ -150,7 +148,7 @@ class ReportServiceTest {
 
     @Test
     void feeCollectionComputesOutstandingAsInvoicedMinusCollected() {
-        when(reportRepository.collectionTotals(any())).thenReturn(new CollectionTotals() {
+        when(reportRepository.collectionTotals()).thenReturn(new CollectionTotals() {
             public BigDecimal getInvoiced() {
                 return new BigDecimal("10000.00");
             }
@@ -159,9 +157,9 @@ class ReportServiceTest {
                 return new BigDecimal("5000.00");
             }
         });
-        when(reportRepository.overdueInvoices(any(), any())).thenReturn(List.of());
+        when(reportRepository.overdueInvoices(any())).thenReturn(List.of());
 
-        FeeCollectionReport report = service().feeCollection(tenantId);
+        FeeCollectionReport report = service().feeCollection();
 
         assertThat(report.totalInvoiced()).isEqualByComparingTo("10000.00");
         assertThat(report.totalCollected()).isEqualByComparingTo("5000.00");
@@ -171,7 +169,7 @@ class ReportServiceTest {
 
     @Test
     void feeCollectionTreatsNullSumsAsZeroWhenThereAreNoInvoices() {
-        when(reportRepository.collectionTotals(any())).thenReturn(new CollectionTotals() {
+        when(reportRepository.collectionTotals()).thenReturn(new CollectionTotals() {
             public BigDecimal getInvoiced() {
                 return null;
             }
@@ -180,9 +178,9 @@ class ReportServiceTest {
                 return null;
             }
         });
-        when(reportRepository.overdueInvoices(any(), any())).thenReturn(List.of());
+        when(reportRepository.overdueInvoices(any())).thenReturn(List.of());
 
-        FeeCollectionReport report = service().feeCollection(tenantId);
+        FeeCollectionReport report = service().feeCollection();
 
         assertThat(report.totalInvoiced()).isEqualByComparingTo("0");
         assertThat(report.totalCollected()).isEqualByComparingTo("0");

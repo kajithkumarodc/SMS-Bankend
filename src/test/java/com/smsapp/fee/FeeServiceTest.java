@@ -7,9 +7,6 @@ import com.smsapp.fee.FeeDtos.CreateFeeStructureRequest;
 import com.smsapp.fee.FeeDtos.CreateInvoiceRequest;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -28,9 +25,6 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.RETURNS_SELF;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,12 +50,8 @@ class FeeServiceTest {
     @Mock
     private AuditService auditService;
 
-    @Mock
-    private EntityManager entityManager;
-
     private final RazorpayProperties properties = new RazorpayProperties("rzp_test_key", "secret", "whsec", "INR");
 
-    private final UUID tenantId = UUID.randomUUID();
     private final UUID schoolId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
     private final UUID feeStructureId = UUID.randomUUID();
@@ -69,20 +59,12 @@ class FeeServiceTest {
 
     private FeeService service() {
         return new FeeService(feeStructureRepository, invoiceRepository, schoolRepository, studentRepository,
-                razorpayGateway, properties, auditService, entityManager);
-    }
-
-    @BeforeEach
-    void stubTenantSessionQuery() {
-        Query query = mock(Query.class, RETURNS_SELF);
-        lenient().when(entityManager.createNativeQuery(anyString())).thenReturn(query);
-        lenient().when(query.getSingleResult()).thenReturn("");
+                razorpayGateway, properties, auditService);
     }
 
     private FeeStructure structure(String amount) {
         FeeStructure s = new FeeStructure();
         s.setId(feeStructureId);
-        s.setTenantId(tenantId);
         s.setSchoolId(schoolId);
         s.setName("Term 1 Tuition");
         s.setAmount(new BigDecimal(amount));
@@ -93,7 +75,6 @@ class FeeServiceTest {
     private Invoice invoice(String status) {
         Invoice i = new Invoice();
         i.setId(invoiceId);
-        i.setTenantId(tenantId);
         i.setStudentId(studentId);
         i.setFeeStructureId(feeStructureId);
         i.setAmount(new BigDecimal("5000.00"));
@@ -104,24 +85,23 @@ class FeeServiceTest {
     // --- Fee structures ----------------------------------------------
 
     @Test
-    void createsFeeStructureScopedToTenant() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(true);
+    void createsFeeStructure() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
         when(feeStructureRepository.save(any(FeeStructure.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        FeeStructure created = service().createFeeStructure(tenantId, new CreateFeeStructureRequest(
+        FeeStructure created = service().createFeeStructure(new CreateFeeStructureRequest(
                 schoolId, "Term 1 Tuition", new BigDecimal("5000.00"), LocalDate.of(2026, 6, 1)));
 
-        assertThat(created.getTenantId()).isEqualTo(tenantId);
         assertThat(created.getSchoolId()).isEqualTo(schoolId);
         assertThat(created.getName()).isEqualTo("Term 1 Tuition");
         assertThat(created.getAmount()).isEqualByComparingTo("5000.00");
     }
 
     @Test
-    void rejectsFeeStructureForSchoolNotInTenantWith404() {
-        when(schoolRepository.existsByIdAndTenantId(schoolId, tenantId)).thenReturn(false);
+    void rejectsFeeStructureForNonexistentSchoolWith404() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().createFeeStructure(tenantId, new CreateFeeStructureRequest(
+        assertThatThrownBy(() -> service().createFeeStructure(new CreateFeeStructureRequest(
                 schoolId, "X", new BigDecimal("10.00"), LocalDate.of(2026, 6, 1))))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
@@ -133,14 +113,12 @@ class FeeServiceTest {
 
     @Test
     void createsInvoiceCopyingTheAmountFromTheFeeStructure() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(new Student()));
-        when(feeStructureRepository.findByIdAndTenantId(feeStructureId, tenantId))
-                .thenReturn(Optional.of(structure("5000.00")));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(new Student()));
+        when(feeStructureRepository.findById(feeStructureId)).thenReturn(Optional.of(structure("5000.00")));
         when(invoiceRepository.save(any(Invoice.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Invoice created = service().createInvoice(tenantId, new CreateInvoiceRequest(studentId, feeStructureId));
+        Invoice created = service().createInvoice(new CreateInvoiceRequest(studentId, feeStructureId));
 
-        assertThat(created.getTenantId()).isEqualTo(tenantId);
         assertThat(created.getStudentId()).isEqualTo(studentId);
         assertThat(created.getFeeStructureId()).isEqualTo(feeStructureId);
         assertThat(created.getStatus()).isEqualTo(InvoiceStatus.PENDING);
@@ -148,10 +126,10 @@ class FeeServiceTest {
     }
 
     @Test
-    void rejectsInvoiceForStudentNotInTenantWith404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+    void rejectsInvoiceForNonexistentStudentWith404() {
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().createInvoice(tenantId, new CreateInvoiceRequest(studentId, feeStructureId)))
+        assertThatThrownBy(() -> service().createInvoice(new CreateInvoiceRequest(studentId, feeStructureId)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -159,11 +137,11 @@ class FeeServiceTest {
     }
 
     @Test
-    void rejectsInvoiceForFeeStructureNotInTenantWith404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(new Student()));
-        when(feeStructureRepository.findByIdAndTenantId(feeStructureId, tenantId)).thenReturn(Optional.empty());
+    void rejectsInvoiceForNonexistentFeeStructureWith404() {
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(new Student()));
+        when(feeStructureRepository.findById(feeStructureId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().createInvoice(tenantId, new CreateInvoiceRequest(studentId, feeStructureId)))
+        assertThatThrownBy(() -> service().createInvoice(new CreateInvoiceRequest(studentId, feeStructureId)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -171,10 +149,10 @@ class FeeServiceTest {
     }
 
     @Test
-    void listInvoicesRejectsAStudentNotInTenantWith404() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.empty());
+    void listInvoicesRejectsANonexistentStudentWith404() {
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().listInvoicesForStudent(tenantId, studentId))
+        assertThatThrownBy(() -> service().listInvoicesForStudent(studentId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -183,12 +161,12 @@ class FeeServiceTest {
 
     @Test
     void checkoutCreatesARazorpayOrderAndReturnsOnlySafeFields() {
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.of(invoice(InvoiceStatus.PENDING)));
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.of(invoice(InvoiceStatus.PENDING)));
         when(invoiceRepository.save(any(Invoice.class))).thenAnswer(inv -> inv.getArgument(0));
         when(razorpayGateway.createOrder(anyLong(), eq("INR"), anyString(), anyMap())).thenReturn("order_TEST123");
         when(razorpayGateway.keyId()).thenReturn("rzp_test_key");
 
-        CheckoutResponse response = service().startCheckout(tenantId, invoiceId, null);
+        CheckoutResponse response = service().startCheckout(invoiceId, null);
 
         assertThat(response.razorpayOrderId()).isEqualTo("order_TEST123");
         assertThat(response.razorpayKeyId()).isEqualTo("rzp_test_key");
@@ -197,10 +175,10 @@ class FeeServiceTest {
     }
 
     @Test
-    void checkoutRejectsAnInvoiceNotInTenantWith404() {
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.empty());
+    void checkoutRejectsANonexistentInvoiceWith404() {
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().startCheckout(tenantId, invoiceId, null))
+        assertThatThrownBy(() -> service().startCheckout(invoiceId, null))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -209,9 +187,9 @@ class FeeServiceTest {
 
     @Test
     void checkoutRejectsAnAlreadyPaidInvoiceWith409() {
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.of(invoice(InvoiceStatus.PAID)));
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.of(invoice(InvoiceStatus.PAID)));
 
-        assertThatThrownBy(() -> service().startCheckout(tenantId, invoiceId, null))
+        assertThatThrownBy(() -> service().startCheckout(invoiceId, null))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
@@ -221,12 +199,10 @@ class FeeServiceTest {
     @Test
     void checkoutByAParentRejectsAnInvoiceThatIsNotTheirChildsWith404() {
         UUID guardianUserId = UUID.randomUUID();
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId))
-                .thenReturn(Optional.of(invoice(InvoiceStatus.PENDING)));
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
-                .thenReturn(Optional.empty());
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.of(invoice(InvoiceStatus.PENDING)));
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().startCheckout(tenantId, invoiceId, guardianUserId))
+        assertThatThrownBy(() -> service().startCheckout(invoiceId, guardianUserId))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -236,15 +212,14 @@ class FeeServiceTest {
     @Test
     void checkoutByAParentIsAllowedForTheirOwnChildsInvoice() {
         UUID guardianUserId = UUID.randomUUID();
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId))
-                .thenReturn(Optional.of(invoice(InvoiceStatus.PENDING)));
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.of(invoice(InvoiceStatus.PENDING)));
         when(invoiceRepository.save(any(Invoice.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(studentRepository.findByIdAndTenantIdAndGuardianUserId(studentId, tenantId, guardianUserId))
+        when(studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId))
                 .thenReturn(Optional.of(new com.smsapp.student.Student()));
         when(razorpayGateway.createOrder(anyLong(), anyString(), anyString(), anyMap())).thenReturn("order_P1");
         when(razorpayGateway.keyId()).thenReturn("rzp_test_key");
 
-        CheckoutResponse response = service().startCheckout(tenantId, invoiceId, guardianUserId);
+        CheckoutResponse response = service().startCheckout(invoiceId, guardianUserId);
 
         assertThat(response.razorpayOrderId()).isEqualTo("order_P1");
     }
@@ -255,15 +230,15 @@ class FeeServiceTest {
     void markInvoicePaidFlipsAPendingInvoiceToPaid() {
         Invoice pending = invoice(InvoiceStatus.PENDING);
         pending.setRazorpayOrderId("order_1");
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.of(pending));
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.of(pending));
         when(invoiceRepository.save(any(Invoice.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service().markInvoicePaid(tenantId, invoiceId, "order_1", "pay_1");
+        service().markInvoicePaid(invoiceId, "order_1", "pay_1");
 
         assertThat(pending.getStatus()).isEqualTo(InvoiceStatus.PAID);
         assertThat(pending.getRazorpayPaymentId()).isEqualTo("pay_1");
         assertThat(pending.getPaidAt()).isNotNull();
-        verify(auditService).logAs(eq(tenantId), any(), anyString(), anyString(), eq(invoiceId), anyMap());
+        verify(auditService).logAs(any(), anyString(), anyString(), eq(invoiceId), anyMap());
     }
 
     @Test
@@ -271,22 +246,22 @@ class FeeServiceTest {
         Invoice paid = invoice(InvoiceStatus.PAID);
         paid.setRazorpayOrderId("order_1");
         paid.setRazorpayPaymentId("pay_original");
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.of(paid));
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.of(paid));
 
-        service().markInvoicePaid(tenantId, invoiceId, "order_1", "pay_duplicate");
+        service().markInvoicePaid(invoiceId, "order_1", "pay_duplicate");
 
         assertThat(paid.getRazorpayPaymentId()).isEqualTo("pay_original");
         verify(invoiceRepository, never()).save(any());
-        verify(auditService, never()).logAs(any(), any(), anyString(), anyString(), any(), anyMap());
+        verify(auditService, never()).logAs(any(), anyString(), anyString(), any(), anyMap());
     }
 
     @Test
     void markInvoicePaidIgnoresAnOrderIdThatDoesNotMatchTheInvoice() {
         Invoice pending = invoice(InvoiceStatus.PENDING);
         pending.setRazorpayOrderId("order_real");
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.of(pending));
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.of(pending));
 
-        service().markInvoicePaid(tenantId, invoiceId, "order_forged", "pay_x");
+        service().markInvoicePaid(invoiceId, "order_forged", "pay_x");
 
         assertThat(pending.getStatus()).isEqualTo(InvoiceStatus.PENDING);
         verify(invoiceRepository, never()).save(any());
@@ -294,32 +269,30 @@ class FeeServiceTest {
 
     @Test
     void markInvoicePaidIsANoOpForAnUnknownInvoice() {
-        when(invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)).thenReturn(Optional.empty());
-        when(invoiceRepository.findByTenantIdAndRazorpayOrderId(tenantId, "order_1")).thenReturn(Optional.empty());
+        when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.empty());
+        when(invoiceRepository.findByRazorpayOrderId("order_1")).thenReturn(Optional.empty());
 
-        service().markInvoicePaid(tenantId, invoiceId, "order_1", "pay_1");
+        service().markInvoicePaid(invoiceId, "order_1", "pay_1");
 
         verify(invoiceRepository, never()).save(any());
     }
 
     @Test
     void checkoutAndWebhookAgreeOnTheOrderNoteKeys() {
-        assertThat(FeeService.NOTE_TENANT_ID).isEqualTo("tenantId");
         assertThat(FeeService.NOTE_INVOICE_ID).isEqualTo("invoiceId");
     }
 
     @Test
     void createInvoiceAuditsWithTheNewInvoiceId() {
-        when(studentRepository.findByIdAndTenantId(studentId, tenantId)).thenReturn(Optional.of(new Student()));
-        when(feeStructureRepository.findByIdAndTenantId(feeStructureId, tenantId))
-                .thenReturn(Optional.of(structure("5000.00")));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(new Student()));
+        when(feeStructureRepository.findById(feeStructureId)).thenReturn(Optional.of(structure("5000.00")));
         when(invoiceRepository.save(any(Invoice.class))).thenAnswer(inv -> {
             Invoice i = inv.getArgument(0);
             i.setId(invoiceId);
             return i;
         });
 
-        service().createInvoice(tenantId, new CreateInvoiceRequest(studentId, feeStructureId));
+        service().createInvoice(new CreateInvoiceRequest(studentId, feeStructureId));
 
         verify(auditService).log(anyString(), anyString(), eq(invoiceId), anyMap());
     }

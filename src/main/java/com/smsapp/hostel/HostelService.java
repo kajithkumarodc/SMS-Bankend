@@ -19,10 +19,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Hostel blocks, rooms and student allocation (plan section 2). Every read and
- * write is explicitly scoped by {@code tenant_id} on top of the RLS policy. A
- * cross-tenant block / room / student reference is reported as 404, never 403, so
- * the API never leaks that the row exists.
+ * Hostel blocks, rooms and student allocation (plan section 2). A nonexistent
+ * block / room / student reference is reported as 404, never 403, so the API
+ * never leaks that the row exists.
  */
 @Service
 public class HostelService {
@@ -47,9 +46,8 @@ public class HostelService {
     // --- Blocks -------------------------------------------------
 
     @Transactional
-    public HostelBlock createBlock(UUID tenantId, CreateBlockRequest request) {
+    public HostelBlock createBlock(CreateBlockRequest request) {
         HostelBlock block = new HostelBlock();
-        block.setTenantId(tenantId);
         block.setName(request.name().trim());
         HostelBlock saved = blockRepository.save(block);
 
@@ -59,28 +57,27 @@ public class HostelService {
     }
 
     @Transactional(readOnly = true)
-    public List<HostelBlock> listBlocks(UUID tenantId) {
-        return blockRepository.findByTenantIdOrderByName(tenantId);
+    public List<HostelBlock> listBlocks() {
+        return blockRepository.findAllByOrderByName();
     }
 
     // --- Rooms -------------------------------------------------
 
     /**
-     * @throws ApiException 404 if the block is not in the caller's tenant, 409 if the
-     *         room number is already used within that block.
+     * @throws ApiException 404 if the block does not exist, 409 if the room number
+     *         is already used within that block.
      */
     @Transactional
-    public HostelRoom addRoom(UUID tenantId, UUID blockId, CreateRoomRequest request) {
-        if (!blockRepository.existsByIdAndTenantId(blockId, tenantId)) {
+    public HostelRoom addRoom(UUID blockId, CreateRoomRequest request) {
+        if (!blockRepository.existsById(blockId)) {
             throw new ApiException(BLOCK_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
         String roomNumber = request.roomNumber().trim();
-        if (roomRepository.existsByTenantIdAndBlockIdAndRoomNumber(tenantId, blockId, roomNumber)) {
+        if (roomRepository.existsByBlockIdAndRoomNumber(blockId, roomNumber)) {
             throw roomNumberConflict(roomNumber);
         }
 
         HostelRoom room = new HostelRoom();
-        room.setTenantId(tenantId);
         room.setBlockId(blockId);
         room.setRoomNumber(roomNumber);
         room.setCapacity(request.capacity());
@@ -102,14 +99,14 @@ public class HostelService {
     /**
      * Rooms of a block, each with its current occupancy.
      *
-     * @throws ApiException 404 if the block is not in the caller's tenant.
+     * @throws ApiException 404 if the block does not exist.
      */
     @Transactional(readOnly = true)
-    public List<RoomWithOccupancy> listRooms(UUID tenantId, UUID blockId) {
-        if (!blockRepository.existsByIdAndTenantId(blockId, tenantId)) {
+    public List<RoomWithOccupancy> listRooms(UUID blockId) {
+        if (!blockRepository.existsById(blockId)) {
             throw new ApiException(BLOCK_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
-        return roomRepository.findRoomsWithOccupancy(tenantId, blockId);
+        return roomRepository.findRoomsWithOccupancy(blockId);
     }
 
     // --- Student <-> room ------------------------------------
@@ -117,19 +114,19 @@ public class HostelService {
     /**
      * Allocates (or, with a null {@code roomId}, deallocates) a student's hostel room.
      *
-     * @throws ApiException 404 if the student is not in the caller's tenant, or if
-     *         {@code roomId} is given but not in the caller's tenant; 400 if the
-     *         target room is already at full capacity.
+     * @throws ApiException 404 if the student does not exist, or if {@code roomId}
+     *         is given but does not exist; 400 if the target room is already at
+     *         full capacity.
      */
     @Transactional
-    public Student allocateStudentRoom(UUID tenantId, UUID studentId, UUID roomId) {
-        Student student = studentRepository.findByIdAndTenantId(studentId, tenantId)
+    public Student allocateStudentRoom(UUID studentId, UUID roomId) {
+        Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new ApiException(STUDENT_NOT_FOUND, HttpStatus.NOT_FOUND));
 
         if (roomId != null && !roomId.equals(student.getHostelRoomId())) {
-            HostelRoom room = roomRepository.findByIdAndTenantId(roomId, tenantId)
+            HostelRoom room = roomRepository.findById(roomId)
                     .orElseThrow(() -> new ApiException(ROOM_NOT_FOUND, HttpStatus.NOT_FOUND));
-            long occupied = studentRepository.countByTenantIdAndHostelRoomId(tenantId, roomId);
+            long occupied = studentRepository.countByHostelRoomId(roomId);
             if (occupied >= room.getCapacity()) {
                 throw new ApiException("This room is already at full capacity", HttpStatus.BAD_REQUEST);
             }
@@ -148,17 +145,16 @@ public class HostelService {
     /**
      * The students allocated to a room, for staff.
      *
-     * @throws ApiException 404 if the room is not in the caller's tenant, or not in
-     *         the given block.
+     * @throws ApiException 404 if the room does not exist, or not in the given block.
      */
     @Transactional(readOnly = true)
-    public List<Student> studentsInRoom(UUID tenantId, UUID blockId, UUID roomId) {
-        HostelRoom room = roomRepository.findByIdAndTenantId(roomId, tenantId)
+    public List<Student> studentsInRoom(UUID blockId, UUID roomId) {
+        HostelRoom room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new ApiException(ROOM_NOT_FOUND, HttpStatus.NOT_FOUND));
         if (!room.getBlockId().equals(blockId)) {
             throw new ApiException(ROOM_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
-        return studentRepository.findByTenantIdAndHostelRoomIdOrderByFullName(tenantId, roomId);
+        return studentRepository.findByHostelRoomIdOrderByFullName(roomId);
     }
 
     /**
@@ -171,17 +167,17 @@ public class HostelService {
      *         been removed) -- a clean "not allocated", not an error.
      */
     @Transactional(readOnly = true)
-    public HostelAllocation allocationForRoom(UUID tenantId, UUID studentId, UUID roomId) {
+    public HostelAllocation allocationForRoom(UUID studentId, UUID roomId) {
         if (roomId == null) {
             throw new ApiException("No hostel room is allocated", HttpStatus.NOT_FOUND);
         }
-        HostelRoom room = roomRepository.findByIdAndTenantId(roomId, tenantId)
+        HostelRoom room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new ApiException("No hostel room is allocated", HttpStatus.NOT_FOUND));
-        HostelBlock block = blockRepository.findByIdAndTenantId(room.getBlockId(), tenantId)
+        HostelBlock block = blockRepository.findById(room.getBlockId())
                 .orElseThrow(() -> new ApiException("No hostel room is allocated", HttpStatus.NOT_FOUND));
 
         List<String> roommates = studentRepository
-                .findByTenantIdAndHostelRoomIdOrderByFullName(tenantId, roomId)
+                .findByHostelRoomIdOrderByFullName(roomId)
                 .stream()
                 .filter(s -> !s.getId().equals(studentId))
                 .map(Student::getFullName)

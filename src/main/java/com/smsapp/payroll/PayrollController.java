@@ -36,14 +36,13 @@ public class PayrollController {
     /**
      * Generate a payroll record for a staff member's month/year. SCHOOL_ADMIN only.
      * {@code netPay = baseSalary - deductions}, {@code baseSalary} taken from the
-     * staff member's current profile. 404 if they have no staff profile in the
-     * caller's tenant, 409 if a record already exists for that staff member + month + year.
+     * staff member's current profile. 404 if they have no staff profile, 409 if a
+     * record already exists for that staff member + month + year.
      */
     @PostMapping("/payroll")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    public ResponseEntity<PayrollRecordResponse> generate(@Valid @RequestBody GeneratePayrollRequest request,
-                                                          Authentication authentication) {
-        PayrollRecord created = payrollService.generate(tenantId(authentication), request);
+    public ResponseEntity<PayrollRecordResponse> generate(@Valid @RequestBody GeneratePayrollRequest request) {
+        PayrollRecord created = payrollService.generate(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(PayrollRecordResponse.from(created));
     }
 
@@ -51,19 +50,11 @@ public class PayrollController {
     @GetMapping("/me/payroll")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
     List<PayrollRecordResponse> ownPayroll(Authentication authentication) {
-        return payrollService.ownPayroll(tenantId(authentication), userId(authentication)).stream()
+        return payrollService.ownPayroll(userId(authentication)).stream()
                 .map(PayrollRecordResponse::from).toList();
     }
 
-    private static UUID tenantId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getClaimAsString("tenant_id"));
-    }
-
     private static UUID userId(Authentication authentication) {
-        return UUID.fromString(jwt(authentication).getSubject());
-    }
-
-    private static Jwt jwt(Authentication authentication) {
-        return (Jwt) authentication.getPrincipal();
+        return UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
     }
 }
