@@ -1,8 +1,12 @@
 package com.smsapp.report;
 
 import com.smsapp.report.ReportDtos.AttendanceTrendPoint;
+import com.smsapp.report.ReportDtos.BalanceFeeEntry;
 import com.smsapp.report.ReportDtos.ExamPerformancePoint;
 import com.smsapp.report.ReportDtos.FeeCollectionReport;
+import com.smsapp.report.ReportDtos.FeeCollectionTransactionsReport;
+import com.smsapp.report.ReportDtos.DailyCollectionPoint;
+import com.smsapp.user.Permissions;
 import com.smsapp.user.Roles;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -51,5 +55,38 @@ public class ReportController {
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     FeeCollectionReport feeCollection() {
         return reportService.feeCollection();
+    }
+
+    /**
+     * Balance Fees Report (plan Phase 5 part K): every student's totals across all their fee
+     * invoices, optionally filtered to one class. New endpoint -- permission-based (FEE_VIEW),
+     * reaching ACCOUNTANT as well as SCHOOL_ADMIN/SUPER_ADMIN.
+     */
+    @GetMapping("/fee-balances")
+    @PreAuthorize(Permissions.HAS_FEE_VIEW)
+    List<BalanceFeeEntry> feeBalances(@RequestParam(required = false) UUID classId) {
+        return reportService.balanceFees(classId);
+    }
+
+    /** Daily Collection (plan Phase 5 part K): real payments over an inclusive date range, grouped by day then method. */
+    @GetMapping("/fee-daily-collection")
+    @PreAuthorize(Permissions.HAS_FEE_VIEW)
+    List<DailyCollectionPoint> feeDailyCollection(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return reportService.dailyCollection(from, to);
+    }
+
+    /** Fee Collection Report (plan Phase 5 part K): filtered transaction list + summary totals. */
+    @GetMapping("/fee-collection-transactions")
+    @PreAuthorize(Permissions.HAS_FEE_VIEW)
+    FeeCollectionTransactionsReport feeCollectionTransactions(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) UUID collectedByUserId,
+            @RequestParam(required = false) UUID studentId,
+            @RequestParam(required = false) UUID classId) {
+        return reportService.feeCollectionTransactions(from, to, method, collectedByUserId, studentId, classId);
     }
 }

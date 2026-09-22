@@ -38,29 +38,45 @@ public class FeeController {
         this.feeService = feeService;
     }
 
-    /** Create a fee structure. SCHOOL_ADMIN only; a TEACHER gets 403. 404 if the school doesn't exist. */
+    /**
+     * Create a fee structure -- either a class-specific, academic-year-scoped
+     * breakdown ({@code items}: Application/Admission/Term I-IV, matching a real
+     * fee-structure sheet) or a flat {@code amount}. SCHOOL_ADMIN only; a TEACHER
+     * gets 403. 404 if the school (or the given class) doesn't exist.
+     */
     @PostMapping("/fee-structures")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
     public ResponseEntity<FeeStructureResponse> createFeeStructure(
             @Valid @RequestBody CreateFeeStructureRequest request) {
         FeeStructure created = feeService.createFeeStructure(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(FeeStructureResponse.from(created));
-    }
-
-    /** All fee structures (most recent first). */
-    @GetMapping("/fee-structures")
-    List<FeeStructureResponse> listFeeStructures() {
-        return feeService.listFeeStructures().stream().map(FeeStructureResponse::from).toList();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(FeeStructureResponse.from(created, feeService.itemResponsesFor(created)));
     }
 
     /**
-     * Generate a PENDING invoice for a student against a fee structure. SCHOOL_ADMIN
-     * only. 404 if the student or the fee structure does not exist.
+     * Fee structures (most recent first), each with its computed total and line-item
+     * breakdown. Optionally filtered to one class (matches structures specific to
+     * that class or applicable to every class) and/or one academic year.
+     */
+    @GetMapping("/fee-structures")
+    List<FeeStructureResponse> listFeeStructures(
+            @RequestParam(required = false) UUID classId,
+            @RequestParam(required = false) String academicYear) {
+        return feeService.listFeeStructures(classId, academicYear).stream()
+                .map(structure -> FeeStructureResponse.from(structure, feeService.itemResponsesFor(structure)))
+                .toList();
+    }
+
+    /**
+     * Generate a PENDING invoice for a student against a fee structure -- the fee
+     * "assignment" of plan Phase 5 part C. 404 if the student or the fee structure
+     * does not exist, 409 if the student already has an invoice for it.
      */
     @PostMapping("/invoices")
     @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
-    public ResponseEntity<InvoiceResponse> createInvoice(@Valid @RequestBody CreateInvoiceRequest request) {
-        Invoice created = feeService.createInvoice(request);
+    public ResponseEntity<InvoiceResponse> createInvoice(@Valid @RequestBody CreateInvoiceRequest request,
+                                                         Authentication authentication) {
+        Invoice created = feeService.createInvoice(request, actorId(authentication));
         return ResponseEntity.status(HttpStatus.CREATED).body(InvoiceResponse.from(created));
     }
 
@@ -98,6 +114,10 @@ public class FeeController {
         if (isAdmin) {
             return null;
         }
+        return UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
+    }
+
+    private static UUID actorId(Authentication authentication) {
         return UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
     }
 }

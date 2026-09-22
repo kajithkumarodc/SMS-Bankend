@@ -87,12 +87,12 @@ class DevToolsIntegrationTest {
             UUID parentAId = seedUser(st, PARENT_A, parentRoleA);
             UUID otherParentAId = seedUser(st, OTHER_PARENT_A, parentRoleA);
 
-            st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status, "
+            st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, admission_number, status, "
                     + "guardian_user_id) VALUES ('" + studentAId + "', '" + schoolAId
-                    + "', 'Anaya', 'ADM-Anaya', 'ACTIVE', '" + parentAId + "')");
-            st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status, "
+                    + "', 'Anaya', 'Anaya', 'Anaya', 'ADM-Anaya', 'ACTIVE', '" + parentAId + "')");
+            st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, admission_number, status, "
                     + "guardian_user_id) VALUES ('" + otherStudentAId + "', '" + schoolAId
-                    + "', 'Bhavya', 'ADM-Bhavya', 'ACTIVE', '" + otherParentAId + "')");
+                    + "', 'Bhavya', 'Bhavya', 'Bhavya', 'ADM-Bhavya', 'ACTIVE', '" + otherParentAId + "')");
             st.execute("INSERT INTO fee_structures (id, school_id, name, amount, due_date) VALUES ('"
                     + feeStructureAId + "', '" + schoolAId + "', 'Term 1', 5000.00, '2026-06-01')");
         }

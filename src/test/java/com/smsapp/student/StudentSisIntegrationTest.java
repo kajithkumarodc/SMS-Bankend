@@ -80,8 +80,9 @@ class StudentSisIntegrationTest {
             seedUser(st, STUDENT_A, "Student User A", "STUDENT");
             seedUser(st, PARENT_A, "Parent User A", "PARENT");
 
-            st.execute("INSERT INTO students (id, school_id, full_name, guardian_name, admission_number, status) VALUES ('"
-                    + studentA + "', '" + schoolA + "', 'Existing A', 'Old Guardian', 'ADM-A-1', 'ACTIVE')");
+            st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, guardian_name, "
+                    + "admission_number, status) VALUES ('"
+                    + studentA + "', '" + schoolA + "', 'Existing A', 'Existing', 'A', 'Old Guardian', 'ADM-A-1', 'ACTIVE')");
         }
     }
 
@@ -103,8 +104,8 @@ class StudentSisIntegrationTest {
     }
 
     private String createBody(UUID schoolId, String admissionNumber) {
-        return "{\"schoolId\":\"" + schoolId + "\",\"fullName\":\"New Student\",\"admissionNumber\":\""
-                + admissionNumber + "\"}";
+        return "{\"schoolId\":\"" + schoolId + "\",\"firstName\":\"New\",\"lastName\":\"Student\",\"admissionNumber\":\""
+                + admissionNumber + "\",\"dateOfBirth\":\"2015-01-01\"}";
     }
 
     // --- Listing / existence checks ----------------------------------------
@@ -201,13 +202,13 @@ class StudentSisIntegrationTest {
         mockMvc.perform(post("/api/v1/students")
                         .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolId\":\"" + schoolA + "\",\"fullName\":\"  \"}"))
+                        .content("{\"schoolId\":\"" + schoolA + "\",\"firstName\":\"  \"}"))
                 .andExpect(status().isBadRequest());
     }
 
     // --- Edit (PUT) -----------------------------------------------------
 
-    private static final String UPDATE_BODY = "{\"fullName\":\"Existing A (renamed)\","
+    private static final String UPDATE_BODY = "{\"firstName\":\"Existing\",\"lastName\":\"A (renamed)\","
             + "\"guardianName\":\"New Guardian\",\"guardianContact\":\"+1 222 333\",\"status\":\"ACTIVE\"}";
 
     @Test
@@ -216,7 +217,7 @@ class StudentSisIntegrationTest {
                         .cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         // admissionNumber in the body is ignored -- the DTO has no such field
-                        .content("{\"fullName\":\"Existing A (renamed)\",\"guardianName\":\"New Guardian\","
+                        .content("{\"firstName\":\"Existing\",\"lastName\":\"A (renamed)\",\"guardianName\":\"New Guardian\","
                                 + "\"guardianContact\":\"+1 222 333\",\"status\":\"ACTIVE\",\"admissionNumber\":\"HACKED\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fullName").value("Existing A (renamed)"))

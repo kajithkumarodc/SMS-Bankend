@@ -1,6 +1,7 @@
 package com.smsapp.academics;
 
 import com.smsapp.academics.AcademicsDtos.AssignSubjectRequest;
+import com.smsapp.academics.AcademicsDtos.AssignTeacherRequest;
 import com.smsapp.academics.AcademicsDtos.ClassResponse;
 import com.smsapp.academics.AcademicsDtos.CreateClassRequest;
 import com.smsapp.academics.AcademicsDtos.CreateSectionRequest;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,10 +29,13 @@ public class ClassController {
 
     private final ClassService classService;
     private final SubjectService subjectService;
+    private final TeacherAssignmentService teacherAssignmentService;
 
-    public ClassController(ClassService classService, SubjectService subjectService) {
+    public ClassController(ClassService classService, SubjectService subjectService,
+                           TeacherAssignmentService teacherAssignmentService) {
         this.classService = classService;
         this.subjectService = subjectService;
+        this.teacherAssignmentService = teacherAssignmentService;
     }
 
     /** Create a class. SCHOOL_ADMIN only; a TEACHER gets 403. */
@@ -73,5 +78,17 @@ public class ClassController {
     @GetMapping("/{classId}/subjects")
     List<SubjectResponse> classSubjects(@PathVariable UUID classId) {
         return subjectService.listForClass(classId).stream().map(SubjectResponse::from).toList();
+    }
+
+    /**
+     * Assigns (or, with a null body field, unassigns) the teacher for a class/subject pairing
+     * (plan Phase 4 section C). SCHOOL_ADMIN only. 404 if the subject isn't linked to the class yet.
+     */
+    @PatchMapping("/{classId}/subjects/{subjectId}/teacher")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    ResponseEntity<Void> assignTeacher(@PathVariable UUID classId, @PathVariable UUID subjectId,
+                                       @RequestBody AssignTeacherRequest request) {
+        teacherAssignmentService.assignTeacher(classId, subjectId, request.teacherId());
+        return ResponseEntity.noContent().build();
     }
 }

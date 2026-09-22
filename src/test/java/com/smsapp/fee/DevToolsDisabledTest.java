@@ -84,8 +84,8 @@ class DevToolsDisabledTest {
             st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('"
                     + userId + "', '" + ADMIN + "', '" + passwordEncoder.encode(PASSWORD) + "', '" + ADMIN + "')");
             st.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userId + "', '" + roleId + "')");
-            st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status) VALUES ('"
-                    + studentId + "', '" + schoolId + "', 'Anaya', 'ADM-Anaya', 'ACTIVE')");
+            st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, admission_number, status) VALUES ('"
+                    + studentId + "', '" + schoolId + "', 'Anaya', 'Anaya', 'Anaya', 'ADM-Anaya', 'ACTIVE')");
             st.execute("INSERT INTO fee_structures (id, school_id, name, amount, due_date) VALUES ('"
                     + feeStructureId + "', '" + schoolId + "', 'Term 1', 5000.00, '2026-06-01')");
         }

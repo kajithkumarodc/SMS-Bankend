@@ -24,6 +24,8 @@ final class PortalDtos {
             UUID id,
             String fullName,
             String admissionNumber,
+            String rollNumber,
+            String photoUrl,
             LocalDate dateOfBirth,
             String guardianName,
             String guardianContact,
@@ -35,6 +37,8 @@ final class PortalDtos {
                     student.getId(),
                     student.getFullName(),
                     student.getAdmissionNumber(),
+                    student.getRollNumber(),
+                    student.getPhotoUrl(),
                     student.getDateOfBirth(),
                     student.getGuardianName(),
                     student.getGuardianContact(),
@@ -59,6 +63,11 @@ final class PortalDtos {
             UUID studentId,
             UUID feeStructureId,
             BigDecimal amount,
+            BigDecimal discountAmount,
+            BigDecimal netAmount,
+            BigDecimal lateFeeAmount,
+            BigDecimal paidAmount,
+            BigDecimal balance,
             String status,
             String razorpayOrderId,
             OffsetDateTime createdAt,
@@ -66,8 +75,9 @@ final class PortalDtos {
 
         static InvoiceView from(Invoice invoice) {
             return new InvoiceView(invoice.getId(), invoice.getStudentId(), invoice.getFeeStructureId(),
-                    invoice.getAmount(), invoice.getStatus(), invoice.getRazorpayOrderId(),
-                    invoice.getCreatedAt(), invoice.getPaidAt());
+                    invoice.getAmount(), invoice.getDiscountAmount(), invoice.getNetAmount(),
+                    invoice.getLateFeeAmount(), invoice.getPaidAmount(), invoice.getBalance(), invoice.getStatus(),
+                    invoice.getRazorpayOrderId(), invoice.getCreatedAt(), invoice.getPaidAt());
         }
     }
 

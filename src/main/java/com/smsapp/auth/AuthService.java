@@ -55,10 +55,14 @@ public class AuthService {
         }
 
         List<String> roles = roleRepository.findNamesByUserId(user.getId());
+        // RBAC Phase 1: database-driven permission grants, baked into the JWT at
+        // login same as roles -- no per-request DB lookup needed for authorization.
+        List<String> permissions = roleRepository.findPermissionNamesByUserId(user.getId());
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(user.getId().toString())
                 .claim("roles", roles)
+                .claim("permissions", permissions)
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(3600))
                 .build();
@@ -69,7 +73,8 @@ public class AuthService {
         auditService.logAs(user.getId(), AuditActions.LOGIN_SUCCESS, AuditActions.USER, user.getId(),
                 Map.of(DETAIL_EMAIL, request.email()));
 
-        return new LoginResponse(token, new AuthenticatedUser(user.getId().toString(), user.getFullName(), roles));
+        return new LoginResponse(token, new AuthenticatedUser(user.getId().toString(), user.getFullName(), roles,
+                permissions, user.isMustChangePassword()));
     }
 
     private void auditLoginFailed(UUID userId, String email, String reason) {
@@ -83,6 +88,7 @@ public class AuthService {
     public record LoginResponse(String token, AuthenticatedUser user) {
     }
 
-    public record AuthenticatedUser(String id, String name, List<String> roles) {
+    public record AuthenticatedUser(String id, String name, List<String> roles, List<String> permissions,
+                                    boolean mustChangePassword) {
     }
 }

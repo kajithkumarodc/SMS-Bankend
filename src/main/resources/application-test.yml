@@ -36,3 +36,14 @@ spring:
 
 server:
   port: 0
+
+app:
+  # Isolated per test run under target/ (cleaned by `mvn clean`), never the
+  # dev/prod uploads directory.
+  storage:
+    base-dir: ${STORAGE_BASE_DIR:./target/test-uploads}
+  # No SMTP server is available in the test environment -- disabled outright so
+  # EmailGateway always takes its log-only path instead of a real (or failing)
+  # connection attempt on every test that triggers a notification.
+  email:
+    enabled: false

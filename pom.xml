@@ -40,6 +40,12 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
         <dependency>
+            <!-- Free/self-hosted email (plan Phase 4.5 part 14/16): plain SMTP, works against any
+                 free provider or a local dev server (MailHog etc.), no paid email API. -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>

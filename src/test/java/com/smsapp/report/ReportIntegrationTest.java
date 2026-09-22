@@ -139,8 +139,8 @@ class ReportIntegrationTest {
 
     private static UUID seedStudent(Statement st, UUID schoolId, String name) throws SQLException {
         UUID id = UUID.randomUUID();
-        st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status) VALUES ('"
-                + id + "', '" + schoolId + "', '" + name + "', 'ADM-" + id + "', 'ACTIVE')");
+        st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, admission_number, status) VALUES ('"
+                + id + "', '" + schoolId + "', '" + name + "', '" + name + "', '" + name + "', 'ADM-" + id + "', 'ACTIVE')");
         return id;
     }
 
@@ -174,9 +174,18 @@ class ReportIntegrationTest {
 
     private static void seedInvoice(Statement st, UUID studentId, UUID feeStructureId, String amount,
                                     String status) throws SQLException {
-        st.execute("INSERT INTO invoices (id, student_id, fee_structure_id, amount, status) VALUES ('"
-                + UUID.randomUUID() + "', '" + studentId + "', '" + feeStructureId + "', "
-                + amount + ", '" + status + "')");
+        UUID invoiceId = UUID.randomUUID();
+        boolean paid = "PAID".equals(status);
+        st.execute("INSERT INTO invoices (id, student_id, fee_structure_id, amount, net_amount, paid_amount, status) "
+                + "VALUES ('" + invoiceId + "', '" + studentId + "', '" + feeStructureId + "', "
+                + amount + ", " + amount + ", " + (paid ? amount : "0") + ", '" + status + "')");
+        if (paid) {
+            // Phase 5: collection totals are computed from the fee_payments ledger, not invoice.status --
+            // a raw-SQL-seeded PAID invoice needs a matching ledger row too.
+            st.execute("INSERT INTO fee_payments (id, invoice_id, amount, method, receipt_number) VALUES ('"
+                    + UUID.randomUUID() + "', '" + invoiceId + "', " + amount + ", 'CASH', 'RCPT-TEST-"
+                    + invoiceId.toString().substring(0, 8) + "')");
+        }
     }
 
     private Cookie login(String email) throws Exception {

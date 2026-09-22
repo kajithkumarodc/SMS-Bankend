@@ -5,6 +5,9 @@ import com.smsapp.attendance.AttendanceService;
 import com.smsapp.common.ApiException;
 import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.exam.ExamService;
+import com.smsapp.fee.FeeCollectionService;
+import com.smsapp.fee.FeeDtos.ReceiptResponse;
+import com.smsapp.fee.FeeDtos.StudentFeeStatementResponse;
 import com.smsapp.fee.Invoice;
 import com.smsapp.fee.InvoiceRepository;
 import com.smsapp.hostel.HostelAllocation;
@@ -42,11 +45,12 @@ public class PortalService {
     private final BookLoanRepository bookLoanRepository;
     private final TransportService transportService;
     private final HostelService hostelService;
+    private final FeeCollectionService feeCollectionService;
 
     public PortalService(StudentRepository studentRepository, AttendanceService attendanceService,
                          ExamService examService, InvoiceRepository invoiceRepository,
                          BookLoanRepository bookLoanRepository, TransportService transportService,
-                         HostelService hostelService) {
+                         HostelService hostelService, FeeCollectionService feeCollectionService) {
         this.studentRepository = studentRepository;
         this.attendanceService = attendanceService;
         this.examService = examService;
@@ -54,6 +58,7 @@ public class PortalService {
         this.bookLoanRepository = bookLoanRepository;
         this.transportService = transportService;
         this.hostelService = hostelService;
+        this.feeCollectionService = feeCollectionService;
     }
 
     /**
@@ -120,6 +125,25 @@ public class PortalService {
         Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
         return invoiceRepository.findByStudentIdOrderByCreatedAtDesc(child.getId());
+    }
+
+    /**
+     * A parent's own child's fee statement (plan Phase 5 part J): totals + full invoice/payment
+     * history. The {@code studentId} from the URL is only honoured if that student's
+     * {@code guardian_user_id} is this parent -- otherwise 404.
+     */
+    @Transactional(readOnly = true)
+    public StudentFeeStatementResponse childFeeStatement(UUID guardianUserId, UUID studentId) {
+        return feeCollectionService.studentStatement(studentId, guardianUserId);
+    }
+
+    /**
+     * A parent's own child's payment receipt. 404 if the payment doesn't exist or belongs to
+     * another family's invoice.
+     */
+    @Transactional(readOnly = true)
+    public ReceiptResponse childReceipt(UUID guardianUserId, UUID paymentId) {
+        return feeCollectionService.receiptFor(paymentId, guardianUserId);
     }
 
     /** The caller's own library loan history, strictly scoped to their own student id. */

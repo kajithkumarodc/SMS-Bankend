@@ -28,6 +28,14 @@ public final class AuditActions {
     public static final String INVOICE_PAID = "INVOICE_PAID";
     /** DEV-ONLY: an invoice marked paid through the dev-tools simulate endpoint, not a real webhook. */
     public static final String INVOICE_PAID_SIMULATED = "INVOICE_PAID_SIMULATED";
+    public static final String FEE_TYPE_CREATED = "FEE_TYPE_CREATED";
+    public static final String FEE_DISCOUNT_CREATED = "FEE_DISCOUNT_CREATED";
+    public static final String FEE_DISCOUNT_APPLIED = "FEE_DISCOUNT_APPLIED";
+    public static final String FEE_LATE_FEE_APPLIED = "FEE_LATE_FEE_APPLIED";
+    public static final String FEE_STRUCTURE_STATUS_CHANGED = "FEE_STRUCTURE_STATUS_CHANGED";
+    public static final String INVOICES_BULK_ASSIGNED = "INVOICES_BULK_ASSIGNED";
+    public static final String FEE_PAYMENT_COLLECTED = "FEE_PAYMENT_COLLECTED";
+    public static final String FEE_PAYMENT_REVERSED = "FEE_PAYMENT_REVERSED";
     public static final String ANNOUNCEMENT_CREATED = "ANNOUNCEMENT_CREATED";
     public static final String ANNOUNCEMENT_DELETED = "ANNOUNCEMENT_DELETED";
     public static final String LIBRARY_BOOK_ADDED = "LIBRARY_BOOK_ADDED";
@@ -44,6 +52,43 @@ public final class AuditActions {
     public static final String LEAVE_REQUEST_CREATED = "LEAVE_REQUEST_CREATED";
     public static final String LEAVE_REQUEST_DECIDED = "LEAVE_REQUEST_DECIDED";
     public static final String PAYROLL_RECORD_CREATED = "PAYROLL_RECORD_CREATED";
+    public static final String USER_CREATED = "USER_CREATED";
+    public static final String USER_UPDATED = "USER_UPDATED";
+    public static final String USER_PASSWORD_RESET = "USER_PASSWORD_RESET";
+    public static final String USER_PASSWORD_CHANGED = "USER_PASSWORD_CHANGED";
+    public static final String ROLE_CREATED = "ROLE_CREATED";
+    public static final String ROLE_PERMISSIONS_UPDATED = "ROLE_PERMISSIONS_UPDATED";
+    public static final String PERMISSION_CREATED = "PERMISSION_CREATED";
+    public static final String STUDENT_DOCUMENT_UPLOADED = "STUDENT_DOCUMENT_UPLOADED";
+    public static final String STUDENT_DOCUMENT_DELETED = "STUDENT_DOCUMENT_DELETED";
+    public static final String STUDENT_IDENTIFICATION_ADDED = "STUDENT_IDENTIFICATION_ADDED";
+    public static final String STUDENT_IDENTIFICATION_REMOVED = "STUDENT_IDENTIFICATION_REMOVED";
+    public static final String STUDENT_PHOTO_UPDATED = "STUDENT_PHOTO_UPDATED";
+    public static final String STUDENT_SIBLING_LINKED = "STUDENT_SIBLING_LINKED";
+    public static final String ACADEMIC_YEAR_CREATED = "ACADEMIC_YEAR_CREATED";
+    public static final String ACADEMIC_YEAR_SET_CURRENT = "ACADEMIC_YEAR_SET_CURRENT";
+    public static final String STUDENTS_PROMOTED = "STUDENTS_PROMOTED";
+    public static final String ENQUIRY_CREATED = "ENQUIRY_CREATED";
+    public static final String ENQUIRY_UPDATED = "ENQUIRY_UPDATED";
+    public static final String ENQUIRY_STATUS_CHANGED = "ENQUIRY_STATUS_CHANGED";
+    public static final String ENQUIRY_ARCHIVED = "ENQUIRY_ARCHIVED";
+    public static final String ENQUIRY_FOLLOWUP_RECORDED = "ENQUIRY_FOLLOWUP_RECORDED";
+    public static final String ENQUIRY_CONVERTED = "ENQUIRY_CONVERTED";
+    public static final String ENQUIRY_SOURCE_CREATED = "ENQUIRY_SOURCE_CREATED";
+    public static final String ADMISSION_CYCLE_CREATED = "ADMISSION_CYCLE_CREATED";
+    public static final String ADMISSION_CYCLE_UPDATED = "ADMISSION_CYCLE_UPDATED";
+    public static final String ADMISSION_CYCLE_OPENED = "ADMISSION_CYCLE_OPENED";
+    public static final String ADMISSION_CYCLE_CLOSED = "ADMISSION_CYCLE_CLOSED";
+    public static final String ADMISSION_APPLICATION_SUBMITTED = "ADMISSION_APPLICATION_SUBMITTED";
+    public static final String ADMISSION_APPLICATION_UPDATED = "ADMISSION_APPLICATION_UPDATED";
+    public static final String ADMISSION_APPLICATION_STATUS_CHANGED = "ADMISSION_APPLICATION_STATUS_CHANGED";
+    public static final String ADMISSION_APPLICATION_DOCUMENT_UPLOADED = "ADMISSION_APPLICATION_DOCUMENT_UPLOADED";
+    public static final String ADMISSION_APPLICATION_DOCUMENT_DELETED = "ADMISSION_APPLICATION_DOCUMENT_DELETED";
+    public static final String ADMISSION_APPLICATION_CONVERTED = "ADMISSION_APPLICATION_CONVERTED";
+    public static final String ADMISSION_ENQUIRY_LINKED = "ADMISSION_ENQUIRY_LINKED";
+    public static final String STUDENT_GUARDIAN_LINKED = "STUDENT_GUARDIAN_LINKED";
+    public static final String USER_ACTIVATION_ISSUED = "USER_ACTIVATION_ISSUED";
+    public static final String USER_ACTIVATED = "USER_ACTIVATED";
 
     // entity types
     public static final String USER = "USER";
@@ -57,6 +102,9 @@ public final class AuditActions {
     public static final String EXAM_MARK = "EXAM_MARK";
     public static final String FEE_STRUCTURE = "FEE_STRUCTURE";
     public static final String INVOICE = "INVOICE";
+    public static final String FEE_TYPE = "FEE_TYPE";
+    public static final String FEE_DISCOUNT = "FEE_DISCOUNT";
+    public static final String FEE_PAYMENT = "FEE_PAYMENT";
     public static final String ANNOUNCEMENT = "ANNOUNCEMENT";
     public static final String LIBRARY_BOOK = "LIBRARY_BOOK";
     public static final String BOOK_LOAN = "BOOK_LOAN";
@@ -67,6 +115,18 @@ public final class AuditActions {
     public static final String STAFF_PROFILE = "STAFF_PROFILE";
     public static final String LEAVE_REQUEST = "LEAVE_REQUEST";
     public static final String PAYROLL_RECORD = "PAYROLL_RECORD";
+    public static final String ROLE = "ROLE";
+    public static final String PERMISSION = "PERMISSION";
+    public static final String ACADEMIC_YEAR = "ACADEMIC_YEAR";
+    public static final String ENQUIRY = "ENQUIRY";
+    public static final String ENQUIRY_FOLLOW_UP = "ENQUIRY_FOLLOW_UP";
+    public static final String ENQUIRY_SOURCE = "ENQUIRY_SOURCE";
+    public static final String STUDENT_DOCUMENT = "STUDENT_DOCUMENT";
+    public static final String STUDENT_IDENTIFICATION = "STUDENT_IDENTIFICATION";
+    public static final String ADMISSION_CYCLE = "ADMISSION_CYCLE";
+    public static final String ADMISSION_APPLICATION = "ADMISSION_APPLICATION";
+    public static final String ADMISSION_APPLICATION_DOCUMENT = "ADMISSION_APPLICATION_DOCUMENT";
+    public static final String USER_ACTIVATION_TOKEN = "USER_ACTIVATION_TOKEN";
 
     private AuditActions() {
     }

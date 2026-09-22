@@ -59,13 +59,18 @@ public class SecurityConfig {
                 // reproducible the same way against the pre-existing /auth/login). Must be
                 // permitAll for every permitAll endpoint's own validation errors to render.
                 .requestMatchers("/error").permitAll()
-                .requestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/actuator/health",
-                    "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                .requestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/activate",
+                    "/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                 .permitAll()
                 // Razorpay's server-to-server payment webhook cannot present a JWT.
                 // It is authenticated instead by its HMAC signature, which the
                 // handler verifies before touching any data (see RazorpayWebhookController).
                 .requestMatchers("/api/v1/webhooks/razorpay")
+                .permitAll()
+                // Online admissions (plan Phase 4.5 part 2/4/15): a public applicant has no account yet,
+                // so submission, document upload and status lookup must all work unauthenticated. Every
+                // other admission endpoint (admin review, cycles) stays behind normal permission checks.
+                .requestMatchers("/api/v1/public/admissions/**")
                 .permitAll()
                 .anyRequest().authenticated()
             )
@@ -79,22 +84,30 @@ public class SecurityConfig {
     /**
      * Maps the JWT {@code roles} claim (e.g. {@code ["SCHOOL_ADMIN"]}) to Spring
      * Security {@code ROLE_*} authorities so {@code @PreAuthorize("hasRole(...)")}
-     * works for method-level RBAC (plan section 3/6).
+     * works for method-level RBAC (plan section 3/6), AND the {@code permissions}
+     * claim (RBAC Phase 1, database-driven grants -- see V22 migration /
+     * {@code RoleRepository#findPermissionNamesByUserId}) to plain, unprefixed
+     * authorities so {@code @PreAuthorize("hasAuthority('STUDENT_EXPORT')")} works
+     * too. Both kinds coexist on the same {@code Authentication}: existing
+     * {@code hasRole(...)} checks are completely unaffected by this addition.
      */
     static JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(SecurityConfig::rolesToAuthorities);
+        converter.setJwtGrantedAuthoritiesConverter(SecurityConfig::claimsToAuthorities);
         return converter;
     }
 
-    private static Collection<GrantedAuthority> rolesToAuthorities(Jwt jwt) {
+    private static Collection<GrantedAuthority> claimsToAuthorities(Jwt jwt) {
+        List<GrantedAuthority> authorities = new java.util.ArrayList<>();
         List<String> roles = jwt.getClaimAsStringList("roles");
-        if (roles == null) {
-            return List.of();
+        if (roles != null) {
+            roles.forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));
         }
-        return roles.stream()
-                .map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
-                .toList();
+        List<String> permissions = jwt.getClaimAsStringList("permissions");
+        if (permissions != null) {
+            permissions.forEach(permission -> authorities.add(new SimpleGrantedAuthority(permission)));
+        }
+        return authorities;
     }
 
     @Bean

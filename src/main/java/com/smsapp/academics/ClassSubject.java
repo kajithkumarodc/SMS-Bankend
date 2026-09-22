@@ -26,6 +26,10 @@ public class ClassSubject extends UuidEntity {
     @Column(name = "subject_id", nullable = false, updatable = false)
     private UUID subjectId;
 
+    /** Optional teacher assigned to teach this subject for this class (Phase 4, V25). Nullable -- not every subject has one yet. */
+    @Column(name = "teacher_id")
+    private UUID teacherId;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

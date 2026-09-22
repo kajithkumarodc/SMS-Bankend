@@ -38,17 +38,64 @@ class StudentServiceTest {
     private SectionRepository sectionRepository;
 
     @Mock
+    private AcademicHistoryService academicHistoryService;
+
+    @Mock
     private AuditService auditService;
 
     private final UUID schoolId = UUID.randomUUID();
 
     private StudentService service() {
-        return new StudentService(studentRepository, schoolRepository, sectionRepository, auditService);
+        return new StudentService(studentRepository, schoolRepository, sectionRepository, academicHistoryService,
+                auditService);
     }
 
-    private CreateStudentRequest request(String fullName, String admissionNumber) {
-        return new CreateStudentRequest(schoolId, fullName, admissionNumber,
-                LocalDate.of(2015, 6, 1), "Guardian", "+1000000000");
+    /** Minimal create request: schoolId/firstName/lastName/dateOfBirth/admissionNumber, everything else null. */
+    private CreateStudentRequest request(String firstName, String lastName, String admissionNumber) {
+        return new CreateStudentRequest(
+                schoolId,
+                // personal (10): firstName, middleName, lastName, gender, dateOfBirth, bloodGroup, nationality, religion, motherTongue, category
+                firstName, null, lastName, null, LocalDate.of(2015, 6, 1), null, null, null, null, null,
+                // admission (12): admissionNumber, rollNumber, enrollmentNumber, admissionDate, sectionId, previousSchoolName, previousSchoolClass, previousSchoolAdmissionNumber, previousSchoolAddress, transferCertificateNumber, admissionSource, rteStatus
+                admissionNumber, null, null, null, null, null, null, null, null, null, null, false,
+                // guardian (7): guardianName, guardianRelationship, guardianPhone, guardianAlternatePhone, guardianEmail, guardianOccupation, guardianContact
+                "Guardian", null, null, null, null, null, "+1000000000",
+                // father/mother (8)
+                null, null, null, null, null, null, null, null,
+                // emergency (5)
+                null, null, null, null, null,
+                // current address (6)
+                null, null, null, null, null, null,
+                // permanent address (7): permanentSameAsCurrentAddress, line1, line2, city, state, country, pincode
+                null, null, null, null, null, null, null,
+                // familyId (1)
+                null,
+                // comm prefs (4)
+                null, null, null, null);
+    }
+
+    private UpdateStudentRequest updateRequest(String firstName, String lastName, String guardianName, String status) {
+        return new UpdateStudentRequest(
+                // personal (10): firstName, middleName, lastName, gender, dateOfBirth, bloodGroup, nationality, religion, motherTongue, category
+                firstName, null, lastName, null, null, null, null, null, null, null,
+                // admission (10): rollNumber, enrollmentNumber, admissionDate, previousSchoolName, previousSchoolClass, previousSchoolAdmissionNumber, previousSchoolAddress, transferCertificateNumber, admissionSource, rteStatus
+                null, null, null, null, null, null, null, null, null, false,
+                // guardian (7): guardianName, guardianRelationship, guardianPhone, guardianAlternatePhone, guardianEmail, guardianOccupation, guardianContact
+                guardianName, null, null, null, null, null, null,
+                // father/mother (8)
+                null, null, null, null, null, null, null, null,
+                // emergency (5)
+                null, null, null, null, null,
+                // current address (6)
+                null, null, null, null, null, null,
+                // permanent address (7): permanentSameAsCurrentAddress, line1, line2, city, state, country, pincode
+                null, null, null, null, null, null, null,
+                // familyId (1)
+                null,
+                // comm prefs (4)
+                null, null, null, null,
+                // status (1)
+                status);
     }
 
     @Test
@@ -57,11 +104,13 @@ class StudentServiceTest {
         when(studentRepository.existsByAdmissionNumber("ADM-1")).thenReturn(false);
         when(studentRepository.saveAndFlush(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service().create(request("  Alice Doe  ", " ADM-1 "));
+        service().create(request("  Alice  ", "  Doe  ", " ADM-1 "));
 
         ArgumentCaptor<Student> saved = ArgumentCaptor.forClass(Student.class);
         verify(studentRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getSchoolId()).isEqualTo(schoolId);
+        assertThat(saved.getValue().getFirstName()).isEqualTo("Alice");
+        assertThat(saved.getValue().getLastName()).isEqualTo("Doe");
         assertThat(saved.getValue().getFullName()).isEqualTo("Alice Doe");
         assertThat(saved.getValue().getAdmissionNumber()).isEqualTo("ADM-1");
         assertThat(saved.getValue().getStatus()).isEqualTo(StudentStatus.ACTIVE);
@@ -71,7 +120,7 @@ class StudentServiceTest {
     void rejectsNonexistentSchoolWith404() {
         when(schoolRepository.existsById(schoolId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service().create(request("Alice", "ADM-1")))
+        assertThatThrownBy(() -> service().create(request("Alice", "Doe", "ADM-1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -83,7 +132,7 @@ class StudentServiceTest {
         when(schoolRepository.existsById(schoolId)).thenReturn(true);
         when(studentRepository.existsByAdmissionNumber("ADM-1")).thenReturn(true);
 
-        assertThatThrownBy(() -> service().create(request("Alice", "ADM-1")))
+        assertThatThrownBy(() -> service().create(request("Alice", "Doe", "ADM-1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
 
@@ -97,7 +146,7 @@ class StudentServiceTest {
         when(studentRepository.saveAndFlush(any(Student.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-        assertThatThrownBy(() -> service().create(request("Alice", "ADM-1")))
+        assertThatThrownBy(() -> service().create(request("Alice", "Doe", "ADM-1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.CONFLICT);
     }
@@ -116,6 +165,8 @@ class StudentServiceTest {
         Student student = new Student();
         student.setId(studentId);
         student.setSchoolId(schoolId);
+        student.setFirstName("Old");
+        student.setLastName("Name");
         student.setFullName("Old Name");
         student.setAdmissionNumber("ADM-KEEP");
         student.setGuardianName("Old Guardian");
@@ -131,11 +182,10 @@ class StudentServiceTest {
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Student result = service().update(studentId,
-                new UpdateStudentRequest("  New Name  ", "  New Guardian  ", "  ", StudentStatus.INACTIVE));
+                updateRequest("  New  ", "  Name  ", "  New Guardian  ", StudentStatus.INACTIVE));
 
         assertThat(result.getFullName()).isEqualTo("New Name");
         assertThat(result.getGuardianName()).isEqualTo("New Guardian");
-        assertThat(result.getGuardianContact()).isNull();
         assertThat(result.getStatus()).isEqualTo(StudentStatus.INACTIVE);
         assertThat(result.getAdmissionNumber()).isEqualTo("ADM-KEEP");
     }
@@ -145,8 +195,7 @@ class StudentServiceTest {
         UUID studentId = UUID.randomUUID();
         when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().update(studentId,
-                new UpdateStudentRequest("Name", null, null, StudentStatus.ACTIVE)))
+        assertThatThrownBy(() -> service().update(studentId, updateRequest("Name", "Two", null, StudentStatus.ACTIVE)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -158,12 +207,24 @@ class StudentServiceTest {
         UUID studentId = UUID.randomUUID();
         when(studentRepository.findById(studentId)).thenReturn(Optional.of(existing(studentId)));
 
-        assertThatThrownBy(() -> service().update(studentId,
-                new UpdateStudentRequest("Name", null, null, "GRADUATED")))
+        assertThatThrownBy(() -> service().update(studentId, updateRequest("Name", "Two", null, "NOT_A_STATUS")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 
         verify(studentRepository, never()).save(any());
+    }
+
+    @Test
+    void updateAcceptsEveryNewStatusValue() {
+        for (String status : new String[] {StudentStatus.GRADUATED, StudentStatus.LEFT_SCHOOL, StudentStatus.TRANSFERRED}) {
+            UUID studentId = UUID.randomUUID();
+            when(studentRepository.findById(studentId)).thenReturn(Optional.of(existing(studentId)));
+            when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            Student result = service().update(studentId, updateRequest("Name", "Two", null, status));
+
+            assertThat(result.getStatus()).isEqualTo(status);
+        }
     }
 
     @Test
@@ -176,7 +237,7 @@ class StudentServiceTest {
         Student result = service().changeStatus(studentId, "inactive");
 
         assertThat(result.getStatus()).isEqualTo(StudentStatus.INACTIVE);
-        verify(studentRepository, never()).delete(any());
+        verify(studentRepository, never()).delete(any(Student.class));
     }
 
     @Test
@@ -201,6 +262,7 @@ class StudentServiceTest {
         Student result = service().assignSection(studentId, sectionId);
 
         assertThat(result.getSectionId()).isEqualTo(sectionId);
+        verify(academicHistoryService).record(studentId, sectionId, AcademicChangeReason.MANUAL_ASSIGNMENT);
     }
 
     @Test
@@ -235,5 +297,38 @@ class StudentServiceTest {
         assertThatThrownBy(() -> service().listInSection(sectionId, org.springframework.data.domain.Pageable.unpaged()))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void siblingsIsEmptyWhenStudentHasNoFamilyLink() {
+        UUID studentId = UUID.randomUUID();
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(existing(studentId)));
+
+        assertThat(service().siblings(studentId)).isEmpty();
+    }
+
+    @Test
+    void linkSiblingCreatesASharedFamilyIdWhenNeitherHasOne() {
+        UUID studentId = UUID.randomUUID();
+        UUID siblingId = UUID.randomUUID();
+        Student student = existing(studentId);
+        Student sibling = existing(siblingId);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(studentRepository.findById(siblingId)).thenReturn(Optional.of(sibling));
+        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Student result = service().linkSibling(studentId, siblingId);
+
+        assertThat(result.getFamilyId()).isNotNull();
+        assertThat(result.getFamilyId()).isEqualTo(sibling.getFamilyId());
+    }
+
+    @Test
+    void linkSiblingRejectsLinkingToSelfWith400() {
+        UUID studentId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service().linkSibling(studentId, studentId))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }

@@ -2,7 +2,9 @@ package com.smsapp.report;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Response payloads for the school-level reports API. Entities are never exposed directly (plan section 7.1d). */
@@ -50,5 +52,47 @@ final class ReportDtos {
             String feeStructureName,
             BigDecimal amount,
             LocalDate dueDate) {
+    }
+
+    // --- Phase 5: Fee Reports (plan part K) ------------------------------
+
+    /** Balance Fees Report: every student's totals across all their fee invoices. */
+    record BalanceFeeEntry(
+            UUID studentId,
+            String fullName,
+            String admissionNumber,
+            UUID sectionId,
+            BigDecimal totalPayable,
+            BigDecimal totalPaid,
+            BigDecimal totalBalance) {
+    }
+
+    /** One day's collection, broken down by payment method. */
+    record DailyCollectionPoint(
+            LocalDate date,
+            Map<String, BigDecimal> byMethod,
+            BigDecimal total) {
+    }
+
+    /** One row of the Fee Collection Report transaction list. */
+    record FeeTransaction(
+            UUID paymentId,
+            OffsetDateTime paidAt,
+            String type,
+            BigDecimal amount,
+            String method,
+            String receiptNumber,
+            UUID studentId,
+            String studentName,
+            String admissionNumber,
+            String feeStructureName,
+            UUID collectedByUserId) {
+    }
+
+    /** Fee Collection Report (plan part K): filtered transaction list + summary totals. */
+    record FeeCollectionTransactionsReport(
+            List<FeeTransaction> transactions,
+            int transactionCount,
+            BigDecimal totalCollected) {
     }
 }

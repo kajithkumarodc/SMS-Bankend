@@ -1,5 +1,7 @@
 package com.smsapp.portal;
 
+import com.smsapp.fee.FeeDtos.ReceiptResponse;
+import com.smsapp.fee.FeeDtos.StudentFeeStatementResponse;
 import com.smsapp.portal.PortalDtos.AttendanceEntryView;
 import com.smsapp.portal.PortalDtos.ExamResultView;
 import com.smsapp.portal.PortalDtos.InvoiceView;
@@ -93,6 +95,20 @@ public class PortalController {
     public List<InvoiceView> childInvoices(@PathVariable UUID studentId, Authentication authentication) {
         return portalService.childInvoices(userId(authentication), studentId)
                 .stream().map(InvoiceView::from).toList();
+    }
+
+    /** PARENT: one of their own children's full fee statement (totals + payment history). 404 if not their child. */
+    @GetMapping("/children/{studentId}/fee-statement")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public StudentFeeStatementResponse childFeeStatement(@PathVariable UUID studentId, Authentication authentication) {
+        return portalService.childFeeStatement(userId(authentication), studentId);
+    }
+
+    /** PARENT: a receipt for one of their own children's payments. 404 if not their child's payment. */
+    @GetMapping("/payments/{paymentId}/receipt")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public ReceiptResponse childReceipt(@PathVariable UUID paymentId, Authentication authentication) {
+        return portalService.childReceipt(userId(authentication), paymentId);
     }
 
     /** STUDENT: their own library loan history only. 404 if no record is linked yet. */

@@ -1,5 +1,6 @@
 package com.smsapp.dashboard;
 
+import com.smsapp.academics.TeacherAssignmentService;
 import com.smsapp.announcement.Announcement;
 import com.smsapp.announcement.AnnouncementRepository;
 import com.smsapp.attendance.AttendanceRepository;
@@ -7,7 +8,10 @@ import com.smsapp.attendance.AttendanceStatus;
 import com.smsapp.dashboard.DashboardSummary.AnnouncementSummary;
 import com.smsapp.dashboard.DashboardSummary.AttendanceSummary;
 import com.smsapp.dashboard.DashboardSummary.StudentInfo;
+import com.smsapp.dashboard.DashboardSummary.TeacherAssignment;
+import com.smsapp.dashboard.DashboardSummary.TeacherInfo;
 import com.smsapp.school.SchoolRepository;
+import com.smsapp.staff.StaffProfileRepository;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
 import com.smsapp.user.Roles;
@@ -16,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -31,17 +36,23 @@ public class DashboardService {
     private final SchoolRepository schoolRepository;
     private final UserRepository userRepository;
     private final StudentRepository studentRepository;
+    private final StaffProfileRepository staffProfileRepository;
     private final AttendanceRepository attendanceRepository;
     private final AnnouncementRepository announcementRepository;
+    private final TeacherAssignmentService teacherAssignmentService;
 
     public DashboardService(SchoolRepository schoolRepository, UserRepository userRepository,
-                            StudentRepository studentRepository, AttendanceRepository attendanceRepository,
-                            AnnouncementRepository announcementRepository) {
+                            StudentRepository studentRepository, StaffProfileRepository staffProfileRepository,
+                            AttendanceRepository attendanceRepository,
+                            AnnouncementRepository announcementRepository,
+                            TeacherAssignmentService teacherAssignmentService) {
         this.schoolRepository = schoolRepository;
         this.userRepository = userRepository;
         this.studentRepository = studentRepository;
+        this.staffProfileRepository = staffProfileRepository;
         this.attendanceRepository = attendanceRepository;
         this.announcementRepository = announcementRepository;
+        this.teacherAssignmentService = teacherAssignmentService;
     }
 
     /** Builds the summary for the authenticated caller. */
@@ -52,7 +63,9 @@ public class DashboardService {
 
         if (roles.contains(Roles.SCHOOL_ADMIN)) {
             DashboardSummary.Counts counts = new DashboardSummary.Counts(
-                    schoolRepository.count(), userRepository.count());
+                    schoolRepository.count(), userRepository.count(), studentRepository.count(),
+                    staffProfileRepository.count(), studentRepository.countByGender("MALE"),
+                    studentRepository.countByGender("FEMALE"));
             return DashboardSummary.forSchoolAdmin(userId, roles, counts, announcements);
         }
 
@@ -74,7 +87,25 @@ public class DashboardService {
             return DashboardSummary.forParent(userId, roles, children, announcements);
         }
 
+        if (roles.contains(Roles.TEACHER)) {
+            return DashboardSummary.forTeacher(userId, roles, teacherInfo(UUID.fromString(userId)), announcements);
+        }
+
         return DashboardSummary.placeholder(userId, roles, PLACEHOLDER_NOTE, announcements);
+    }
+
+    private TeacherInfo teacherInfo(UUID teacherUserId) {
+        List<TeacherAssignmentService.AssignmentView> assignments = teacherAssignmentService.myAssignments(teacherUserId);
+        Set<UUID> classIds = new java.util.HashSet<>();
+        Set<UUID> subjectIds = new java.util.HashSet<>();
+        List<TeacherAssignment> summaries = assignments.stream().map(view -> {
+            classIds.add(view.classId());
+            subjectIds.add(view.subjectId());
+            return new TeacherAssignment(view.className(), view.subjectName(),
+                    view.sections().stream().map(TeacherAssignmentService.SectionInfo::name).toList());
+        }).toList();
+        long studentCount = teacherAssignmentService.studentCount(teacherUserId);
+        return new TeacherInfo(classIds.size(), subjectIds.size(), studentCount, summaries);
     }
 
     private List<AnnouncementSummary> recentAnnouncements() {

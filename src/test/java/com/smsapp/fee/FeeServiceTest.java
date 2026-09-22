@@ -1,20 +1,25 @@
 package com.smsapp.fee;
 
+import com.smsapp.academics.ClassRepository;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
 import com.smsapp.fee.FeeDtos.CheckoutResponse;
 import com.smsapp.fee.FeeDtos.CreateFeeStructureRequest;
 import com.smsapp.fee.FeeDtos.CreateInvoiceRequest;
+import com.smsapp.fee.FeeDtos.FeeStructureItemResponse;
+import com.smsapp.fee.FeeDtos.LineItemRequest;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,16 +41,31 @@ class FeeServiceTest {
     private FeeStructureRepository feeStructureRepository;
 
     @Mock
+    private FeeStructureItemRepository feeStructureItemRepository;
+
+    @Mock
     private InvoiceRepository invoiceRepository;
 
     @Mock
     private com.smsapp.school.SchoolRepository schoolRepository;
 
     @Mock
+    private ClassRepository classRepository;
+
+    @Mock
     private StudentRepository studentRepository;
 
     @Mock
+    private FeeTypeRepository feeTypeRepository;
+
+    @Mock
+    private FeePaymentRepository feePaymentRepository;
+
+    @Mock
     private RazorpayGateway razorpayGateway;
+
+    @Mock
+    private FeePaymentRecorder paymentRecorder;
 
     @Mock
     private AuditService auditService;
@@ -53,13 +73,15 @@ class FeeServiceTest {
     private final RazorpayProperties properties = new RazorpayProperties("rzp_test_key", "secret", "whsec", "INR");
 
     private final UUID schoolId = UUID.randomUUID();
+    private final UUID classId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
     private final UUID feeStructureId = UUID.randomUUID();
     private final UUID invoiceId = UUID.randomUUID();
 
     private FeeService service() {
-        return new FeeService(feeStructureRepository, invoiceRepository, schoolRepository, studentRepository,
-                razorpayGateway, properties, auditService);
+        return new FeeService(feeStructureRepository, feeStructureItemRepository, invoiceRepository,
+                schoolRepository, classRepository, studentRepository, feeTypeRepository, feePaymentRepository,
+                razorpayGateway, properties, paymentRecorder, auditService);
     }
 
     private FeeStructure structure(String amount) {
@@ -78,7 +100,11 @@ class FeeServiceTest {
         i.setStudentId(studentId);
         i.setFeeStructureId(feeStructureId);
         i.setAmount(new BigDecimal("5000.00"));
+        i.setNetAmount(new BigDecimal("5000.00"));
         i.setStatus(status);
+        if (InvoiceStatus.PAID.equals(status)) {
+            i.setPaidAmount(new BigDecimal("5000.00"));
+        }
         return i;
     }
 
@@ -90,9 +116,12 @@ class FeeServiceTest {
         when(feeStructureRepository.save(any(FeeStructure.class))).thenAnswer(inv -> inv.getArgument(0));
 
         FeeStructure created = service().createFeeStructure(new CreateFeeStructureRequest(
-                schoolId, "Term 1 Tuition", new BigDecimal("5000.00"), LocalDate.of(2026, 6, 1)));
+                schoolId, null, "2026-2027", "Term 1 Tuition", new BigDecimal("5000.00"),
+                LocalDate.of(2026, 6, 1), null, null, null));
 
         assertThat(created.getSchoolId()).isEqualTo(schoolId);
+        assertThat(created.getClassId()).isNull();
+        assertThat(created.getAcademicYear()).isEqualTo("2026-2027");
         assertThat(created.getName()).isEqualTo("Term 1 Tuition");
         assertThat(created.getAmount()).isEqualByComparingTo("5000.00");
     }
@@ -102,11 +131,122 @@ class FeeServiceTest {
         when(schoolRepository.existsById(schoolId)).thenReturn(false);
 
         assertThatThrownBy(() -> service().createFeeStructure(new CreateFeeStructureRequest(
-                schoolId, "X", new BigDecimal("10.00"), LocalDate.of(2026, 6, 1))))
+                schoolId, null, "2026-2027", "X", new BigDecimal("10.00"), LocalDate.of(2026, 6, 1), null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
         verify(feeStructureRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsFeeStructureForNonexistentClassWith404() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+        when(classRepository.existsById(classId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service().createFeeStructure(new CreateFeeStructureRequest(
+                schoolId, classId, "2026-2027", "Grade 5 fees", new BigDecimal("100.00"),
+                LocalDate.of(2026, 6, 1), null, null, null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(feeStructureRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsFeeStructureWithNeitherAmountNorItemsWith400() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service().createFeeStructure(new CreateFeeStructureRequest(
+                schoolId, null, "2026-2027", "X", null, LocalDate.of(2026, 6, 1), null, null, null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(feeStructureRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsFeeStructureWithAnUnrecognizedCategoryWith400() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+        List<LineItemRequest> items = List.of(new LineItemRequest("NOT_A_CATEGORY", null, null, new BigDecimal("100.00")));
+
+        assertThatThrownBy(() -> service().createFeeStructure(new CreateFeeStructureRequest(
+                schoolId, null, "2026-2027", "X", null, LocalDate.of(2026, 6, 1), null, null, items)))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(feeStructureRepository, never()).save(any());
+    }
+
+    /** Pre-KG & LKG row from a real CBSE school's fee-structure sheet: 100+1500+13500+5500+4400+4400+4400 = 33800. */
+    @Test
+    void createsAClassSpecificFeeStructureWithMultipleLineItemsAndComputesTheTotal() {
+        when(schoolRepository.existsById(schoolId)).thenReturn(true);
+        when(classRepository.existsById(classId)).thenReturn(true);
+        when(feeStructureRepository.save(any(FeeStructure.class))).thenAnswer(inv -> {
+            FeeStructure s = inv.getArgument(0);
+            s.setId(feeStructureId);
+            return s;
+        });
+        List<LineItemRequest> items = List.of(
+                new LineItemRequest("APPLICATION", null, null, new BigDecimal("100.00")),
+                new LineItemRequest("ADMISSION", null, null, new BigDecimal("1500.00")),
+                new LineItemRequest("TERM_1", "Initial Fees", null, new BigDecimal("13500.00")),
+                new LineItemRequest("TERM_1", "Books & Notes", null, new BigDecimal("5500.00")),
+                new LineItemRequest("TERM_2", null, null, new BigDecimal("4400.00")),
+                new LineItemRequest("TERM_3", null, null, new BigDecimal("4400.00")),
+                new LineItemRequest("TERM_4", null, null, new BigDecimal("4400.00")));
+
+        FeeStructure created = service().createFeeStructure(new CreateFeeStructureRequest(
+                schoolId, classId, "2026-2027", "Pre-KG & LKG", null, LocalDate.of(2026, 6, 1), null, null, items));
+
+        assertThat(created.getClassId()).isEqualTo(classId);
+        assertThat(created.getAmount()).isEqualByComparingTo("33800.00");
+
+        ArgumentCaptor<List<FeeStructureItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(feeStructureItemRepository).saveAll(captor.capture());
+        List<FeeStructureItem> saved = captor.getValue();
+        assertThat(saved).hasSize(7);
+        assertThat(saved.get(0).getCategory()).isEqualTo("APPLICATION");
+        assertThat(saved.get(0).getSequenceOrder()).isEqualTo(0);
+        assertThat(saved.get(2).getLabel()).isEqualTo("Initial Fees");
+        assertThat(saved.get(3).getLabel()).isEqualTo("Books & Notes");
+        assertThat(saved.get(6).getSequenceOrder()).isEqualTo(6);
+    }
+
+    @Test
+    void listFeeStructuresPassesTheClassAndAcademicYearFilterThrough() {
+        when(feeStructureRepository.search(classId, "2026-2027")).thenReturn(List.of());
+
+        service().listFeeStructures(classId, "2026-2027");
+
+        verify(feeStructureRepository).search(classId, "2026-2027");
+    }
+
+    @Test
+    void itemResponsesForReturnsPersistedItemsInSequenceOrder() {
+        FeeStructure s = structure("100.00");
+        FeeStructureItem item = new FeeStructureItem();
+        item.setCategory("APPLICATION");
+        when(feeStructureItemRepository.findByFeeStructureIdOrderBySequenceOrder(feeStructureId))
+                .thenReturn(List.of(item));
+
+        List<FeeStructureItemResponse> items = service().itemResponsesFor(s);
+
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).category()).isEqualTo("APPLICATION");
+    }
+
+    @Test
+    void itemResponsesForSynthesizesAnImplicitItemForABackwardCompatibleFlatStructure() {
+        FeeStructure s = structure("5000.00");
+        when(feeStructureItemRepository.findByFeeStructureIdOrderBySequenceOrder(feeStructureId))
+                .thenReturn(List.of());
+
+        List<FeeStructureItemResponse> items = service().itemResponsesFor(s);
+
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).category()).isEqualTo(FeeStructureItemCategory.OTHER);
+        assertThat(items.get(0).amount()).isEqualByComparingTo("5000.00");
     }
 
     // --- Invoices --------------------------------------------------

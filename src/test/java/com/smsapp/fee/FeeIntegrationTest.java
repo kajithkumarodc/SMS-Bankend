@@ -139,9 +139,9 @@ class FeeIntegrationTest {
 
     private static void seedStudent(Statement st, UUID schoolId, UUID studentId, String name, UUID guardianUserId)
             throws SQLException {
-        st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status, "
+        st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, admission_number, status, "
                 + "guardian_user_id) VALUES ('" + studentId + "', '" + schoolId + "', '" + name
-                + "', 'ADM-" + name + "', 'ACTIVE', "
+                + "', '" + name + "', '" + name + "', 'ADM-" + name + "', 'ACTIVE', "
                 + (guardianUserId == null ? "NULL" : "'" + guardianUserId + "'") + ")");
     }
 
@@ -192,16 +192,22 @@ class FeeIntegrationTest {
     void schoolAdminCanCreateAFeeStructure() throws Exception {
         mockMvc.perform(post("/api/v1/fee-structures").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolId\":\"" + schoolAId + "\",\"name\":\"Term 2 Tuition\","
-                                + "\"amount\":6000.00,\"dueDate\":\"2026-09-01\"}"))
+                        .content("{\"schoolId\":\"" + schoolAId + "\",\"academicYear\":\"2026-2027\","
+                                + "\"name\":\"Term 2 Tuition\",\"amount\":6000.00,\"dueDate\":\"2026-09-01\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Term 2 Tuition"))
-                .andExpect(jsonPath("$.amount").value(6000.00));
+                .andExpect(jsonPath("$.amount").value(6000.00))
+                .andExpect(jsonPath("$.classId").doesNotExist())
+                .andExpect(jsonPath("$.academicYear").value("2026-2027"))
+                // Backward-compatible flat amount: presented as one implicit line item.
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].amount").value(6000.00));
     }
 
     @Test
     void teacherStudentAndParentCannotCreateAFeeStructure() throws Exception {
-        String body = "{\"schoolId\":\"" + schoolAId + "\",\"name\":\"X\",\"amount\":10.00,\"dueDate\":\"2026-09-01\"}";
+        String body = "{\"schoolId\":\"" + schoolAId + "\",\"academicYear\":\"2026-2027\","
+                + "\"name\":\"X\",\"amount\":10.00,\"dueDate\":\"2026-09-01\"}";
         for (String email : new String[] {TEACHER_A, STUDENT_A, PARENT_A}) {
             mockMvc.perform(post("/api/v1/fee-structures").cookie(login(email))
                             .contentType(MediaType.APPLICATION_JSON).content(body))
@@ -213,9 +219,118 @@ class FeeIntegrationTest {
     void cannotCreateAFeeStructureForANonexistentSchool() throws Exception {
         mockMvc.perform(post("/api/v1/fee-structures").cookie(login(ADMIN_A))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolId\":\"" + UUID.randomUUID() + "\",\"name\":\"X\",\"amount\":10.00,"
+                        .content("{\"schoolId\":\"" + UUID.randomUUID() + "\",\"academicYear\":\"2026-2027\","
+                                + "\"name\":\"X\",\"amount\":10.00,\"dueDate\":\"2026-09-01\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void cannotCreateAFeeStructureForANonexistentClass() throws Exception {
+        mockMvc.perform(post("/api/v1/fee-structures").cookie(login(ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"schoolId\":\"" + schoolAId + "\",\"classId\":\"" + UUID.randomUUID() + "\","
+                                + "\"academicYear\":\"2026-2027\",\"name\":\"X\",\"amount\":10.00,"
                                 + "\"dueDate\":\"2026-09-01\"}"))
                 .andExpect(status().isNotFound());
+    }
+
+    /** Pre-KG & LKG row from a real CBSE school's fee-structure sheet. */
+    @Test
+    void createsAClassSpecificFeeStructureWithLineItemsAndTheTotalIsComputed() throws Exception {
+        UUID classId = seedClass(schoolAId, "Pre-KG & LKG");
+
+        String body = "{\"schoolId\":\"" + schoolAId + "\",\"classId\":\"" + classId + "\","
+                + "\"academicYear\":\"2026-2027\",\"name\":\"Pre-KG & LKG fees\",\"dueDate\":\"2026-06-01\","
+                + "\"items\":["
+                + "{\"category\":\"APPLICATION\",\"amount\":100.00},"
+                + "{\"category\":\"ADMISSION\",\"amount\":1500.00},"
+                + "{\"category\":\"TERM_1\",\"label\":\"Initial Fees\",\"amount\":13500.00},"
+                + "{\"category\":\"TERM_1\",\"label\":\"Books & Notes\",\"amount\":5500.00},"
+                + "{\"category\":\"TERM_2\",\"amount\":4400.00},"
+                + "{\"category\":\"TERM_3\",\"amount\":4400.00},"
+                + "{\"category\":\"TERM_4\",\"amount\":4400.00}]}";
+
+        mockMvc.perform(post("/api/v1/fee-structures").cookie(login(ADMIN_A))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.classId").value(classId.toString()))
+                .andExpect(jsonPath("$.amount").value(33800.00))
+                .andExpect(jsonPath("$.items.length()").value(7))
+                .andExpect(jsonPath("$.items[2].category").value("TERM_1"))
+                .andExpect(jsonPath("$.items[2].label").value("Initial Fees"))
+                .andExpect(jsonPath("$.items[3].label").value("Books & Notes"));
+    }
+
+    @Test
+    void feeStructureListFiltersByClassAndAcademicYear() throws Exception {
+        UUID classId = seedClass(schoolAId, "Grade 5");
+        Cookie admin = login(ADMIN_A);
+
+        String classSpecific = "{\"schoolId\":\"" + schoolAId + "\",\"classId\":\"" + classId + "\","
+                + "\"academicYear\":\"2026-2027\",\"name\":\"Grade 5 fees\",\"amount\":40000.00,"
+                + "\"dueDate\":\"2026-06-01\"}";
+        String otherYear = "{\"schoolId\":\"" + schoolAId + "\",\"classId\":\"" + classId + "\","
+                + "\"academicYear\":\"2025-2026\",\"name\":\"Grade 5 fees (last year)\",\"amount\":38000.00,"
+                + "\"dueDate\":\"2025-06-01\"}";
+        String universal = "{\"schoolId\":\"" + schoolAId + "\",\"academicYear\":\"2026-2027\","
+                + "\"name\":\"School-wide activity fee\",\"amount\":500.00,\"dueDate\":\"2026-06-01\"}";
+        mockMvc.perform(post("/api/v1/fee-structures").cookie(admin).contentType(MediaType.APPLICATION_JSON)
+                .content(classSpecific)).andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/fee-structures").cookie(admin).contentType(MediaType.APPLICATION_JSON)
+                .content(otherYear)).andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/fee-structures").cookie(admin).contentType(MediaType.APPLICATION_JSON)
+                .content(universal)).andExpect(status().isCreated());
+
+        // classId + academicYear: the class-specific 2026-2027 one, plus the universal one (applies to every class).
+        var byClassAndYear = mockMvc.perform(get("/api/v1/fee-structures")
+                        .param("classId", classId.toString()).param("academicYear", "2026-2027").cookie(admin))
+                .andExpect(status().isOk()).andReturn();
+        JsonNode filtered = JSON.readTree(byClassAndYear.getResponse().getContentAsString());
+        org.assertj.core.api.Assertions.assertThat(filtered).hasSize(2);
+
+        // academicYear alone: both 2026-2027 structures (class-specific + universal), not the 2025-2026 one.
+        var byYear = mockMvc.perform(get("/api/v1/fee-structures").param("academicYear", "2026-2027").cookie(admin))
+                .andExpect(status().isOk()).andReturn();
+        org.assertj.core.api.Assertions.assertThat(JSON.readTree(byYear.getResponse().getContentAsString()))
+                .hasSize(2);
+
+        // No filters: the pre-seeded structure from @BeforeEach plus all three created here.
+        var all = mockMvc.perform(get("/api/v1/fee-structures").cookie(admin))
+                .andExpect(status().isOk()).andReturn();
+        org.assertj.core.api.Assertions.assertThat(JSON.readTree(all.getResponse().getContentAsString()))
+                .hasSize(4);
+    }
+
+    /** The @BeforeEach-seeded structure was inserted via raw SQL with no items -- the pre-existing-data case. */
+    @Test
+    void feeStructureListPresentsAPreexistingFlatStructureAsOneImplicitItem() throws Exception {
+        var result = mockMvc.perform(get("/api/v1/fee-structures").cookie(login(ADMIN_A)))
+                .andExpect(status().isOk()).andReturn();
+        JsonNode structures = JSON.readTree(result.getResponse().getContentAsString());
+        JsonNode seeded = null;
+        for (JsonNode node : structures) {
+            if (feeStructureAId.toString().equals(node.get("id").asText())) {
+                seeded = node;
+            }
+        }
+        org.assertj.core.api.Assertions.assertThat(seeded).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(seeded.get("amount").asDouble()).isEqualTo(5000.00);
+        org.assertj.core.api.Assertions.assertThat(seeded.get("items")).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(seeded.get("items").get(0).get("amount").asDouble())
+                .isEqualTo(5000.00);
+    }
+
+    private UUID seedClass(UUID schoolId, String name) throws SQLException {
+        UUID classId = UUID.randomUUID();
+        try (var connection = DriverManager.getConnection(
+                System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
+                System.getProperty("DB_USERNAME", "postgres"),
+                System.getProperty("DB_PASSWORD", "1234"));
+             Statement st = connection.createStatement()) {
+            st.execute("INSERT INTO classes (id, school_id, name) VALUES ('"
+                    + classId + "', '" + schoolId + "', '" + name + "')");
+        }
+        return classId;
     }
 
     @Test

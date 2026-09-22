@@ -84,8 +84,8 @@ class AttendanceIntegrationTest {
                     + classA + "', '" + schoolA + "', 'Grade 5')");
             st.execute("INSERT INTO sections (id, class_id, name) VALUES ('"
                     + sectionA + "', '" + classA + "', 'A')");
-            st.execute("INSERT INTO students (id, school_id, section_id, full_name, admission_number, status) "
-                    + "VALUES ('" + studentA + "', '" + schoolA + "', '" + sectionA + "', 'Student A', 'ADM-A', 'ACTIVE')");
+            st.execute("INSERT INTO students (id, school_id, section_id, full_name, first_name, last_name, admission_number, status) "
+                    + "VALUES ('" + studentA + "', '" + schoolA + "', '" + sectionA + "', 'Student A', 'Student', 'A', 'ADM-A', 'ACTIVE')");
         }
     }
 

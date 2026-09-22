@@ -26,4 +26,7 @@ public class User extends UuidEntity {
 
     @Column(nullable = false, length = 30)
     private String status;
+
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
 }

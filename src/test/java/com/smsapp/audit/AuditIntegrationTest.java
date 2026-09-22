@@ -138,8 +138,8 @@ class AuditIntegrationTest {
     void studentCreateIsAuditedWithActorAndDetails() throws Exception {
         Cookie admin = loginAdminA();
         mockMvc.perform(post("/api/v1/students").cookie(admin).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolId\":\"" + schoolA + "\",\"fullName\":\"Ravi Kumar\","
-                                + "\"admissionNumber\":\"ADM-AUDIT-1\"}"))
+                        .content("{\"schoolId\":\"" + schoolA + "\",\"firstName\":\"Ravi\",\"lastName\":\"Kumar\","
+                                + "\"admissionNumber\":\"ADM-AUDIT-1\",\"dateOfBirth\":\"2015-01-01\"}"))
                 .andExpect(status().isCreated());
 
         JsonNode student = findByAction(auditLog(admin, "?entityType=STUDENT"), "STUDENT_CREATED");
@@ -152,8 +152,8 @@ class AuditIntegrationTest {
     void attendanceMarkIsAuditedWithTheTeacherAsActor() throws Exception {
         Cookie admin = loginAdminA();
         var created = mockMvc.perform(post("/api/v1/students").cookie(admin).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolId\":\"" + schoolA + "\",\"fullName\":\"Mark Me\","
-                                + "\"admissionNumber\":\"ADM-AUDIT-2\"}"))
+                        .content("{\"schoolId\":\"" + schoolA + "\",\"firstName\":\"Mark\",\"lastName\":\"Me\","
+                                + "\"admissionNumber\":\"ADM-AUDIT-2\",\"dateOfBirth\":\"2015-01-01\"}"))
                 .andExpect(status().isCreated())
                 .andReturn();
         String studentId = JSON.readTree(created.getResponse().getContentAsString()).get("id").asText();
@@ -182,8 +182,8 @@ class AuditIntegrationTest {
     void auditLogFiltersByEntityType() throws Exception {
         Cookie admin = loginAdminA();
         mockMvc.perform(post("/api/v1/students").cookie(admin).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"schoolId\":\"" + schoolA + "\",\"fullName\":\"Only Student\","
-                                + "\"admissionNumber\":\"ADM-AUDIT-3\"}"))
+                        .content("{\"schoolId\":\"" + schoolA + "\",\"firstName\":\"Only\",\"lastName\":\"Student\","
+                                + "\"admissionNumber\":\"ADM-AUDIT-3\",\"dateOfBirth\":\"2015-01-01\"}"))
                 .andExpect(status().isCreated());
 
         JsonNode entries = auditLog(admin, "?entityType=STUDENT");

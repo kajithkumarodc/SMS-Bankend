@@ -132,9 +132,9 @@ class PortalIntegrationTest {
 
     private static void seedStudent(Statement st, UUID schoolId, UUID studentId, String name,
                                     UUID studentUserId, UUID guardianUserId) throws SQLException {
-        st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status, "
+        st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, admission_number, status, "
                 + "student_user_id, guardian_user_id) VALUES ('" + studentId + "', '" + schoolId
-                + "', '" + name + "', 'ADM-" + name + "', 'ACTIVE', "
+                + "', '" + name + "', '" + name + "', '" + name + "', 'ADM-" + name + "', 'ACTIVE', "
                 + (studentUserId == null ? "NULL" : "'" + studentUserId + "'") + ", "
                 + (guardianUserId == null ? "NULL" : "'" + guardianUserId + "'") + ")");
     }

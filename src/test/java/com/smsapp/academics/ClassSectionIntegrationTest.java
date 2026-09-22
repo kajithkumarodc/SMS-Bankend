@@ -73,8 +73,8 @@ class ClassSectionIntegrationTest {
             seedUser(st, ADMIN_A, "SCHOOL_ADMIN");
             seedUser(st, TEACHER_A, "TEACHER");
 
-            st.execute("INSERT INTO students (id, school_id, full_name, admission_number, status) VALUES ('"
-                    + studentA + "', '" + schoolA + "', 'Student A', 'ADM-A', 'ACTIVE')");
+            st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, admission_number, status) VALUES ('"
+                    + studentA + "', '" + schoolA + "', 'Student A', 'Student', 'A', 'ADM-A', 'ACTIVE')");
         }
     }
 

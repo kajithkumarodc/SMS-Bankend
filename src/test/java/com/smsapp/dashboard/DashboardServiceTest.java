@@ -1,9 +1,11 @@
 package com.smsapp.dashboard;
 
+import com.smsapp.academics.TeacherAssignmentService;
 import com.smsapp.announcement.Announcement;
 import com.smsapp.announcement.AnnouncementRepository;
 import com.smsapp.attendance.AttendanceRepository;
 import com.smsapp.school.SchoolRepository;
+import com.smsapp.staff.StaffProfileRepository;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentRepository;
 import com.smsapp.user.Roles;
@@ -34,14 +36,20 @@ class DashboardServiceTest {
     private StudentRepository studentRepository;
 
     @Mock
+    private StaffProfileRepository staffProfileRepository;
+
+    @Mock
     private AttendanceRepository attendanceRepository;
 
     @Mock
     private AnnouncementRepository announcementRepository;
 
+    @Mock
+    private TeacherAssignmentService teacherAssignmentService;
+
     private DashboardService service() {
-        return new DashboardService(schoolRepository, userRepository, studentRepository, attendanceRepository,
-                announcementRepository);
+        return new DashboardService(schoolRepository, userRepository, studentRepository, staffProfileRepository,
+                attendanceRepository, announcementRepository, teacherAssignmentService);
     }
 
     private Student student(UUID id, String fullName, UUID studentUserId, UUID guardianUserId) {
@@ -59,22 +67,46 @@ class DashboardServiceTest {
     void schoolAdminGetsRealCounts() {
         when(schoolRepository.count()).thenReturn(4L);
         when(userRepository.count()).thenReturn(12L);
+        when(studentRepository.count()).thenReturn(30L);
+        when(staffProfileRepository.count()).thenReturn(6L);
+        when(studentRepository.countByGender("MALE")).thenReturn(17L);
+        when(studentRepository.countByGender("FEMALE")).thenReturn(13L);
 
         DashboardSummary summary = service().summaryFor("user-1", List.of(Roles.SCHOOL_ADMIN));
 
         assertThat(summary.placeholder()).isFalse();
-        assertThat(summary.counts()).isEqualTo(new DashboardSummary.Counts(4L, 12L));
+        assertThat(summary.counts()).isEqualTo(new DashboardSummary.Counts(4L, 12L, 30L, 6L, 17L, 13L));
         verify(schoolRepository).count();
         verify(userRepository).count();
     }
 
     @Test
     void nonAdminNonPortalRoleGetsPlaceholder() {
-        DashboardSummary summary = service().summaryFor("user-2", List.of(Roles.TEACHER));
+        DashboardSummary summary = service().summaryFor("user-2", List.of(Roles.LIBRARIAN));
 
         assertThat(summary.placeholder()).isTrue();
         assertThat(summary.counts()).isNull();
         assertThat(summary.note()).isNotBlank();
+    }
+
+    @Test
+    void teacherGetsAssignedClassesSubjectsAndStudentCount() {
+        UUID userId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        UUID subjectId = UUID.randomUUID();
+        when(teacherAssignmentService.myAssignments(userId)).thenReturn(List.of(
+                new TeacherAssignmentService.AssignmentView(classId, "Grade 5", subjectId, "Mathematics",
+                        List.of(new TeacherAssignmentService.SectionInfo(UUID.randomUUID(), "A")))));
+        when(teacherAssignmentService.studentCount(userId)).thenReturn(28L);
+
+        DashboardSummary summary = service().summaryFor(userId.toString(), List.of(Roles.TEACHER));
+
+        assertThat(summary.placeholder()).isFalse();
+        assertThat(summary.teacher().assignedClassCount()).isEqualTo(1);
+        assertThat(summary.teacher().assignedSubjectCount()).isEqualTo(1);
+        assertThat(summary.teacher().studentCount()).isEqualTo(28L);
+        assertThat(summary.teacher().assignments()).singleElement()
+                .extracting(DashboardSummary.TeacherAssignment::className).isEqualTo("Grade 5");
     }
 
     @Test
@@ -129,6 +161,8 @@ class DashboardServiceTest {
         a.setBody("Details to follow.");
         a.setCreatedAt(java.time.OffsetDateTime.now());
         when(announcementRepository.findTop3ByOrderByCreatedAtDesc()).thenReturn(List.of(a));
+        when(teacherAssignmentService.myAssignments(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        when(teacherAssignmentService.studentCount(org.mockito.ArgumentMatchers.any())).thenReturn(0L);
 
         for (String role : List.of(Roles.SCHOOL_ADMIN, Roles.TEACHER, Roles.STUDENT, Roles.PARENT)) {
             DashboardSummary summary = service().summaryFor(UUID.randomUUID().toString(), List.of(role));

@@ -36,16 +36,49 @@ spring:
       app_user_name: ${DB_APP_USERNAME}
       app_user_password: ${DB_APP_PASSWORD}
 
+  servlet:
+    multipart:
+      # Matches StudentDocumentService's own 10 MB cap -- kept in sync rather
+      # than relying on Spring's 1 MB default, which would reject a valid
+      # upload before the service's own (more informative) 400 ever runs.
+      max-file-size: 10MB
+      max-request-size: 10MB
+
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: ${JWT_ISSUER_URI:http://localhost:8080}
 
+  # Free/self-hosted email (plan Phase 4.5 parts 14/16): plain SMTP, never a paid
+  # provider. Defaults target a local dev SMTP catcher (e.g. MailHog on 1025,
+  # no auth/TLS) so email "just works" locally with zero configuration; point
+  # SMTP_HOST/PORT at any real SMTP relay (including a free one) in production.
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:false}
+          starttls:
+            enable: ${SMTP_STARTTLS:false}
+        connectiontimeout: 3000
+        timeout: 3000
+        writetimeout: 3000
+
 server:
   port: 8080
 
 app:
+  # Local/self-hosted file storage for uploaded student documents (plan Phase 3
+  # section 2) -- never a paid cloud bucket. Outside any statically-served
+  # directory; files are only ever read back through the authenticated
+  # download endpoint (StudentDocumentService).
+  storage:
+    base-dir: ${STORAGE_BASE_DIR:./data/uploads}
   # DANGER: local-development convenience only. When true it exposes
   # /api/v1/dev/** endpoints (e.g. simulating a paid invoice without a real
   # Razorpay webhook). MUST stay false in every deployed environment -- real
@@ -64,6 +97,24 @@ app:
       secure: ${AUTH_COOKIE_SECURE:true}
       same-site: ${AUTH_COOKIE_SAME_SITE:Strict}
       max-age-seconds: ${AUTH_COOKIE_MAX_AGE_SECONDS:3600}
+  email:
+    # The "from" address on outgoing mail, and a kill switch for environments with
+    # no SMTP relay reachable at all -- when false, EmailGateway logs instead of
+    # sending, so a missing/unreachable SMTP server can never fail a transaction
+    # (plan part 16).
+    from: ${EMAIL_FROM:no-reply@school.local}
+    enabled: ${EMAIL_ENABLED:true}
+  # Used to build links in outgoing email (portal activation, status lookup) --
+  # the frontend origin, not this backend's own.
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  # Public-endpoint abuse protection (plan part 4/27): a simple in-memory
+  # sliding-window limiter, no external service/dependency -- appropriate for a
+  # single self-hosted instance. Applies to the public admission-application
+  # submission endpoint.
+  rate-limit:
+    admission-submit:
+      max-requests: ${ADMISSION_SUBMIT_RATE_LIMIT:5}
+      window-minutes: ${ADMISSION_SUBMIT_RATE_WINDOW_MINUTES:15}
 
 # Razorpay payment gateway (fee collection). Credentials come from the
 # environment only -- never commit them (plan section 7.2d / 7.3). Test-mode
@@ -83,6 +134,14 @@ management:
   endpoint:
     health:
       show-details: when_authorized
+  health:
+    # Email is designed to fail soft everywhere it's used (SmtpEmailGateway swallows every send
+    # error so a down/unconfigured SMTP server -- e.g. no local MailHog running -- never breaks a
+    # caller's transaction, plan Phase 4.5 part 16). The auto-registered MailHealthIndicator pings
+    # the SMTP server and would otherwise flip the whole app's aggregate health to DOWN for the same
+    # "SMTP unreachable" condition that's explicitly meant to be non-fatal -- so it's excluded here.
+    mail:
+      enabled: false
 
 springdoc:
   api-docs:

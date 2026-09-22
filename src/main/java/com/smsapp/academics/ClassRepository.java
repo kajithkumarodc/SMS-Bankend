@@ -10,4 +10,7 @@ public interface ClassRepository extends JpaRepository<SchoolClass, UUID> {
     List<SchoolClass> findAllByOrderByName();
 
     boolean existsBySchoolIdAndName(UUID schoolId, String name);
+
+    /** Teacher Panel (Phase 4): resolve class names for a set of assigned class ids. */
+    List<SchoolClass> findByIdIn(java.util.Collection<UUID> ids);
 }

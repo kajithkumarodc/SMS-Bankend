@@ -16,4 +16,9 @@ public interface ClassSubjectRepository extends JpaRepository<ClassSubject, UUID
             + "where cs.subjectId = s.id and cs.classId = :classId "
             + "order by s.name")
     List<Subject> findSubjectsForClass(@Param("classId") UUID classId);
+
+    java.util.Optional<ClassSubject> findByClassIdAndSubjectId(UUID classId, UUID subjectId);
+
+    /** Teacher Panel (Phase 4): every class/subject a given teacher is assigned to. */
+    List<ClassSubject> findByTeacherId(UUID teacherId);
 }

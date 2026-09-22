@@ -12,8 +12,13 @@ public final class StudentStatus {
 
     public static final String ACTIVE = "ACTIVE";
     public static final String INACTIVE = "INACTIVE";
+    public static final String GRADUATED = "GRADUATED";
+    public static final String LEFT_SCHOOL = "LEFT_SCHOOL";
+    public static final String TRANSFERRED = "TRANSFERRED";
 
-    private static final Set<String> ALL = Set.of(ACTIVE, INACTIVE);
+    private static final Set<String> ALL = Set.of(ACTIVE, INACTIVE, GRADUATED, LEFT_SCHOOL, TRANSFERRED);
+
+    public static final String VALID_VALUES_MESSAGE = "Status must be one of ACTIVE, INACTIVE, GRADUATED, LEFT_SCHOOL, TRANSFERRED";
 
     private StudentStatus() {
     }
