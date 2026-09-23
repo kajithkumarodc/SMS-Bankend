@@ -70,7 +70,9 @@ spring:
         writetimeout: 3000
 
 server:
-  port: 8080
+  # Deployment platforms (Railway, Heroku, Cloud Run) assign the listening port
+  # at runtime through $PORT; the 8080 default keeps local runs unchanged.
+  port: ${PORT:8080}
 
 app:
   # Local/self-hosted file storage for uploaded student documents (plan Phase 3

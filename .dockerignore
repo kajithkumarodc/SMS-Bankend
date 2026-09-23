@@ -1,0 +1,23 @@
+# Build outputs — the image builds these itself; copying a host target/ in
+# would both bloat the context and risk shipping a stale jar.
+target/
+**/target/
+
+# Secrets. application.yml imports .env when present, so it must never reach
+# the build context.
+.env
+.env.*
+
+.git/
+.gitignore
+.idea/
+.vscode/
+*.iml
+
+docs/
+README.md
+docker-compose.yml
+
+*.log
+.DS_Store
+Thumbs.db

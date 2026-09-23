@@ -59,7 +59,10 @@ public class SecurityConfig {
                 // reproducible the same way against the pre-existing /auth/login). Must be
                 // permitAll for every permitAll endpoint's own validation errors to render.
                 .requestMatchers("/error").permitAll()
-                .requestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/activate",
+                // /auth/refresh is deliberately open: it authenticates the caller via the
+                // opaque refresh token in the request body, not a JWT, so it cannot sit
+                // behind the JWT resource-server filter like /logout-all does.
+                .requestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/refresh",
                     "/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                 .permitAll()
                 // Razorpay's server-to-server payment webhook cannot present a JWT.

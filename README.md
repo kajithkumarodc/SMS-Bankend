@@ -324,6 +324,47 @@ blocks. A student optionally carries a `hostel_room_id`.
 mvn clean install
 ```
 
+## Deploying to Railway
+
+`Dockerfile` and `railway.toml` are committed, so Railway builds from the
+Dockerfile rather than guessing a toolchain (the Maven wrapper is deliberately
+not committed — see `.gitignore`). PostgreSQL is the only backing service the
+application needs; the Redis / RabbitMQ / MinIO entries in `docker-compose.yml`
+are not referenced by any code yet.
+
+Add a **PostgreSQL** service to the Railway project, then set these variables on
+the **backend** service. Nothing below is provisioned automatically.
+
+| Variable | Value | Notes |
+| --- | --- | --- |
+| `DB_URL` | `jdbc:postgresql://${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}` | **Not** `DATABASE_URL` — Railway supplies `postgresql://…`, Spring needs the `jdbc:` prefix |
+| `DB_USERNAME` | `${{Postgres.PGUSER}}` | Elevated role, used by Flyway only |
+| `DB_PASSWORD` | `${{Postgres.PGPASSWORD}}` | |
+| `DB_APP_USERNAME` | `app_user` | Restricted runtime role, created by `V4` |
+| `DB_APP_PASSWORD` | *(generate)* | Becomes `app_user`'s password via a Flyway placeholder |
+| `JWT_SECRET` | *(generate, ≥32 chars)* | Startup fails fast if shorter |
+| `JWT_ISSUER_URI` | `https://<your-service>.up.railway.app` | |
+| `CORS_ALLOWED_ORIGINS` | your frontend origin(s) | Comma-separated; no trailing slash |
+| `RAZORPAY_KEY_ID` / `_KEY_SECRET` / `_WEBHOOK_SECRET` | from the Razorpay dashboard | Optional — default empty |
+
+`PORT` is injected by Railway and read by `server.port`; do not set it yourself.
+
+⚠️ Leave `APP_DEV_TOOLS_ENABLED` unset. It defaults to `false`, and setting it
+true would expose the endpoint that marks an invoice paid without a verified
+webhook signature.
+
+Two things worth knowing about the first deploy:
+
+- Flyway's `V4` migration runs `CREATE ROLE`, so `DB_USERNAME` must be a
+  privileged account. Railway's Postgres gives you a superuser, so this works —
+  but it is why `DB_USERNAME` and `DB_APP_USERNAME` must be *different* roles.
+- The first boot runs every migration against an empty database and is much
+  slower than later restarts; `healthcheckTimeout` in `railway.toml` is set to
+  300s for exactly that reason.
+
+The service stays at one replica (`numReplicas`), since the migrations are not
+safe to run concurrently from several instances against a cold database.
+
 ## Phase 1 tests
 
 The integration suite temporarily uses the isolated native PostgreSQL 17 test database `sms_db_test` on port `5433`, never the development database `sms_db`. Create it once as a PostgreSQL administrator:

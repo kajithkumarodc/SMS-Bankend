@@ -9,6 +9,11 @@ public final class AuditActions {
     // actions
     public static final String LOGIN_SUCCESS = "LOGIN_SUCCESS";
     public static final String LOGIN_FAILED = "LOGIN_FAILED";
+    public static final String TOKEN_REFRESHED = "TOKEN_REFRESHED";
+    /** A revoked/expired refresh token was presented again -- treated as a theft signal; the whole chain is revoked. */
+    public static final String TOKEN_REUSE_DETECTED = "TOKEN_REUSE_DETECTED";
+    public static final String LOGOUT = "LOGOUT";
+    public static final String LOGOUT_ALL = "LOGOUT_ALL";
     public static final String STUDENT_CREATED = "STUDENT_CREATED";
     public static final String STUDENT_UPDATED = "STUDENT_UPDATED";
     public static final String STUDENT_STATUS_CHANGED = "STUDENT_STATUS_CHANGED";
@@ -92,6 +97,7 @@ public final class AuditActions {
 
     // entity types
     public static final String USER = "USER";
+    public static final String REFRESH_TOKEN = "REFRESH_TOKEN";
     public static final String STUDENT = "STUDENT";
     public static final String CLASS = "CLASS";
     public static final String SECTION = "SECTION";
