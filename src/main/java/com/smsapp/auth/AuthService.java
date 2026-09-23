@@ -90,7 +90,8 @@ public class AuthService {
                 Map.of(DETAIL_EMAIL, request.email()));
 
         return new LoginResponse(accessToken, refreshToken,
-                new AuthenticatedUser(user.getId().toString(), user.getFullName(), roles));
+                new AuthenticatedUser(user.getId().toString(), user.getFullName(), roles, permissions,
+                        user.isMustChangePassword()));
     }
 
     /**
@@ -129,6 +130,7 @@ public class AuthService {
         User user = userRepository.findById(existing.getUserId())
                 .orElseThrow(() -> new BadCredentialsException(INVALID_REFRESH_TOKEN));
         List<String> roles = roleRepository.findNamesByUserId(user.getId());
+        List<String> permissions = roleRepository.findPermissionNamesByUserId(user.getId());
 
         String newRawRefreshToken = generateOpaqueToken();
         RefreshToken rotated = persistRefreshToken(user.getId(), newRawRefreshToken);
@@ -143,7 +145,8 @@ public class AuthService {
                 Map.of());
 
         return new RefreshResponse(accessToken, newRawRefreshToken,
-                new AuthenticatedUser(user.getId().toString(), user.getFullName(), roles));
+                new AuthenticatedUser(user.getId().toString(), user.getFullName(), roles, permissions,
+                        user.isMustChangePassword()));
     }
 
     /** Revokes one refresh token (best-effort -- an already-revoked/unknown token is not an error). */
