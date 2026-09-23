@@ -95,6 +95,8 @@ public class AuthController {
     }
 
     public record ActivatePayload(@NotBlank String token, @NotBlank @Size(min = 8, max = 100) String newPassword) {
+    }
+
     public record RefreshPayload(@NotBlank String refreshToken) {
     }
 
