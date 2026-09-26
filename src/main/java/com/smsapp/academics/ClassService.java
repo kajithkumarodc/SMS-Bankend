@@ -79,14 +79,59 @@ public class ClassService {
         return saved;
     }
 
-    /** Lists all classes with their sections nested. */
+    /**
+     * Renames a section. The class and the students in the section are untouched.
+     *
+     * @throws ApiException 404 if the section isn't in that class, 409 if the class already has a section with
+     *         that name.
+     */
+    @Transactional
+    public Section renameSection(UUID classId, UUID sectionId, CreateSectionRequest request) {
+        Section section = requireSection(classId, sectionId);
+        String name = request.name().trim();
+        if (!section.getName().equals(name) && sectionRepository.existsByClassIdAndName(classId, name)) {
+            throw new ApiException("A section named '" + name + "' already exists in this class", HttpStatus.CONFLICT);
+        }
+        String previous = section.getName();
+        section.setName(name);
+        Section saved = sectionRepository.save(section);
+        auditService.log(AuditActions.SECTION_UPDATED, AuditActions.SECTION, sectionId,
+                Map.of("classId", classId.toString(), "from", previous, "to", name));
+        return saved;
+    }
+
+    /**
+     * Deletes a section. Only an empty one: students must be moved to another section first, so nobody is left
+     * without a section. The class itself is never affected.
+     *
+     * @throws ApiException 404 if the section isn't in that class, 409 if students are still in it.
+     */
+    @Transactional
+    public void deleteSection(UUID classId, UUID sectionId) {
+        Section section = requireSection(classId, sectionId);
+        long students = sectionRepository.countStudentsInSection(sectionId);
+        if (students > 0) {
+            throw new ApiException("Section " + section.getName() + " still has " + students + " student"
+                    + (students == 1 ? "" : "s") + " -- move them to another section first", HttpStatus.CONFLICT);
+        }
+        sectionRepository.delete(section);
+        auditService.log(AuditActions.SECTION_DELETED, AuditActions.SECTION, sectionId,
+                Map.of("classId", classId.toString(), "name", section.getName()));
+    }
+
+    private Section requireSection(UUID classId, UUID sectionId) {
+        return sectionRepository.findByIdAndClassId(sectionId, classId)
+                .orElseThrow(() -> new ApiException("Section not found", HttpStatus.NOT_FOUND));
+    }
+
+    /** Lists all classes, in school order, with their sections nested. */
     @Transactional(readOnly = true)
     public List<ClassResponse> listWithSections() {
         Map<UUID, List<SectionResponse>> sectionsByClass = sectionRepository.findAllByOrderByName().stream()
                 .map(SectionResponse::from)
                 .collect(Collectors.groupingBy(SectionResponse::classId));
 
-        return classRepository.findAllByOrderByName().stream()
+        return classRepository.findAllByOrderBySortOrderAscNameAsc().stream()
                 .map(c -> new ClassResponse(c.getId(), c.getSchoolId(), c.getName(),
                         sectionsByClass.getOrDefault(c.getId(), List.of())))
                 .toList();

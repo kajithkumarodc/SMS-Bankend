@@ -66,7 +66,7 @@ class FrontOfficeSetupIntegrationTest {
     @BeforeEach
     void seed() throws SQLException {
         try (Connection connection = connect(); Statement st = connection.createStatement()) {
-            st.execute("TRUNCATE users, roles, permissions, user_roles, role_permissions, front_office_purposes, "
+            st.execute("TRUNCATE schools, users, roles, permissions, user_roles, role_permissions, front_office_purposes, "
                     + "complaint_types, enquiry_sources, enquiry_references, visitors, complaints, admission_enquiries CASCADE");
             schoolEventsId = UUID.randomUUID();
             staffId = UUID.randomUUID();
@@ -165,7 +165,7 @@ class FrontOfficeSetupIntegrationTest {
         try (Connection connection = connect(); Statement st = connection.createStatement()) {
             UUID schoolId = UUID.randomUUID();
             UUID studentId = UUID.randomUUID();
-            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolId + "', 'Setup School') ON CONFLICT DO NOTHING");
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolId + "', 'Setup School')");
             st.execute("INSERT INTO students (id, school_id, full_name, first_name, last_name, admission_number, status) "
                     + "VALUES ('" + studentId + "', '" + schoolId + "', 'Edward Thomas', 'Edward', 'Thomas', 'FS-1', 'ACTIVE')");
             st.execute("INSERT INTO visitors (purpose_id, meeting_with_type, student_id, visitor_name, visit_date) VALUES ('"

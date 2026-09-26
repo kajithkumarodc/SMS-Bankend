@@ -19,9 +19,11 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -226,5 +228,84 @@ class ClassSectionIntegrationTest {
         mockMvc.perform(get("/api/v1/students").param("sectionId", UUID.randomUUID().toString()).cookie(admin))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    // --- Sections are flexible: rename and delete without touching the class ---------
+
+    @Test
+    void aSectionCanBeRenamedButNotToANameTheClassAlreadyHas() throws Exception {
+        Cookie admin = login(ADMIN_A);
+        UUID classId = createClassA(admin, "Class 5");
+        UUID sectionA = createSection(admin, classId, "A");
+        createSection(admin, classId, "B");
+
+        mockMvc.perform(put("/api/v1/classes/" + classId + "/sections/" + sectionA).cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\" Rose \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Rose"))
+                .andExpect(jsonPath("$.classId").value(classId.toString()));
+        mockMvc.perform(put("/api/v1/classes/" + classId + "/sections/" + sectionA).cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"B\"}"))
+                .andExpect(status().isConflict());
+        // A section id under the wrong class is a 404.
+        UUID otherClass = createClassA(admin, "Class 6");
+        mockMvc.perform(put("/api/v1/classes/" + otherClass + "/sections/" + sectionA).cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"C\"}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/api/v1/classes/" + classId + "/sections/" + sectionA).cookie(login(TEACHER_A))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"C\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anEmptySectionCanBeDeletedButOneWithStudentsCannot() throws Exception {
+        Cookie admin = login(ADMIN_A);
+        UUID classId = createClassA(admin, "Class 5");
+        UUID sectionA = createSection(admin, classId, "A");
+        UUID sectionB = createSection(admin, classId, "B");
+        mockMvc.perform(patch("/api/v1/students/" + studentA + "/section").cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"sectionId\":\"" + sectionA + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/v1/classes/" + classId + "/sections/" + sectionA).cookie(admin))
+                .andExpect(status().isConflict());
+        mockMvc.perform(delete("/api/v1/classes/" + classId + "/sections/" + sectionB).cookie(admin))
+                .andExpect(status().isNoContent());
+
+        // The class and its remaining section are untouched.
+        mockMvc.perform(get("/api/v1/classes").cookie(admin))
+                .andExpect(jsonPath("$[?(@.name == 'Class 5')].sections.length()").value(1))
+                .andExpect(jsonPath("$[?(@.name == 'Class 5')].sections[0].name").value("A"));
+        mockMvc.perform(delete("/api/v1/classes/" + classId + "/sections/" + sectionB).cookie(admin))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/v1/classes/" + classId + "/sections/" + sectionA).cookie(login(TEACHER_A)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void classesAreListedInSchoolOrder() throws Exception {
+        try (var connection = DriverManager.getConnection(
+                System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
+                System.getProperty("DB_USERNAME", "postgres"),
+                System.getProperty("DB_PASSWORD", "1234"));
+             Statement st = connection.createStatement()) {
+            st.execute("INSERT INTO classes (id, school_id, name, sort_order) VALUES "
+                    + "(gen_random_uuid(), '" + schoolA + "', 'Class 10', 11), "
+                    + "(gen_random_uuid(), '" + schoolA + "', 'Class 2', 3), "
+                    + "(gen_random_uuid(), '" + schoolA + "', 'UKG', 1), "
+                    + "(gen_random_uuid(), '" + schoolA + "', 'LKG', 0)");
+        }
+        Cookie admin = login(ADMIN_A);
+        createClassA(admin, "Arts Club"); // added later: listed after the standard classes
+        mockMvc.perform(get("/api/v1/classes").cookie(admin))
+                .andExpect(jsonPath("$[*].name").value(org.hamcrest.Matchers.contains("LKG", "UKG", "Class 2", "Class 10", "Arts Club")));
+    }
+
+    private UUID createSection(Cookie admin, UUID classId, String name) throws Exception {
+        var result = mockMvc.perform(post("/api/v1/classes/" + classId + "/sections").cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return UUID.fromString(JSON.readTree(result.getResponse().getContentAsString()).get("id").asText());
     }
 }

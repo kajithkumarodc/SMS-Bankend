@@ -20,6 +20,8 @@ public final class AuditActions {
     public static final String SECTION_ASSIGNED = "SECTION_ASSIGNED";
     public static final String CLASS_CREATED = "CLASS_CREATED";
     public static final String SECTION_CREATED = "SECTION_CREATED";
+    public static final String SECTION_UPDATED = "SECTION_UPDATED";
+    public static final String SECTION_DELETED = "SECTION_DELETED";
     public static final String SUBJECT_CREATED = "SUBJECT_CREATED";
     public static final String CLASS_SUBJECT_ASSIGNED = "CLASS_SUBJECT_ASSIGNED";
     public static final String ATTENDANCE_MARKED = "ATTENDANCE_MARKED";

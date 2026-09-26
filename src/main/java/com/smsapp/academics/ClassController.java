@@ -12,10 +12,12 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -60,6 +62,22 @@ public class ClassController {
                                                          @Valid @RequestBody CreateSectionRequest request) {
         Section created = classService.createSection(classId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(SectionResponse.from(created));
+    }
+
+    /** Rename a section. SCHOOL_ADMIN only. 404 if the section isn't in the class, 409 if the name is taken. */
+    @PutMapping("/{classId}/sections/{sectionId}")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    public SectionResponse renameSection(@PathVariable UUID classId, @PathVariable UUID sectionId,
+                                         @Valid @RequestBody CreateSectionRequest request) {
+        return SectionResponse.from(classService.renameSection(classId, sectionId, request));
+    }
+
+    /** Delete an empty section. SCHOOL_ADMIN only. 404 if the section isn't in the class, 409 if it has students. */
+    @DeleteMapping("/{classId}/sections/{sectionId}")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    public ResponseEntity<Void> deleteSection(@PathVariable UUID classId, @PathVariable UUID sectionId) {
+        classService.deleteSection(classId, sectionId);
+        return ResponseEntity.noContent().build();
     }
 
     /**
