@@ -139,6 +139,27 @@ public class AuthService {
                         user.isMustChangePassword()));
     }
 
+    /**
+     * Re-reads the user's current roles and permissions and re-issues their access token with the
+     * <em>same</em> expiry as the one presented. Roles and permissions are baked into the token at login,
+     * so without this a signed-in user wouldn't see grants added since (e.g. a new module's permissions)
+     * until they logged in again. Keeping the original expiry means this never lengthens a session.
+     *
+     * @throws BadCredentialsException if the user no longer exists or the session has already expired.
+     */
+    @Transactional(readOnly = true)
+    public SessionResponse refreshSession(UUID userId, Instant sessionExpiresAt) {
+        if (sessionExpiresAt == null || !sessionExpiresAt.isAfter(Instant.now())) {
+            throw new BadCredentialsException(INVALID_CREDENTIALS);
+        }
+        User user = userRepository.findById(userId).orElseThrow(() -> new BadCredentialsException(INVALID_CREDENTIALS));
+        List<String> roles = roleRepository.findNamesByUserId(user.getId());
+        List<String> permissions = roleRepository.findPermissionNamesByUserId(user.getId());
+        String accessToken = issueAccessToken(user, roles, permissions, sessionExpiresAt);
+        return new SessionResponse(accessToken, new AuthenticatedUser(user.getId().toString(), user.getFullName(),
+                roles, permissions, user.isMustChangePassword()));
+    }
+
     /** Revokes one refresh token (best-effort -- an already-revoked/unknown token is not an error). */
     @Transactional
     public void logout(String rawRefreshToken) {
@@ -163,13 +184,17 @@ public class AuthService {
     }
 
     private String issueAccessToken(User user, List<String> roles, List<String> permissions) {
+        return issueAccessToken(user, roles, permissions, Instant.now().plusSeconds(ACCESS_TOKEN_TTL_SECONDS));
+    }
+
+    private String issueAccessToken(User user, List<String> roles, List<String> permissions, Instant expiresAt) {
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(user.getId().toString())
                 .claim("roles", roles)
                 .claim("permissions", permissions)
                 .claim("name", user.getFullName())
                 .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(ACCESS_TOKEN_TTL_SECONDS))
+                .expiresAt(expiresAt)
                 .build();
 
         return jwtEncoder.encode(JwtEncoderParameters.from(
@@ -218,6 +243,10 @@ public class AuthService {
     }
 
     public record RefreshResponse(String token, String refreshToken, AuthenticatedUser user) {
+    }
+
+    /** Result of {@link #refreshSession}: the re-issued access token (same expiry) and the up-to-date user. */
+    public record SessionResponse(String token, AuthenticatedUser user) {
     }
 
     public record AuthenticatedUser(String id, String name, List<String> roles, List<String> permissions,
