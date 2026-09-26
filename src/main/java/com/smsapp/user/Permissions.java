@@ -66,6 +66,14 @@ public final class Permissions {
     public static final String ENQUIRY_EXPORT = "ENQUIRY_EXPORT";
     public static final String ENQUIRY_PRINT = "ENQUIRY_PRINT";
 
+    public static final String VISITOR_VIEW = "VISITOR_VIEW";
+    public static final String VISITOR_CREATE = "VISITOR_CREATE";
+    public static final String VISITOR_EDIT = "VISITOR_EDIT";
+    public static final String VISITOR_DELETE = "VISITOR_DELETE";
+    public static final String VISITOR_EXPORT = "VISITOR_EXPORT";
+    public static final String VISITOR_PRINT = "VISITOR_PRINT";
+
+
     public static final String HAS_STUDENT_VIEW = HAS_AUTHORITY_OPEN + STUDENT_VIEW + CLOSE;
     public static final String HAS_STUDENT_CREATE = HAS_AUTHORITY_OPEN + STUDENT_CREATE + CLOSE;
     public static final String HAS_STUDENT_EDIT = HAS_AUTHORITY_OPEN + STUDENT_EDIT + CLOSE;
@@ -114,6 +122,12 @@ public final class Permissions {
     public static final String HAS_ENQUIRY_CONVERT = HAS_AUTHORITY_OPEN + ENQUIRY_CONVERT + CLOSE;
     public static final String HAS_ENQUIRY_EXPORT = HAS_AUTHORITY_OPEN + ENQUIRY_EXPORT + CLOSE;
     public static final String HAS_ENQUIRY_PRINT = HAS_AUTHORITY_OPEN + ENQUIRY_PRINT + CLOSE;
+
+    public static final String HAS_VISITOR_VIEW = HAS_AUTHORITY_OPEN + VISITOR_VIEW + CLOSE;
+    public static final String HAS_VISITOR_CREATE = HAS_AUTHORITY_OPEN + VISITOR_CREATE + CLOSE;
+    public static final String HAS_VISITOR_EDIT = HAS_AUTHORITY_OPEN + VISITOR_EDIT + CLOSE;
+    public static final String HAS_VISITOR_DELETE = HAS_AUTHORITY_OPEN + VISITOR_DELETE + CLOSE;
+
 
     private Permissions() {
     }
