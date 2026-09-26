@@ -101,6 +101,8 @@ public final class Permissions {
     public static final String COMPLAINT_EXPORT = "COMPLAINT_EXPORT";
     public static final String COMPLAINT_PRINT = "COMPLAINT_PRINT";
 
+    public static final String FRONT_OFFICE_SETUP = "FRONT_OFFICE_SETUP";
+
     public static final String HAS_STUDENT_VIEW = HAS_AUTHORITY_OPEN + STUDENT_VIEW + CLOSE;
     public static final String HAS_STUDENT_CREATE = HAS_AUTHORITY_OPEN + STUDENT_CREATE + CLOSE;
     public static final String HAS_STUDENT_EDIT = HAS_AUTHORITY_OPEN + STUDENT_EDIT + CLOSE;
@@ -174,6 +176,8 @@ public final class Permissions {
     public static final String HAS_COMPLAINT_CREATE = HAS_AUTHORITY_OPEN + COMPLAINT_CREATE + CLOSE;
     public static final String HAS_COMPLAINT_EDIT = HAS_AUTHORITY_OPEN + COMPLAINT_EDIT + CLOSE;
     public static final String HAS_COMPLAINT_DELETE = HAS_AUTHORITY_OPEN + COMPLAINT_DELETE + CLOSE;
+
+    public static final String HAS_FRONT_OFFICE_SETUP = HAS_AUTHORITY_OPEN + FRONT_OFFICE_SETUP + CLOSE;
 
     private Permissions() {
     }

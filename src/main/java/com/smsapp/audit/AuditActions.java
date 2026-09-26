@@ -106,6 +106,10 @@ public final class AuditActions {
     public static final String COMPLAINT_ATTACHMENT_UPLOADED = "COMPLAINT_ATTACHMENT_UPLOADED";
     public static final String COMPLAINT_ATTACHMENT_REMOVED = "COMPLAINT_ATTACHMENT_REMOVED";
     public static final String COMPLAINT_TYPE_CREATED = "COMPLAINT_TYPE_CREATED";
+    public static final String FRONT_OFFICE_SETUP_CREATED = "FRONT_OFFICE_SETUP_CREATED";
+    public static final String FRONT_OFFICE_SETUP_UPDATED = "FRONT_OFFICE_SETUP_UPDATED";
+    public static final String FRONT_OFFICE_SETUP_DELETED = "FRONT_OFFICE_SETUP_DELETED";
+    public static final String FRONT_OFFICE_SETUP_DEACTIVATED = "FRONT_OFFICE_SETUP_DEACTIVATED";
     public static final String ADMISSION_CYCLE_CREATED = "ADMISSION_CYCLE_CREATED";
     public static final String ADMISSION_CYCLE_UPDATED = "ADMISSION_CYCLE_UPDATED";
     public static final String ADMISSION_CYCLE_OPENED = "ADMISSION_CYCLE_OPENED";
@@ -161,6 +165,7 @@ public final class AuditActions {
     public static final String POSTAL_RECEIVE = "POSTAL_RECEIVE";
     public static final String COMPLAINT = "COMPLAINT";
     public static final String COMPLAINT_TYPE = "COMPLAINT_TYPE";
+    public static final String FRONT_OFFICE_SETUP_ITEM = "FRONT_OFFICE_SETUP_ITEM";
     public static final String STUDENT_DOCUMENT = "STUDENT_DOCUMENT";
     public static final String STUDENT_IDENTIFICATION = "STUDENT_IDENTIFICATION";
     public static final String ADMISSION_CYCLE = "ADMISSION_CYCLE";
