@@ -3,17 +3,16 @@ package com.smsapp.frontoffice;
 import java.util.Locale;
 import java.util.Set;
 
-/** Fixed enquiry pipeline states (matches the `admission_enquiries.status` CHECK constraint). */
+/** Fixed enquiry pipeline states (matches the `admission_enquiries.status` CHECK constraint, V31). */
 public final class EnquiryStatus {
 
     public static final String ACTIVE = "ACTIVE";
-    public static final String FOLLOW_UP = "FOLLOW_UP";
     public static final String WON = "WON";
     public static final String PASSIVE = "PASSIVE";
     public static final String LOST = "LOST";
     public static final String DEAD = "DEAD";
 
-    private static final Set<String> ALL = Set.of(ACTIVE, FOLLOW_UP, WON, PASSIVE, LOST, DEAD);
+    private static final Set<String> ALL = Set.of(ACTIVE, PASSIVE, WON, LOST, DEAD);
 
     /** Statuses that mean "no longer an open lead" -- excluded from "follow-ups due" counts. */
     public static final Set<String> CLOSED = Set.of(WON, LOST, DEAD);

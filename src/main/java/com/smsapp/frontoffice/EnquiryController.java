@@ -3,19 +3,21 @@ package com.smsapp.frontoffice;
 import com.smsapp.frontoffice.EnquiryDtos.ArchiveEnquiryRequest;
 import com.smsapp.frontoffice.EnquiryDtos.AssignableStaffResponse;
 import com.smsapp.frontoffice.EnquiryDtos.ChangeEnquiryStatusRequest;
-import com.smsapp.frontoffice.EnquiryDtos.CreateEnquiryRequest;
 import com.smsapp.frontoffice.EnquiryDtos.EnquiryConversionResult;
+import com.smsapp.frontoffice.EnquiryDtos.EnquiryRequest;
 import com.smsapp.frontoffice.EnquiryDtos.EnquiryResponse;
 import com.smsapp.frontoffice.EnquiryDtos.EnquirySummaryResponse;
 import com.smsapp.frontoffice.EnquiryDtos.FollowUpResponse;
 import com.smsapp.frontoffice.EnquiryDtos.LinkApplicationRequest;
 import com.smsapp.frontoffice.EnquiryDtos.RecordFollowUpRequest;
-import com.smsapp.frontoffice.EnquiryDtos.UpdateEnquiryRequest;
 import com.smsapp.admission.AdmissionApplicationService;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
+import com.smsapp.common.ApiException;
 import com.smsapp.user.Permissions;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -38,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -60,14 +63,29 @@ public class EnquiryController {
 
     @PostMapping
     @PreAuthorize(Permissions.HAS_ENQUIRY_CREATE)
-    ResponseEntity<EnquiryResponse> create(@Valid @RequestBody CreateEnquiryRequest request) {
+    ResponseEntity<EnquiryResponse> create(@Valid @RequestBody EnquiryRequest request) {
         AdmissionEnquiry created = enquiryService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(enquiryService.toResponse(created));
     }
 
     /**
-     * Search/list, paginated. {@code q} matches applicant name, guardian name, phone or enquiry number.
-     * Archived enquiries are excluded unless {@code includeArchived=true}.
+     * Sortable list columns: API sort key -> entity property. {@code sourceName} sorts through the
+     * read-only {@code source} association so the list orders by the source's name, not its id.
+     */
+    private static final Map<String, String> SORTABLE = Map.of(
+            "applicantName", "applicantName",
+            "phone", "phone",
+            "sourceName", "source.name",
+            "enquiryDate", "enquiryDate",
+            "lastFollowUpDate", "lastFollowUpDate",
+            "followUpDate", "followUpDate",
+            "status", "status",
+            "createdAt", "createdAt");
+
+    /**
+     * Search/list, paginated. {@code q} matches applicant name, guardian name, phone, email or enquiry
+     * number. Archived enquiries are excluded unless {@code includeArchived=true}. Sort keys are the
+     * {@link #SORTABLE} names (400 otherwise); ties are broken newest-first.
      */
     @GetMapping
     @PreAuthorize(Permissions.HAS_ENQUIRY_VIEW)
@@ -84,8 +102,24 @@ public class EnquiryController {
 
         String normalizedStatus = status == null || status.isBlank() ? null : status.trim().toUpperCase(java.util.Locale.ROOT);
         Page<AdmissionEnquiry> page = enquiryService.search(q, normalizedStatus, sourceId, classId,
-                assignedStaffUserId, from, to, includeArchived, pageable);
-        return new PagedModel<>(page.map(enquiryService::toResponse));
+                assignedStaffUserId, from, to, includeArchived, withEntitySort(pageable));
+        return new PagedModel<>(new PageImpl<>(enquiryService.toResponses(page.getContent()), pageable,
+                page.getTotalElements()));
+    }
+
+    private static Pageable withEntitySort(Pageable pageable) {
+        Sort sort = Sort.unsorted();
+        for (Sort.Order order : pageable.getSort()) {
+            String property = SORTABLE.get(order.getProperty());
+            if (property == null) {
+                throw new ApiException("Can't sort enquiries by '" + order.getProperty() + "'", HttpStatus.BAD_REQUEST);
+            }
+            sort = sort.and(Sort.by(order.withProperty(property)));
+        }
+        if (sort.getOrderFor("createdAt") == null) {
+            sort = sort.and(Sort.by(Sort.Direction.DESC, "createdAt"));
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 
     @GetMapping("/summary")
@@ -109,7 +143,7 @@ public class EnquiryController {
 
     @PutMapping("/{id}")
     @PreAuthorize(Permissions.HAS_ENQUIRY_EDIT)
-    EnquiryResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateEnquiryRequest request) {
+    EnquiryResponse update(@PathVariable UUID id, @Valid @RequestBody EnquiryRequest request) {
         return enquiryService.toResponse(enquiryService.update(id, request));
     }
 

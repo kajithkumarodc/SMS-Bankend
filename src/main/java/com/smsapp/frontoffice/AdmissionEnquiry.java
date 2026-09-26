@@ -3,7 +3,11 @@ package com.smsapp.frontoffice;
 import com.smsapp.common.UuidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -45,6 +49,28 @@ public class AdmissionEnquiry extends UuidEntity {
     @Column(name = "source_id")
     private UUID sourceId;
 
+    /**
+     * Read-only view of {@link #sourceId}, mapped only so the list can sort by source name
+     * (Pageable sort {@code source.name}). Writes always go through {@code sourceId}.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_id", insertable = false, updatable = false)
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private EnquirySource source;
+
+    @Column(name = "reference_id")
+    private UUID referenceId;
+
+    @Column
+    private String address;
+
+    @Column
+    private String description;
+
+    @Column(name = "number_of_children")
+    private Short numberOfChildren;
+
     /** Which academic session this enquiry was raised for -- defaults to the current one at creation time. */
     @Column(name = "academic_year_id")
     private UUID academicYearId;
@@ -52,16 +78,21 @@ public class AdmissionEnquiry extends UuidEntity {
     @Column(name = "assigned_staff_user_id")
     private UUID assignedStaffUserId;
 
-    /** Denormalized cache of the latest follow-up -- kept in sync by {@link EnquiryService#recordFollowUp}. */
+    /** The next planned follow-up date. Set on create/edit, and moved forward by {@link EnquiryService#recordFollowUp}. */
     @Column(name = "follow_up_date")
     private LocalDate followUpDate;
 
     @Column(name = "follow_up_notes")
     private String followUpNotes;
 
+    /** Date of the most recent follow-up actually made -- kept in sync by {@link EnquiryService#recordFollowUp}. */
+    @Column(name = "last_follow_up_date")
+    private LocalDate lastFollowUpDate;
+
     @Column(nullable = false, length = 20)
     private String status;
 
+    /** Shown as "Note" on the enquiry form. */
     @Column
     private String remarks;
 

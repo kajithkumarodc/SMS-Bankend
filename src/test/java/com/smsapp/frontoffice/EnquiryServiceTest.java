@@ -4,10 +4,9 @@ import com.smsapp.academics.AcademicYearRepository;
 import com.smsapp.academics.ClassRepository;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
-import com.smsapp.frontoffice.EnquiryDtos.CreateEnquiryRequest;
+import com.smsapp.frontoffice.EnquiryDtos.EnquiryRequest;
 import com.smsapp.frontoffice.EnquiryDtos.EnquiryConversionResult;
 import com.smsapp.frontoffice.EnquiryDtos.RecordFollowUpRequest;
-import com.smsapp.frontoffice.EnquiryDtos.UpdateEnquiryRequest;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
 import com.smsapp.student.StudentService;
@@ -46,6 +45,9 @@ class EnquiryServiceTest {
     private EnquirySourceRepository sourceRepository;
 
     @Mock
+    private EnquiryReferenceRepository referenceRepository;
+
+    @Mock
     private ClassRepository classRepository;
 
     @Mock
@@ -63,8 +65,18 @@ class EnquiryServiceTest {
     private final UUID staffUserId = UUID.randomUUID();
 
     private EnquiryService service() {
-        return new EnquiryService(enquiryRepository, followUpRepository, sourceRepository, classRepository,
+        return new EnquiryService(enquiryRepository, followUpRepository, sourceRepository, referenceRepository,
+                classRepository,
                 academicYearRepository, userRepository, studentService, auditService);
+    }
+
+    private final UUID sourceId = UUID.randomUUID();
+
+    /** A valid form submission; tests override the one field they care about. */
+    private EnquiryRequest form(UUID classId, UUID referenceId, LocalDate enquiryDate, LocalDate nextFollowUpDate) {
+        return new EnquiryRequest("Alex Applicant", "+911234567890", "guardian@example.com", "12 Main Street",
+                "Wants the science stream", "Call after 5pm", enquiryDate, nextFollowUpDate, null, referenceId,
+                sourceId, classId, 2, null, null);
     }
 
     private static AdmissionEnquiry enquiry(UUID id, String status) {
@@ -82,27 +94,79 @@ class EnquiryServiceTest {
         when(enquiryRepository.nextEnquiryNumberSeq()).thenReturn(42L);
         when(enquiryRepository.save(any(AdmissionEnquiry.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        AdmissionEnquiry created = service().create(new CreateEnquiryRequest(
-                "Alex Applicant", "Guardian Name", "+911234567890", "guardian@example.com",
-                null, null, null, null, null, null));
+        when(sourceRepository.existsById(sourceId)).thenReturn(true);
+        LocalDate today = LocalDate.now();
+
+        AdmissionEnquiry created = service().create(form(null, null, today, today.plusDays(2)));
 
         assertThat(created.getEnquiryNumber()).isEqualTo("ENQ-000042");
         assertThat(created.getStatus()).isEqualTo(EnquiryStatus.ACTIVE);
         assertThat(created.isArchived()).isFalse();
-        assertThat(created.getEnquiryDate()).isEqualTo(LocalDate.now());
+        assertThat(created.getEnquiryDate()).isEqualTo(today);
+        assertThat(created.getFollowUpDate()).isEqualTo(today.plusDays(2));
+        assertThat(created.getAddress()).isEqualTo("12 Main Street");
+        assertThat(created.getDescription()).isEqualTo("Wants the science stream");
+        assertThat(created.getRemarks()).isEqualTo("Call after 5pm");
+        assertThat(created.getNumberOfChildren()).isEqualTo((short) 2);
+        assertThat(created.getLastFollowUpDate()).isNull();
     }
 
     @Test
     void rejectsCreateWithUnknownClassIdWith404() {
         UUID classId = UUID.randomUUID();
         when(classRepository.existsById(classId)).thenReturn(false);
+        LocalDate today = LocalDate.now();
 
-        assertThatThrownBy(() -> service().create(new CreateEnquiryRequest(
-                "Alex", null, null, null, classId, null, null, null, null, null)))
+        assertThatThrownBy(() -> service().create(form(classId, null, today, today)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
         verify(enquiryRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsCreateWithUnknownReferenceWith404() {
+        UUID referenceId = UUID.randomUUID();
+        when(sourceRepository.existsById(sourceId)).thenReturn(true);
+        when(referenceRepository.existsById(referenceId)).thenReturn(false);
+        LocalDate today = LocalDate.now();
+
+        assertThatThrownBy(() -> service().create(form(null, referenceId, today, today)))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(enquiryRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsNextFollowUpBeforeTheEnquiryDateWith400() {
+        when(sourceRepository.existsById(sourceId)).thenReturn(true);
+        LocalDate today = LocalDate.now();
+
+        assertThatThrownBy(() -> service().create(form(null, null, today, today.minusDays(1))))
+                .isInstanceOf(ApiException.class)
+                .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(enquiryRepository, never()).save(any());
+    }
+
+    @Test
+    void updateLeavesGuardianAndAcademicYearAloneWhenTheFormDoesNotSendThem() {
+        UUID id = UUID.randomUUID();
+        UUID yearId = UUID.randomUUID();
+        AdmissionEnquiry existing = enquiry(id, EnquiryStatus.ACTIVE);
+        existing.setGuardianName("Existing Guardian");
+        existing.setAcademicYearId(yearId);
+        when(enquiryRepository.findById(id)).thenReturn(Optional.of(existing));
+        when(sourceRepository.existsById(sourceId)).thenReturn(true);
+        when(enquiryRepository.save(any(AdmissionEnquiry.class))).thenAnswer(inv -> inv.getArgument(0));
+        LocalDate today = LocalDate.now();
+
+        service().update(id, form(null, null, today, today.plusDays(1)));
+
+        assertThat(existing.getGuardianName()).isEqualTo("Existing Guardian");
+        assertThat(existing.getAcademicYearId()).isEqualTo(yearId);
+        assertThat(existing.getAddress()).isEqualTo("12 Main Street");
     }
 
     @Test
@@ -126,7 +190,7 @@ class EnquiryServiceTest {
     }
 
     @Test
-    void recordFollowUpUpdatesTheEnquiryCacheAndMovesActiveToFollowUp() {
+    void recordFollowUpUpdatesLastAndNextDatesButKeepsTheStatus() {
         UUID id = UUID.randomUUID();
         AdmissionEnquiry existing = enquiry(id, EnquiryStatus.ACTIVE);
         when(enquiryRepository.findById(id)).thenReturn(Optional.of(existing));
@@ -137,9 +201,25 @@ class EnquiryServiceTest {
         service().recordFollowUp(id, new RecordFollowUpRequest(LocalDate.now(), "call", "Spoke to parent", next),
                 staffUserId);
 
-        assertThat(existing.getStatus()).isEqualTo(EnquiryStatus.FOLLOW_UP);
+        assertThat(existing.getStatus()).isEqualTo(EnquiryStatus.ACTIVE);
+        assertThat(existing.getLastFollowUpDate()).isEqualTo(LocalDate.now());
         assertThat(existing.getFollowUpDate()).isEqualTo(next);
         assertThat(existing.getFollowUpNotes()).isEqualTo("Spoke to parent");
+    }
+
+    @Test
+    void aBackDatedFollowUpDoesNotMoveLastFollowUpBackwards() {
+        UUID id = UUID.randomUUID();
+        AdmissionEnquiry existing = enquiry(id, EnquiryStatus.ACTIVE);
+        LocalDate latest = LocalDate.now();
+        existing.setLastFollowUpDate(latest);
+        when(enquiryRepository.findById(id)).thenReturn(Optional.of(existing));
+        when(followUpRepository.save(any(EnquiryFollowUp.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(enquiryRepository.save(any(AdmissionEnquiry.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service().recordFollowUp(id, new RecordFollowUpRequest(latest.minusDays(5), "visit", null, null), staffUserId);
+
+        assertThat(existing.getLastFollowUpDate()).isEqualTo(latest);
     }
 
     @Test
@@ -219,8 +299,7 @@ class EnquiryServiceTest {
         UUID id = UUID.randomUUID();
         when(enquiryRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().update(id, new UpdateEnquiryRequest(
-                "Alex", null, null, null, null, null, null, null, null)))
+        assertThatThrownBy(() -> service().update(id, form(null, null, LocalDate.now(), LocalDate.now())))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -229,7 +308,6 @@ class EnquiryServiceTest {
     void summaryComputesRealCountsFromRepositories() {
         when(enquiryRepository.countByArchivedFalse()).thenReturn(10L);
         when(enquiryRepository.countByStatusAndArchivedFalse(EnquiryStatus.ACTIVE)).thenReturn(4L);
-        when(enquiryRepository.countByStatusAndArchivedFalse(EnquiryStatus.FOLLOW_UP)).thenReturn(2L);
         when(enquiryRepository.countByFollowUpDateLessThanEqualAndArchivedFalseAndStatusNotIn(any(), any()))
                 .thenReturn(3L);
         when(enquiryRepository.countByConvertedStudentIdIsNotNull()).thenReturn(1L);
@@ -243,7 +321,7 @@ class EnquiryServiceTest {
         var summary = service().summary();
 
         assertThat(summary.totalEnquiries()).isEqualTo(10);
-        assertThat(summary.activeEnquiries()).isEqualTo(6);
+        assertThat(summary.activeEnquiries()).isEqualTo(4);
         assertThat(summary.followUpsDue()).isEqualTo(3);
         assertThat(summary.converted()).isEqualTo(1);
         assertThat(summary.lost()).isEqualTo(2);
