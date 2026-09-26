@@ -95,6 +95,11 @@ public final class AuditActions {
     public static final String POSTAL_DISPATCH_DELETED = "POSTAL_DISPATCH_DELETED";
     public static final String POSTAL_DISPATCH_DOCUMENT_UPLOADED = "POSTAL_DISPATCH_DOCUMENT_UPLOADED";
     public static final String POSTAL_DISPATCH_DOCUMENT_DELETED = "POSTAL_DISPATCH_DOCUMENT_DELETED";
+    public static final String POSTAL_RECEIVE_CREATED = "POSTAL_RECEIVE_CREATED";
+    public static final String POSTAL_RECEIVE_UPDATED = "POSTAL_RECEIVE_UPDATED";
+    public static final String POSTAL_RECEIVE_DELETED = "POSTAL_RECEIVE_DELETED";
+    public static final String POSTAL_RECEIVE_DOCUMENT_UPLOADED = "POSTAL_RECEIVE_DOCUMENT_UPLOADED";
+    public static final String POSTAL_RECEIVE_DOCUMENT_DELETED = "POSTAL_RECEIVE_DOCUMENT_DELETED";
     public static final String ADMISSION_CYCLE_CREATED = "ADMISSION_CYCLE_CREATED";
     public static final String ADMISSION_CYCLE_UPDATED = "ADMISSION_CYCLE_UPDATED";
     public static final String ADMISSION_CYCLE_OPENED = "ADMISSION_CYCLE_OPENED";
@@ -147,6 +152,7 @@ public final class AuditActions {
     public static final String FRONT_OFFICE_PURPOSE = "FRONT_OFFICE_PURPOSE";
     public static final String PHONE_CALL = "PHONE_CALL";
     public static final String POSTAL_DISPATCH = "POSTAL_DISPATCH";
+    public static final String POSTAL_RECEIVE = "POSTAL_RECEIVE";
     public static final String STUDENT_DOCUMENT = "STUDENT_DOCUMENT";
     public static final String STUDENT_IDENTIFICATION = "STUDENT_IDENTIFICATION";
     public static final String ADMISSION_CYCLE = "ADMISSION_CYCLE";

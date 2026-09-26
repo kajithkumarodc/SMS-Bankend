@@ -87,6 +87,13 @@ public final class Permissions {
     public static final String POSTAL_DISPATCH_EXPORT = "POSTAL_DISPATCH_EXPORT";
     public static final String POSTAL_DISPATCH_PRINT = "POSTAL_DISPATCH_PRINT";
 
+    public static final String POSTAL_RECEIVE_VIEW = "POSTAL_RECEIVE_VIEW";
+    public static final String POSTAL_RECEIVE_CREATE = "POSTAL_RECEIVE_CREATE";
+    public static final String POSTAL_RECEIVE_EDIT = "POSTAL_RECEIVE_EDIT";
+    public static final String POSTAL_RECEIVE_DELETE = "POSTAL_RECEIVE_DELETE";
+    public static final String POSTAL_RECEIVE_EXPORT = "POSTAL_RECEIVE_EXPORT";
+    public static final String POSTAL_RECEIVE_PRINT = "POSTAL_RECEIVE_PRINT";
+
     public static final String HAS_STUDENT_VIEW = HAS_AUTHORITY_OPEN + STUDENT_VIEW + CLOSE;
     public static final String HAS_STUDENT_CREATE = HAS_AUTHORITY_OPEN + STUDENT_CREATE + CLOSE;
     public static final String HAS_STUDENT_EDIT = HAS_AUTHORITY_OPEN + STUDENT_EDIT + CLOSE;
@@ -150,6 +157,11 @@ public final class Permissions {
     public static final String HAS_POSTAL_DISPATCH_CREATE = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_CREATE + CLOSE;
     public static final String HAS_POSTAL_DISPATCH_EDIT = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_EDIT + CLOSE;
     public static final String HAS_POSTAL_DISPATCH_DELETE = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_DELETE + CLOSE;
+
+    public static final String HAS_POSTAL_RECEIVE_VIEW = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_VIEW + CLOSE;
+    public static final String HAS_POSTAL_RECEIVE_CREATE = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_CREATE + CLOSE;
+    public static final String HAS_POSTAL_RECEIVE_EDIT = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_EDIT + CLOSE;
+    public static final String HAS_POSTAL_RECEIVE_DELETE = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_DELETE + CLOSE;
 
     private Permissions() {
     }
