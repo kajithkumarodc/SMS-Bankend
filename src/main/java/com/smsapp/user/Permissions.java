@@ -94,6 +94,13 @@ public final class Permissions {
     public static final String POSTAL_RECEIVE_EXPORT = "POSTAL_RECEIVE_EXPORT";
     public static final String POSTAL_RECEIVE_PRINT = "POSTAL_RECEIVE_PRINT";
 
+    public static final String COMPLAINT_VIEW = "COMPLAINT_VIEW";
+    public static final String COMPLAINT_CREATE = "COMPLAINT_CREATE";
+    public static final String COMPLAINT_EDIT = "COMPLAINT_EDIT";
+    public static final String COMPLAINT_DELETE = "COMPLAINT_DELETE";
+    public static final String COMPLAINT_EXPORT = "COMPLAINT_EXPORT";
+    public static final String COMPLAINT_PRINT = "COMPLAINT_PRINT";
+
     public static final String HAS_STUDENT_VIEW = HAS_AUTHORITY_OPEN + STUDENT_VIEW + CLOSE;
     public static final String HAS_STUDENT_CREATE = HAS_AUTHORITY_OPEN + STUDENT_CREATE + CLOSE;
     public static final String HAS_STUDENT_EDIT = HAS_AUTHORITY_OPEN + STUDENT_EDIT + CLOSE;
@@ -162,6 +169,11 @@ public final class Permissions {
     public static final String HAS_POSTAL_RECEIVE_CREATE = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_CREATE + CLOSE;
     public static final String HAS_POSTAL_RECEIVE_EDIT = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_EDIT + CLOSE;
     public static final String HAS_POSTAL_RECEIVE_DELETE = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_DELETE + CLOSE;
+
+    public static final String HAS_COMPLAINT_VIEW = HAS_AUTHORITY_OPEN + COMPLAINT_VIEW + CLOSE;
+    public static final String HAS_COMPLAINT_CREATE = HAS_AUTHORITY_OPEN + COMPLAINT_CREATE + CLOSE;
+    public static final String HAS_COMPLAINT_EDIT = HAS_AUTHORITY_OPEN + COMPLAINT_EDIT + CLOSE;
+    public static final String HAS_COMPLAINT_DELETE = HAS_AUTHORITY_OPEN + COMPLAINT_DELETE + CLOSE;
 
     private Permissions() {
     }
