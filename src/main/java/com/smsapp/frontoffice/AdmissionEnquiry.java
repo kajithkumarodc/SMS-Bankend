@@ -45,6 +45,10 @@ public class AdmissionEnquiry extends UuidEntity {
     @Column(name = "source_id")
     private UUID sourceId;
 
+    /** Which academic session this enquiry was raised for -- defaults to the current one at creation time. */
+    @Column(name = "academic_year_id")
+    private UUID academicYearId;
+
     @Column(name = "assigned_staff_user_id")
     private UUID assignedStaffUserId;
 

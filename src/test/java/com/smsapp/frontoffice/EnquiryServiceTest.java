@@ -1,5 +1,6 @@
 package com.smsapp.frontoffice;
 
+import com.smsapp.academics.AcademicYearRepository;
 import com.smsapp.academics.ClassRepository;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
@@ -48,6 +49,9 @@ class EnquiryServiceTest {
     private ClassRepository classRepository;
 
     @Mock
+    private AcademicYearRepository academicYearRepository;
+
+    @Mock
     private UserRepository userRepository;
 
     @Mock
@@ -60,7 +64,7 @@ class EnquiryServiceTest {
 
     private EnquiryService service() {
         return new EnquiryService(enquiryRepository, followUpRepository, sourceRepository, classRepository,
-                userRepository, studentService, auditService);
+                academicYearRepository, userRepository, studentService, auditService);
     }
 
     private static AdmissionEnquiry enquiry(UUID id, String status) {
@@ -80,7 +84,7 @@ class EnquiryServiceTest {
 
         AdmissionEnquiry created = service().create(new CreateEnquiryRequest(
                 "Alex Applicant", "Guardian Name", "+911234567890", "guardian@example.com",
-                null, null, null, null, null));
+                null, null, null, null, null, null));
 
         assertThat(created.getEnquiryNumber()).isEqualTo("ENQ-000042");
         assertThat(created.getStatus()).isEqualTo(EnquiryStatus.ACTIVE);
@@ -94,7 +98,7 @@ class EnquiryServiceTest {
         when(classRepository.existsById(classId)).thenReturn(false);
 
         assertThatThrownBy(() -> service().create(new CreateEnquiryRequest(
-                "Alex", null, null, null, classId, null, null, null, null)))
+                "Alex", null, null, null, classId, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 
@@ -216,7 +220,7 @@ class EnquiryServiceTest {
         when(enquiryRepository.findById(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().update(id, new UpdateEnquiryRequest(
-                "Alex", null, null, null, null, null, null, null)))
+                "Alex", null, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }

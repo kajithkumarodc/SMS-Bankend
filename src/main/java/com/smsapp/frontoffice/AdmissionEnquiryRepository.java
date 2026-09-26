@@ -42,6 +42,28 @@ public interface AdmissionEnquiryRepository
             + "where e.archived = false group by e.classId")
     List<ClassCount> countByClass();
 
+    // --- Same counts, scoped to one academic year -- used instead of the above when the
+    // school has a current academic year set, so the dashboard reflects that year only. ---
+
+    long countByArchivedFalseAndAcademicYearId(UUID academicYearId);
+
+    long countByStatusAndArchivedFalseAndAcademicYearId(String status, UUID academicYearId);
+
+    long countByConvertedStudentIdIsNotNullAndAcademicYearId(UUID academicYearId);
+
+    long countByFollowUpDateLessThanEqualAndArchivedFalseAndStatusNotInAndAcademicYearId(
+            LocalDate onOrBefore, Collection<String> closedStatuses, UUID academicYearId);
+
+    List<AdmissionEnquiry> findTop5ByArchivedFalseAndAcademicYearIdOrderByCreatedAtDesc(UUID academicYearId);
+
+    @Query("select e.sourceId as sourceId, count(e) as total from AdmissionEnquiry e "
+            + "where e.archived = false and e.academicYearId = :academicYearId group by e.sourceId")
+    List<SourceCount> countBySourceAndAcademicYearId(UUID academicYearId);
+
+    @Query("select e.classId as classId, count(e) as total from AdmissionEnquiry e "
+            + "where e.archived = false and e.academicYearId = :academicYearId group by e.classId")
+    List<ClassCount> countByClassAndAcademicYearId(UUID academicYearId);
+
     interface SourceCount {
         UUID getSourceId();
 

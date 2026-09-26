@@ -9,7 +9,6 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /** Request/response payloads for the Front Office / Admission Enquiry API. Entities are never exposed directly. */
@@ -27,7 +26,9 @@ final class EnquiryDtos {
             LocalDate enquiryDate,
             UUID sourceId,
             UUID assignedStaffUserId,
-            String remarks) {
+            String remarks,
+            /** Defaults to the current academic year (see {@code AcademicYearRepository#findByCurrentTrue}) when omitted. */
+            UUID academicYearId) {
     }
 
     record UpdateEnquiryRequest(
@@ -38,7 +39,8 @@ final class EnquiryDtos {
             UUID classId,
             UUID sourceId,
             UUID assignedStaffUserId,
-            String remarks) {
+            String remarks,
+            UUID academicYearId) {
     }
 
     /** Body for {@code PATCH /api/v1/enquiries/{id}/status}. */
@@ -87,9 +89,12 @@ final class EnquiryDtos {
             String phone,
             String email,
             UUID classId,
+            String className,
             LocalDate enquiryDate,
             UUID sourceId,
             String sourceName,
+            UUID academicYearId,
+            String academicYearName,
             UUID assignedStaffUserId,
             String assignedStaffName,
             LocalDate followUpDate,
@@ -101,12 +106,13 @@ final class EnquiryDtos {
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {
 
-        static EnquiryResponse from(AdmissionEnquiry e, String sourceName, String assignedStaffName) {
+        static EnquiryResponse from(AdmissionEnquiry e, String sourceName, String className, String academicYearName,
+                                     String assignedStaffName) {
             return new EnquiryResponse(e.getId(), e.getEnquiryNumber(), e.getApplicantName(), e.getGuardianName(),
-                    e.getPhone(), e.getEmail(), e.getClassId(), e.getEnquiryDate(), e.getSourceId(), sourceName,
-                    e.getAssignedStaffUserId(), assignedStaffName, e.getFollowUpDate(), e.getFollowUpNotes(),
-                    e.getStatus(), e.getRemarks(), e.getConvertedStudentId(), e.isArchived(), e.getCreatedAt(),
-                    e.getUpdatedAt());
+                    e.getPhone(), e.getEmail(), e.getClassId(), className, e.getEnquiryDate(), e.getSourceId(),
+                    sourceName, e.getAcademicYearId(), academicYearName, e.getAssignedStaffUserId(), assignedStaffName,
+                    e.getFollowUpDate(), e.getFollowUpNotes(), e.getStatus(), e.getRemarks(),
+                    e.getConvertedStudentId(), e.isArchived(), e.getCreatedAt(), e.getUpdatedAt());
         }
     }
 
@@ -123,6 +129,18 @@ final class EnquiryDtos {
     record AssignableStaffResponse(UUID id, String fullName, String email) {
     }
 
+    /**
+     * One row of the "Enquiries by source/class" breakdown. {@code id} is null for the
+     * "Not specified" bucket (no source/class was recorded) -- the frontend uses that to
+     * tell an unfiltered/unclickable row apart from a real source or class.
+     */
+    record EnquiryGroupCount(UUID id, String label, long count) {
+    }
+
+    /** Which academic year the dashboard counts below are scoped to, if any is marked current. */
+    record AcademicYearBadge(UUID id, String name) {
+    }
+
     /** Real database counts for the Front Office dashboard -- no hardcoded numbers (plan "Dashboard rule"). */
     record EnquirySummaryResponse(
             long totalEnquiries,
@@ -130,8 +148,9 @@ final class EnquiryDtos {
             long followUpsDue,
             long converted,
             long lost,
-            Map<String, Long> bySource,
-            Map<String, Long> byClass,
+            List<EnquiryGroupCount> bySource,
+            List<EnquiryGroupCount> byClass,
+            AcademicYearBadge academicYear,
             List<EnquiryResponse> recent) {
     }
 
