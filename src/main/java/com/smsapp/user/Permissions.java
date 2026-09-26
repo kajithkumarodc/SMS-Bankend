@@ -73,6 +73,12 @@ public final class Permissions {
     public static final String VISITOR_EXPORT = "VISITOR_EXPORT";
     public static final String VISITOR_PRINT = "VISITOR_PRINT";
 
+    public static final String PHONE_CALL_VIEW = "PHONE_CALL_VIEW";
+    public static final String PHONE_CALL_CREATE = "PHONE_CALL_CREATE";
+    public static final String PHONE_CALL_EDIT = "PHONE_CALL_EDIT";
+    public static final String PHONE_CALL_DELETE = "PHONE_CALL_DELETE";
+    public static final String PHONE_CALL_EXPORT = "PHONE_CALL_EXPORT";
+    public static final String PHONE_CALL_PRINT = "PHONE_CALL_PRINT";
 
     public static final String HAS_STUDENT_VIEW = HAS_AUTHORITY_OPEN + STUDENT_VIEW + CLOSE;
     public static final String HAS_STUDENT_CREATE = HAS_AUTHORITY_OPEN + STUDENT_CREATE + CLOSE;
@@ -128,6 +134,10 @@ public final class Permissions {
     public static final String HAS_VISITOR_EDIT = HAS_AUTHORITY_OPEN + VISITOR_EDIT + CLOSE;
     public static final String HAS_VISITOR_DELETE = HAS_AUTHORITY_OPEN + VISITOR_DELETE + CLOSE;
 
+    public static final String HAS_PHONE_CALL_VIEW = HAS_AUTHORITY_OPEN + PHONE_CALL_VIEW + CLOSE;
+    public static final String HAS_PHONE_CALL_CREATE = HAS_AUTHORITY_OPEN + PHONE_CALL_CREATE + CLOSE;
+    public static final String HAS_PHONE_CALL_EDIT = HAS_AUTHORITY_OPEN + PHONE_CALL_EDIT + CLOSE;
+    public static final String HAS_PHONE_CALL_DELETE = HAS_AUTHORITY_OPEN + PHONE_CALL_DELETE + CLOSE;
 
     private Permissions() {
     }

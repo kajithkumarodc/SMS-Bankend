@@ -87,6 +87,9 @@ public final class AuditActions {
     public static final String VISITOR_ATTACHMENT_UPLOADED = "VISITOR_ATTACHMENT_UPLOADED";
     public static final String VISITOR_ATTACHMENT_REMOVED = "VISITOR_ATTACHMENT_REMOVED";
     public static final String FRONT_OFFICE_PURPOSE_CREATED = "FRONT_OFFICE_PURPOSE_CREATED";
+    public static final String PHONE_CALL_CREATED = "PHONE_CALL_CREATED";
+    public static final String PHONE_CALL_UPDATED = "PHONE_CALL_UPDATED";
+    public static final String PHONE_CALL_DELETED = "PHONE_CALL_DELETED";
     public static final String ADMISSION_CYCLE_CREATED = "ADMISSION_CYCLE_CREATED";
     public static final String ADMISSION_CYCLE_UPDATED = "ADMISSION_CYCLE_UPDATED";
     public static final String ADMISSION_CYCLE_OPENED = "ADMISSION_CYCLE_OPENED";
@@ -137,6 +140,7 @@ public final class AuditActions {
     public static final String ENQUIRY_REFERENCE = "ENQUIRY_REFERENCE";
     public static final String VISITOR = "VISITOR";
     public static final String FRONT_OFFICE_PURPOSE = "FRONT_OFFICE_PURPOSE";
+    public static final String PHONE_CALL = "PHONE_CALL";
     public static final String STUDENT_DOCUMENT = "STUDENT_DOCUMENT";
     public static final String STUDENT_IDENTIFICATION = "STUDENT_IDENTIFICATION";
     public static final String ADMISSION_CYCLE = "ADMISSION_CYCLE";
