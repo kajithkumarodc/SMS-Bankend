@@ -1,0 +1,24 @@
+# Railway service configuration. Committed so the build/deploy settings live
+# with the code rather than only in the dashboard.
+#
+# This file does NOT provision anything: the Postgres service and every
+# environment variable below still have to be created in the Railway project.
+# See the "Deploying to Railway" section of README.md for that list.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# /actuator/health is permitAll in SecurityConfig, so the platform can reach it
+# without credentials.
+healthcheckPath = "/actuator/health"
+# Flyway runs the full migration set on first boot against an empty database,
+# which is far slower than a steady-state restart — a short timeout here fails
+# the very first deploy.
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+# One instance: V4's CREATE ROLE and the rest of the migrations are not safe to
+# run concurrently from several replicas on a cold database.
+numReplicas = 1

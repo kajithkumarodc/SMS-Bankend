@@ -101,6 +101,25 @@ available for plain-HTTP local dev only.
   immediately reopens the CSRF vector and CSRF tokens must come back.
 - **Supporting legacy browsers** without `SameSite` enforcement.
 
+## Addendum — 2026-09-22, mobile client added
+
+The "what would make us revisit this decision" scenario above has happened: a
+Flutter mobile app now consumes this API. Following the recommended direction
+already written here, the mobile client authenticates with the `Authorization:
+Bearer` header only and never touches the `access_token` cookie or the new
+`refresh_tokens` table's raw values outside secure device storage. No CSRF
+filter-chain change was needed: bearer-header requests carry no ambient
+credential a third-party page could trigger, so they were never in CSRF's
+threat model in the first place. The existing `SameSite=Strict` cookie
+protection is unchanged and continues to cover the web client exactly as
+described above.
+
+The one related addition, `POST /api/v1/auth/refresh` (opaque, rotating
+refresh tokens so the mobile app isn't forced to re-prompt for a password
+every hour), is `permitAll` for the same reason `/login` is: it authenticates
+the caller via the token in the request body, not a cookie or bearer header,
+so it sits outside the resource-server filter's authentication step entirely.
+
 ## Verification
 
 - `PhaseOneIntegrationTest` asserts the login response sets

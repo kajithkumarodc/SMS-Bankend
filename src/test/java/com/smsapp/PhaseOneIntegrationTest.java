@@ -155,6 +155,118 @@ class PhaseOneIntegrationTest {
     }
 
     @Test
+    void refreshRotatesTheTokenAndTheOldOneCanNeverBeUsedAgain() throws Exception {
+        String refreshToken = loginAndGetRefreshToken();
+
+        var rotated = mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isString())
+                .andExpect(jsonPath("$.refreshToken").isString())
+                .andReturn();
+
+        String newRefreshToken = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(rotated.getResponse().getContentAsString()).get("refreshToken").asText();
+        assertThat(newRefreshToken).isNotEqualTo(refreshToken);
+
+        // The new token works once...
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + newRefreshToken + "\"}"))
+                .andExpect(status().isOk());
+
+        // ...but the ORIGINAL (now-rotated) token must never work again, even once.
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void reusingARevokedRefreshTokenRevokesEveryOtherActiveTokenForThatUser() throws Exception {
+        // Two "devices" logged in as the same user -- two independent refresh tokens.
+        String deviceOneToken = loginAndGetRefreshToken();
+        String deviceTwoToken = loginAndGetRefreshToken();
+
+        // Device one refreshes normally, rotating its token.
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + deviceOneToken + "\"}"))
+                .andExpect(status().isOk());
+
+        // An attacker replays device one's now-stale (already-rotated) token. This
+        // must not only be rejected -- it must revoke every OTHER active refresh
+        // token for the user too (including device two's, which never leaked),
+        // because a replayed token is a signal the raw value escaped this user's
+        // control and every outstanding session must be forced to re-authenticate.
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + deviceOneToken + "\"}"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + deviceTwoToken + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void logoutRevokesOnlyItsOwnRefreshTokenNotTheUsersOtherSessions() throws Exception {
+        String sessionAToken = loginAndGetRefreshToken();
+        String sessionBToken = loginAndGetRefreshToken();
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + sessionAToken + "\"}"))
+                .andExpect(status().isNoContent());
+
+        // Confirmed via the DB directly rather than by calling /refresh with
+        // sessionAToken: presenting an already-revoked token there is exactly the
+        // reuse scenario covered by reusingARevokedRefreshTokenRevokesEveryOther...
+        // below, and would itself cascade-revoke session B -- which would make
+        // this test pass for the wrong reason no matter what logout() actually did.
+        Integer revokedCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM refresh_tokens WHERE revoked_at IS NOT NULL", Integer.class);
+        assertThat(revokedCount).isEqualTo(1);
+
+        // Session B was never touched by session A's logout.
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + sessionBToken + "\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void logoutAllRevokesEverySessionsRefreshToken() throws Exception {
+        String sessionAToken = loginAndGetRefreshToken();
+        String sessionBToken = loginAndGetRefreshToken();
+        Cookie accessCookie = login();
+
+        mockMvc.perform(post("/api/v1/auth/logout-all").cookie(accessCookie))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + sessionAToken + "\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + sessionBToken + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    private String loginAndGetRefreshToken() throws Exception {
+        var loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"admin@example.com\",\"password\":\"secret\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        return com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(loginResult.getResponse().getContentAsString()).get("refreshToken").asText();
+    }
+
+    @Test
     void dashboardSummaryReturnsCountsForSchoolAdmin() throws Exception {
         mockMvc.perform(get("/api/v1/dashboard/summary").cookie(login()))
                 .andExpect(status().isOk())
