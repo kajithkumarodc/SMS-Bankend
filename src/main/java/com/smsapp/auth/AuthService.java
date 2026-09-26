@@ -73,17 +73,7 @@ public class AuthService {
         // login same as roles -- no per-request DB lookup needed for authorization.
         List<String> permissions = roleRepository.findPermissionNamesByUserId(user.getId());
 
-        JwtClaimsSet claims = JwtClaimsSet.builder()
-                .subject(user.getId().toString())
-                .claim("roles", roles)
-                .claim("permissions", permissions)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(3600))
-                .build();
-
-        String token = jwtEncoder.encode(JwtEncoderParameters.from(
-                JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
-        String accessToken = issueAccessToken(user, roles);
+        String accessToken = issueAccessToken(user, roles, permissions);
         String refreshToken = issueRefreshToken(user.getId());
 
         auditService.logAs(user.getId(), AuditActions.LOGIN_SUCCESS, AuditActions.USER, user.getId(),
@@ -139,7 +129,7 @@ public class AuthService {
         existing.setReplacedByTokenId(rotated.getId());
         refreshTokenRepository.save(existing);
 
-        String accessToken = issueAccessToken(user, roles);
+        String accessToken = issueAccessToken(user, roles, permissions);
 
         auditService.logAs(user.getId(), AuditActions.TOKEN_REFRESHED, AuditActions.REFRESH_TOKEN, rotated.getId(),
                 Map.of());
@@ -172,10 +162,11 @@ public class AuthService {
         auditService.logAs(userId, AuditActions.LOGOUT_ALL, AuditActions.USER, userId, Map.of());
     }
 
-    private String issueAccessToken(User user, List<String> roles) {
+    private String issueAccessToken(User user, List<String> roles, List<String> permissions) {
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(user.getId().toString())
                 .claim("roles", roles)
+                .claim("permissions", permissions)
                 .claim("name", user.getFullName())
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(ACCESS_TOKEN_TTL_SECONDS))
