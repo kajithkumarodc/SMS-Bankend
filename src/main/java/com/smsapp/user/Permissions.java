@@ -80,6 +80,13 @@ public final class Permissions {
     public static final String PHONE_CALL_EXPORT = "PHONE_CALL_EXPORT";
     public static final String PHONE_CALL_PRINT = "PHONE_CALL_PRINT";
 
+    public static final String POSTAL_DISPATCH_VIEW = "POSTAL_DISPATCH_VIEW";
+    public static final String POSTAL_DISPATCH_CREATE = "POSTAL_DISPATCH_CREATE";
+    public static final String POSTAL_DISPATCH_EDIT = "POSTAL_DISPATCH_EDIT";
+    public static final String POSTAL_DISPATCH_DELETE = "POSTAL_DISPATCH_DELETE";
+    public static final String POSTAL_DISPATCH_EXPORT = "POSTAL_DISPATCH_EXPORT";
+    public static final String POSTAL_DISPATCH_PRINT = "POSTAL_DISPATCH_PRINT";
+
     public static final String HAS_STUDENT_VIEW = HAS_AUTHORITY_OPEN + STUDENT_VIEW + CLOSE;
     public static final String HAS_STUDENT_CREATE = HAS_AUTHORITY_OPEN + STUDENT_CREATE + CLOSE;
     public static final String HAS_STUDENT_EDIT = HAS_AUTHORITY_OPEN + STUDENT_EDIT + CLOSE;
@@ -138,6 +145,11 @@ public final class Permissions {
     public static final String HAS_PHONE_CALL_CREATE = HAS_AUTHORITY_OPEN + PHONE_CALL_CREATE + CLOSE;
     public static final String HAS_PHONE_CALL_EDIT = HAS_AUTHORITY_OPEN + PHONE_CALL_EDIT + CLOSE;
     public static final String HAS_PHONE_CALL_DELETE = HAS_AUTHORITY_OPEN + PHONE_CALL_DELETE + CLOSE;
+
+    public static final String HAS_POSTAL_DISPATCH_VIEW = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_VIEW + CLOSE;
+    public static final String HAS_POSTAL_DISPATCH_CREATE = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_CREATE + CLOSE;
+    public static final String HAS_POSTAL_DISPATCH_EDIT = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_EDIT + CLOSE;
+    public static final String HAS_POSTAL_DISPATCH_DELETE = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_DELETE + CLOSE;
 
     private Permissions() {
     }
