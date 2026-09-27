@@ -1,5 +1,7 @@
 package com.smsapp.face;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smsapp.common.ApiException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -65,6 +67,9 @@ public class FaceServiceClient {
 
     private record WireDetect(String model_version, int faces_detected, List<WireFace> faces) {
     }
+
+    private static final ObjectMapper ERROR_MAPPER = new ObjectMapper();
+    private static final String GENERIC_REJECTION = "the image was rejected";
 
     private final RestClient client;
     private final boolean configured;
@@ -182,17 +187,24 @@ public class FaceServiceClient {
         }
     }
 
+    /**
+     * Pulls FastAPI's {@code {"detail": "..."}} message out of an error body.
+     *
+     * <p>Parsed properly rather than scanned for a substring: starlette serialises with a
+     * space after the colon, so a literal {@code "detail":"} search silently missed every
+     * message and replaced it with the generic fallback -- defeating the whole point of
+     * relaying the sidecar's actionable text to whoever uploaded the photo.
+     */
     private static String detailFrom(java.io.InputStream body) {
         try {
-            String raw = new String(body.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            // FastAPI reports {"detail": "..."}; fall back to the raw body if it does not.
-            int marker = raw.indexOf("\"detail\":\"");
-            if (marker < 0) return "the image was rejected";
-            int start = marker + "\"detail\":\"".length();
-            int end = raw.indexOf('"', start);
-            return end < 0 ? "the image was rejected" : raw.substring(start, end);
-        } catch (Exception readFailed) {
-            return "the image was rejected";
+            JsonNode detail = ERROR_MAPPER.readTree(body).get("detail");
+            if (detail == null) return GENERIC_REJECTION;
+            // FastAPI sends a string for an explicit HTTPException, but an array of
+            // per-field objects for its own request-validation failures.
+            String message = detail.isTextual() ? detail.asText() : detail.toString();
+            return message.isBlank() ? GENERIC_REJECTION : message;
+        } catch (Exception unreadable) {
+            return GENERIC_REJECTION;
         }
     }
 }

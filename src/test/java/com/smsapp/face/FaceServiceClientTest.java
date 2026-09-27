@@ -101,7 +101,9 @@ class FaceServiceClientTest {
         harness.server().expect(requestTo("http://face:8000/v1/embed"))
                 .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"detail\":\"Expected one face, found 3 - crop to a single student\"}"));
+                        // A space after the colon, exactly as starlette serialises it --
+                        // the shape that broke the original substring-scanning parser.
+                        .body("{\"detail\": \"Expected one face, found 3 - crop to a single student\"}"));
 
         assertThatThrownBy(() -> harness.client().embed(new byte[] {1}, "a.png", "image/png"))
                 .isInstanceOf(ApiException.class)
@@ -131,6 +133,34 @@ class FaceServiceClientTest {
         assertThatThrownBy(() -> client.embed(new byte[] {1}, "a.png", "image/png"))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    /** FastAPI's own validation errors send an array, not a string. Must not crash. */
+    @Test
+    void handlesAValidationErrorBodyThatIsNotAPlainString() {
+        Harness harness = harness();
+        harness.server().expect(requestTo("http://face:8000/v1/embed"))
+                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"detail\": [{\"loc\": [\"body\", \"file\"], \"msg\": \"field required\"}]}"));
+
+        assertThatThrownBy(() -> harness.client().embed(new byte[] {1}, "a.png", "image/png"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("field required");
+    }
+
+    /** An unparseable body must degrade to the generic message, not blow up. */
+    @Test
+    void handlesANonJsonErrorBody() {
+        Harness harness = harness();
+        harness.server().expect(requestTo("http://face:8000/v1/embed"))
+                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+                        .contentType(MediaType.TEXT_HTML)
+                        .body("<html>502 Bad Gateway</html>"));
+
+        assertThatThrownBy(() -> harness.client().embed(new byte[] {1}, "a.png", "image/png"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("the image was rejected");
     }
 
     @Test
