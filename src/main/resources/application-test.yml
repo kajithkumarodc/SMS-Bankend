@@ -38,6 +38,11 @@ server:
   port: 0
 
 app:
+  face:
+    purge:
+      # No background sweep during tests -- it would race fixtures and delete files
+      # a test had just written. CapturePhotoPurgeServiceTest calls the method directly.
+      enabled: false
   # Isolated per test run under target/ (cleaned by `mvn clean`), never the
   # dev/prod uploads directory.
   storage:

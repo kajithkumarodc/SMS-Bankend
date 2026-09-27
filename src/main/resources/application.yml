@@ -123,6 +123,16 @@ app:
     api-key: ${FACE_SERVICE_API_KEY:}
     timeout-seconds: ${FACE_SERVICE_TIMEOUT_SECONDS:30}
     max-enrolments-per-student: ${FACE_MAX_ENROLMENTS_PER_STUDENT:5}
+    # How long a classroom photo is kept before the sweeper deletes it. The consent
+    # screen tells parents "deleted within 7 days", so this number is a promise --
+    # raising it means changing what the app says. The embeddings and match records
+    # are unaffected; only the image goes.
+    photo-retention-days: ${FACE_PHOTO_RETENTION_DAYS:7}
+    purge:
+      enabled: ${FACE_PURGE_ENABLED:true}
+      interval-ms: ${FACE_PURGE_INTERVAL_MS:3600000}
+      initial-delay-ms: ${FACE_PURGE_INITIAL_DELAY_MS:120000}
+      batch-size: ${FACE_PURGE_BATCH_SIZE:500}
   # Public-endpoint abuse protection (plan part 4/27): a simple in-memory
   # sliding-window limiter, no external service/dependency -- appropriate for a
   # single self-hosted instance. Applies to the public admission-application
