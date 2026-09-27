@@ -11,6 +11,8 @@ import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
@@ -47,6 +49,40 @@ class FaceServiceClientTest {
         // installs its own request factory, which would replace the mock's and silently
         // send these requests nowhere.
         return new Harness(new FaceServiceClient(builder.build(), true), server);
+    }
+
+    /**
+     * Regression: the request body must carry a part named `file` with BOTH a filename and
+     * its own Content-Type. The first version built a raw MultiValueMap, which produced a
+     * part FastAPI did not recognise as an UploadFile -- it reported "field required" and
+     * the model never ran, while the call still looked like a plain 422 from the outside.
+     */
+    @Test
+    void sendsTheImageAsAFilePartWithAFilenameAndContentType() {
+        Harness harness = harness();
+        harness.server().expect(requestTo("http://face:8000/v1/embed"))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.MULTIPART_FORM_DATA))
+                .andExpect(content().string(containsString("name=\"file\"")))
+                .andExpect(content().string(containsString("filename=\"aarav.jpg\"")))
+                .andExpect(content().string(containsString("Content-Type: image/jpeg")))
+                .andRespond(withSuccess(EMBED_JSON, MediaType.APPLICATION_JSON));
+
+        harness.client().embed(new byte[] {1, 2, 3}, "aarav.jpg", "image/jpeg");
+
+        harness.server().verify();
+    }
+
+    /** A missing filename must still produce a file part, not a plain field. */
+    @Test
+    void fallsBackToAPlaceholderFilenameRatherThanOmittingIt() {
+        Harness harness = harness();
+        harness.server().expect(requestTo("http://face:8000/v1/detect"))
+                .andExpect(content().string(containsString("filename=\"upload\"")))
+                .andRespond(withSuccess(DETECT_JSON, MediaType.APPLICATION_JSON));
+
+        harness.client().detect(new byte[] {1}, null, "image/png");
+
+        harness.server().verify();
     }
 
     @Test

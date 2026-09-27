@@ -10,9 +10,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.client.RestClient;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.net.http.HttpClient;
@@ -152,21 +154,29 @@ public class FaceServiceClient {
                     HttpStatus.SERVICE_UNAVAILABLE);
         }
 
+        // The part needs BOTH a filename and its own Content-Type. Without the filename
+        // FastAPI does not treat it as an UploadFile and reports the field as missing
+        // entirely; without the part Content-Type the sidecar's allow-list rejects it.
+        // FormHttpMessageConverter takes the filename from Resource#getFilename, and the
+        // per-part Content-Type from the wrapping HttpEntity's headers -- hence both here.
+        // (MultipartBodyBuilder would be tidier but needs reactive-streams, which this
+        // non-reactive app does not ship.)
+        String partFilename = filename == null || filename.isBlank() ? "upload" : filename;
+        HttpHeaders partHeaders = new HttpHeaders();
+        partHeaders.setContentType(MediaType.parseMediaType(contentType));
+
         MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
-        form.add("file", new ByteArrayResource(image) {
+        form.add("file", new HttpEntity<>(new ByteArrayResource(image) {
             @Override
             public String getFilename() {
-                // Multipart needs a filename for the part to be treated as a file; the
-                // sidecar reads the content type, not the name.
-                return filename == null || filename.isBlank() ? "upload" : filename;
+                return partFilename;
             }
-        });
+        }, partHeaders));
 
         try {
             return client.post()
                     .uri(path)
                     .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .header("X-Upload-Content-Type", contentType)
                     .body(form)
                     .retrieve()
                     .onStatus(status -> status.value() == HttpStatus.UNPROCESSABLE_ENTITY.value(),
