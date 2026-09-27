@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
@@ -62,6 +63,10 @@ class FaceServiceClientTest {
         Harness harness = harness();
         harness.server().expect(requestTo("http://face:8000/v1/embed"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.MULTIPART_FORM_DATA))
+                // The boundary is the part the first fix missed: pinning Content-Type
+                // manually produced a boundary-less header, so the server could not split
+                // the body and reported the file field as missing.
+                .andExpect(header("Content-Type", containsString("boundary=")))
                 .andExpect(content().string(containsString("name=\"file\"")))
                 .andExpect(content().string(containsString("filename=\"aarav.jpg\"")))
                 .andExpect(content().string(containsString("Content-Type: image/jpeg")))

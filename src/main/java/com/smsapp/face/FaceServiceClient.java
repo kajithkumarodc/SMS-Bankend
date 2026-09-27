@@ -179,7 +179,11 @@ public class FaceServiceClient {
         try {
             return client.post()
                     .uri(path)
-                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    // Deliberately NOT setting Content-Type here. Doing so pins the header
+                    // to a boundary-less "multipart/form-data", and without a boundary the
+                    // server cannot split the parts -- FastAPI then reports the file field
+                    // as missing entirely. FormHttpMessageConverter generates the boundary
+                    // and writes the full header itself when the type is left alone.
                     .body(form)
                     .retrieve()
                     .onStatus(status -> status.value() == HttpStatus.UNPROCESSABLE_ENTITY.value(),
