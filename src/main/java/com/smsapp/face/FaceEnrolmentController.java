@@ -98,7 +98,7 @@ public class FaceEnrolmentController {
      */
     @DeleteMapping
     ErasureResponse erase(@PathVariable UUID studentId) {
-        return new ErasureResponse(studentId, enrolmentService.revokeConsentAndErase(studentId));
+        return new ErasureResponse(studentId, enrolmentService.revokeConsentAndErase(studentId).embeddingsDeleted());
     }
 
     private static UUID userId(Authentication authentication) {

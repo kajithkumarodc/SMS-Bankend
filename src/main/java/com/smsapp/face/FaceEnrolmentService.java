@@ -160,6 +160,10 @@ public class FaceEnrolmentService {
                 Map.of("studentId", studentId.toString()));
     }
 
+    /** The withdrawn consent row plus how many embeddings were destroyed with it. */
+    public record ErasureResult(FaceConsent consent, int embeddingsDeleted) {
+    }
+
     /**
      * Withdraws consent and deletes every stored vector for that student, in one
      * transaction.
@@ -168,12 +172,14 @@ public class FaceEnrolmentService {
      * the decision without erasing the biometrics would leave the system holding data
      * it has no basis to hold. Safe to retry -- both halves are idempotent.
      *
-     * @return how many embeddings were destroyed.
+     * @return the withdrawn consent row and how many embeddings were destroyed. The row
+     *         is returned rather than just the count so the caller can report the real
+     *         revocation timestamp instead of asserting nulls it has not checked.
      * @throws ApiException 404 if the student does not exist, or has no consent record.
      */
     @Transactional
-    public int revokeConsentAndErase(UUID studentId) {
-        consentService.revoke(studentId);
+    public ErasureResult revokeConsentAndErase(UUID studentId) {
+        FaceConsent consent = consentService.revoke(studentId);
 
         long held = enrolmentRepository.countByStudentId(studentId);
         if (held > 0) {
@@ -181,7 +187,7 @@ public class FaceEnrolmentService {
             auditService.log(AuditActions.FACE_ENROLMENT_ERASED, AuditActions.FACE_ENROLMENT, studentId,
                     Map.of("studentId", studentId.toString(), "embeddingsDeleted", String.valueOf(held)));
         }
-        return (int) held;
+        return new ErasureResult(consent, (int) held);
     }
 
     /**

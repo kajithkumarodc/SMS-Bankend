@@ -157,10 +157,17 @@ class FaceEnrolmentServiceTest {
     /** Withdrawal must actually erase, not merely record the decision. */
     @Test
     void revokingConsentDeletesEveryStoredEmbedding() {
+        FaceConsent revoked = new FaceConsent();
+        revoked.setStudentId(studentId);
+        revoked.setRevokedAt(CLOCK.now());
+        when(consentService.revoke(studentId)).thenReturn(revoked);
         when(enrolmentRepository.countByStudentId(studentId)).thenReturn(3L);
 
-        int deleted = service().revokeConsentAndErase(studentId);
+        var result = service().revokeConsentAndErase(studentId);
+        int deleted = result.embeddingsDeleted();
 
+        // The withdrawn row travels back so the API can report a real timestamp.
+        assertThat(result.consent().getRevokedAt()).isNotNull();
         assertThat(deleted).isEqualTo(3);
         verify(consentService).revoke(studentId);
         verify(enrolmentRepository).deleteByStudentId(studentId);
@@ -169,9 +176,10 @@ class FaceEnrolmentServiceTest {
     /** Safe to retry: a second withdrawal deletes nothing and claims nothing. */
     @Test
     void revokingWhenNothingIsStoredDeletesNothing() {
+        when(consentService.revoke(studentId)).thenReturn(new FaceConsent());
         when(enrolmentRepository.countByStudentId(studentId)).thenReturn(0L);
 
-        int deleted = service().revokeConsentAndErase(studentId);
+        int deleted = service().revokeConsentAndErase(studentId).embeddingsDeleted();
 
         assertThat(deleted).isZero();
         verify(consentService).revoke(studentId);

@@ -60,9 +60,12 @@ public class FaceConsentController {
                     consent.getGrantedAt(), consent.getRevokedAt(), consent.getScope(), null);
         }
 
-        static FaceConsentResponse withdrawn(UUID studentId, int embeddingsDeleted) {
-            return new FaceConsentResponse(studentId, false, null, null,
-                    FaceConsent.SCOPE_FACE_ATTENDANCE, embeddingsDeleted);
+        /** Carries the real timestamps off the withdrawn row, not hardcoded nulls. */
+        static FaceConsentResponse withdrawn(FaceEnrolmentService.ErasureResult result) {
+            FaceConsent consent = result.consent();
+            return new FaceConsentResponse(consent.getStudentId(), consent.isActive(),
+                    consent.getGrantedAt(), consent.getRevokedAt(), consent.getScope(),
+                    result.embeddingsDeleted());
         }
 
         /** No row at all is a real answer -- never consented -- not a 404. */
@@ -105,7 +108,7 @@ public class FaceConsentController {
     @PreAuthorize(Roles.HAS_PARENT)
     FaceConsentResponse revokeForChild(@PathVariable UUID studentId, Authentication authentication) {
         requireOwnChild(studentId, userId(authentication));
-        return FaceConsentResponse.withdrawn(studentId, enrolmentService.revokeConsentAndErase(studentId));
+        return FaceConsentResponse.withdrawn(enrolmentService.revokeConsentAndErase(studentId));
     }
 
     // --- SCHOOL_ADMIN, any student ----------------------------------------
@@ -133,7 +136,7 @@ public class FaceConsentController {
     @DeleteMapping("/students/{id}/face-consent")
     @PreAuthorize(Roles.HAS_ADMIN)
     FaceConsentResponse revokeConsent(@PathVariable UUID id) {
-        return FaceConsentResponse.withdrawn(id, enrolmentService.revokeConsentAndErase(id));
+        return FaceConsentResponse.withdrawn(enrolmentService.revokeConsentAndErase(id));
     }
 
     /**
