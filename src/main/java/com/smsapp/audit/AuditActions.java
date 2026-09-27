@@ -43,6 +43,10 @@ public final class AuditActions {
     public static final String FEE_PAYMENT_REVERSED = "FEE_PAYMENT_REVERSED";
     public static final String ANNOUNCEMENT_CREATED = "ANNOUNCEMENT_CREATED";
     public static final String ANNOUNCEMENT_DELETED = "ANNOUNCEMENT_DELETED";
+    public static final String HOMEWORK_CREATED = "HOMEWORK_CREATED";
+    public static final String HOMEWORK_UPDATED = "HOMEWORK_UPDATED";
+    public static final String HOMEWORK_DELETED = "HOMEWORK_DELETED";
+    public static final String HOMEWORK_SUBMISSION_RECORDED = "HOMEWORK_SUBMISSION_RECORDED";
     public static final String LIBRARY_BOOK_ADDED = "LIBRARY_BOOK_ADDED";
     public static final String LIBRARY_BOOK_ISSUED = "LIBRARY_BOOK_ISSUED";
     public static final String LIBRARY_BOOK_RETURNED = "LIBRARY_BOOK_RETURNED";
@@ -112,6 +116,8 @@ public final class AuditActions {
     public static final String FEE_DISCOUNT = "FEE_DISCOUNT";
     public static final String FEE_PAYMENT = "FEE_PAYMENT";
     public static final String ANNOUNCEMENT = "ANNOUNCEMENT";
+    public static final String HOMEWORK = "HOMEWORK";
+    public static final String HOMEWORK_SUBMISSION = "HOMEWORK_SUBMISSION";
     public static final String LIBRARY_BOOK = "LIBRARY_BOOK";
     public static final String BOOK_LOAN = "BOOK_LOAN";
     public static final String TRANSPORT_ROUTE = "TRANSPORT_ROUTE";

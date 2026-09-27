@@ -5,6 +5,7 @@ import com.smsapp.academics.SchoolClass;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
+import com.smsapp.common.SchoolClock;
 import com.smsapp.frontoffice.EnquiryDtos.AssignableStaffResponse;
 import com.smsapp.frontoffice.EnquiryDtos.CreateEnquiryRequest;
 import com.smsapp.frontoffice.EnquiryDtos.EnquiryConversionResult;
@@ -52,10 +53,11 @@ public class EnquiryService {
     private final UserRepository userRepository;
     private final StudentService studentService;
     private final AuditService auditService;
+    private final SchoolClock clock;
 
     public EnquiryService(AdmissionEnquiryRepository enquiryRepository, EnquiryFollowUpRepository followUpRepository,
                           EnquirySourceRepository sourceRepository, ClassRepository classRepository,
-                          UserRepository userRepository, StudentService studentService, AuditService auditService) {
+                          UserRepository userRepository, StudentService studentService, AuditService auditService, SchoolClock clock) {
         this.enquiryRepository = enquiryRepository;
         this.followUpRepository = followUpRepository;
         this.sourceRepository = sourceRepository;
@@ -63,6 +65,7 @@ public class EnquiryService {
         this.userRepository = userRepository;
         this.studentService = studentService;
         this.auditService = auditService;
+        this.clock = clock;
     }
 
     /** @throws ApiException 404 if {@code classId}/{@code sourceId}/{@code assignedStaffUserId} is given but unknown. */
@@ -77,7 +80,7 @@ public class EnquiryService {
         enquiry.setPhone(blankToNull(request.phone()));
         enquiry.setEmail(blankToNull(request.email()));
         enquiry.setClassId(request.classId());
-        enquiry.setEnquiryDate(request.enquiryDate() != null ? request.enquiryDate() : LocalDate.now());
+        enquiry.setEnquiryDate(request.enquiryDate() != null ? request.enquiryDate() : clock.today());
         enquiry.setSourceId(request.sourceId());
         enquiry.setAssignedStaffUserId(request.assignedStaffUserId());
         enquiry.setRemarks(blankToNull(request.remarks()));
@@ -292,7 +295,7 @@ public class EnquiryService {
         long active = enquiryRepository.countByStatusAndArchivedFalse(EnquiryStatus.ACTIVE)
                 + enquiryRepository.countByStatusAndArchivedFalse(EnquiryStatus.FOLLOW_UP);
         long followUpsDue = enquiryRepository.countByFollowUpDateLessThanEqualAndArchivedFalseAndStatusNotIn(
-                LocalDate.now(), EnquiryStatus.CLOSED);
+                clock.today(), EnquiryStatus.CLOSED);
         long converted = enquiryRepository.countByConvertedStudentIdIsNotNull();
         long lost = enquiryRepository.countByStatusAndArchivedFalse(EnquiryStatus.LOST);
 

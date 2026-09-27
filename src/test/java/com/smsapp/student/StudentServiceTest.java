@@ -1,5 +1,6 @@
 package com.smsapp.student;
 
+import com.smsapp.common.SchoolClock;
 import com.smsapp.academics.SectionRepository;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
@@ -28,6 +29,10 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class StudentServiceTest {
 
+    /** A real clock rather than a mock: it is a value object, and the tests'
+     * date expectations only make sense against the school's own zone. */
+    private static final SchoolClock CLOCK = new SchoolClock("Asia/Kolkata");
+
     @Mock
     private StudentRepository studentRepository;
 
@@ -47,7 +52,7 @@ class StudentServiceTest {
 
     private StudentService service() {
         return new StudentService(studentRepository, schoolRepository, sectionRepository, academicHistoryService,
-                auditService);
+                auditService, CLOCK);
     }
 
     /** Minimal create request: schoolId/firstName/lastName/dateOfBirth/admissionNumber, everything else null. */

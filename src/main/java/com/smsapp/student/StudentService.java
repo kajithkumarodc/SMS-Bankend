@@ -4,6 +4,7 @@ import com.smsapp.academics.SectionRepository;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
+import com.smsapp.common.SchoolClock;
 import com.smsapp.school.SchoolRepository;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
 import com.smsapp.student.StudentDtos.UpdateStudentRequest;
@@ -32,15 +33,17 @@ public class StudentService {
     private final SectionRepository sectionRepository;
     private final AcademicHistoryService academicHistoryService;
     private final AuditService auditService;
+    private final SchoolClock clock;
 
     public StudentService(StudentRepository studentRepository, SchoolRepository schoolRepository,
                           SectionRepository sectionRepository, AcademicHistoryService academicHistoryService,
-                          AuditService auditService) {
+                          AuditService auditService, SchoolClock clock) {
         this.studentRepository = studentRepository;
         this.schoolRepository = schoolRepository;
         this.sectionRepository = sectionRepository;
         this.academicHistoryService = academicHistoryService;
         this.auditService = auditService;
+        this.clock = clock;
     }
 
     /**
@@ -64,7 +67,7 @@ public class StudentService {
         Student student = new Student();
         student.setSchoolId(request.schoolId());
         student.setAdmissionNumber(admissionNumber);
-        student.setAdmissionDate(request.admissionDate() != null ? request.admissionDate() : LocalDate.now());
+        student.setAdmissionDate(request.admissionDate() != null ? request.admissionDate() : clock.today());
         student.setSectionId(request.sectionId());
         student.setStatus(StudentStatus.ACTIVE);
 

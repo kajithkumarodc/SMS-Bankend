@@ -1,5 +1,6 @@
 package com.smsapp.fee;
 
+import com.smsapp.common.SchoolClock;
 import com.smsapp.academics.ClassRepository;
 import com.smsapp.academics.SectionRepository;
 import com.smsapp.audit.AuditService;
@@ -32,6 +33,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FeeCollectionServiceTest {
+
+    /** A real clock rather than a mock: it is a value object, and the tests'
+     * date expectations only make sense against the school's own zone. */
+    private static final SchoolClock CLOCK = new SchoolClock("Asia/Kolkata");
 
     @Mock
     private InvoiceRepository invoiceRepository;
@@ -74,7 +79,7 @@ class FeeCollectionServiceTest {
     private FeeCollectionService service() {
         return new FeeCollectionService(invoiceRepository, feeStructureRepository, feeDiscountRepository,
                 feePaymentRepository, studentRepository, schoolRepository, classRepository, sectionRepository,
-                userRepository, paymentRecorder, auditService);
+                userRepository, paymentRecorder, auditService, CLOCK);
     }
 
     private Invoice invoice(BigDecimal amount, BigDecimal netAmount, BigDecimal paidAmount) {

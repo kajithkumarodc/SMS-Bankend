@@ -11,6 +11,7 @@ import com.smsapp.admission.AdmissionDtos.SubmitApplicationRequest;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
+import com.smsapp.common.SchoolClock;
 import com.smsapp.email.EmailGateway;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentDocumentService;
@@ -60,6 +61,7 @@ public class AdmissionApplicationService {
     private final StudentDocumentService studentDocumentService;
     private final EmailGateway emailGateway;
     private final AuditService auditService;
+    private final SchoolClock clock;
     private final String frontendBaseUrl;
 
     public AdmissionApplicationService(AdmissionApplicationRepository applicationRepository,
@@ -69,7 +71,7 @@ public class AdmissionApplicationService {
                                         RoleRepository roleRepository, UserService userService,
                                         UserActivationService userActivationService, StudentService studentService,
                                         StudentDocumentService studentDocumentService, EmailGateway emailGateway,
-                                        AuditService auditService,
+                                        AuditService auditService, SchoolClock clock,
                                         @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.applicationRepository = applicationRepository;
         this.cycleRepository = cycleRepository;
@@ -83,6 +85,7 @@ public class AdmissionApplicationService {
         this.studentDocumentService = studentDocumentService;
         this.emailGateway = emailGateway;
         this.auditService = auditService;
+        this.clock = clock;
         this.frontendBaseUrl = frontendBaseUrl;
     }
 
@@ -380,7 +383,7 @@ public class AdmissionApplicationService {
                 a.getSchoolId(),
                 a.getFirstName(), a.getMiddleName(), a.getLastName(), a.getGender(), a.getDateOfBirth(),
                 a.getBloodGroup(), a.getNationality(), a.getReligion(), a.getMotherTongue(), a.getCategory(),
-                admissionNumber, null, null, LocalDate.now(), null,
+                admissionNumber, null, null, clock.today(), null,
                 a.getPreviousSchoolName(), a.getPreviousSchoolClass(), a.getPreviousSchoolAdmissionNumber(),
                 a.getPreviousSchoolAddress(), null, a.getAdmissionSource(), null,
                 a.getGuardianName(), a.getGuardianRelationship(), a.getGuardianPhone(), a.getGuardianAlternatePhone(),

@@ -7,6 +7,7 @@ import com.smsapp.academics.SectionRepository;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
+import com.smsapp.common.SchoolClock;
 import com.smsapp.fee.FeeDtos.BulkAssignResult;
 import com.smsapp.fee.FeeDtos.CreateFeeDiscountRequest;
 import com.smsapp.fee.FeeDtos.InvoiceStatementLine;
@@ -55,13 +56,14 @@ public class FeeCollectionService {
     private final UserRepository userRepository;
     private final FeePaymentRecorder paymentRecorder;
     private final AuditService auditService;
+    private final SchoolClock clock;
 
     public FeeCollectionService(InvoiceRepository invoiceRepository, FeeStructureRepository feeStructureRepository,
                                 FeeDiscountRepository feeDiscountRepository, FeePaymentRepository feePaymentRepository,
                                 StudentRepository studentRepository, SchoolRepository schoolRepository,
                                 ClassRepository classRepository, SectionRepository sectionRepository,
                                 UserRepository userRepository, FeePaymentRecorder paymentRecorder,
-                                AuditService auditService) {
+                                AuditService auditService, SchoolClock clock) {
         this.invoiceRepository = invoiceRepository;
         this.feeStructureRepository = feeStructureRepository;
         this.feeDiscountRepository = feeDiscountRepository;
@@ -73,6 +75,7 @@ public class FeeCollectionService {
         this.userRepository = userRepository;
         this.paymentRecorder = paymentRecorder;
         this.auditService = auditService;
+        this.clock = clock;
     }
 
     // --- Bulk assignment (plan part C) ----------------------------------
@@ -183,7 +186,7 @@ public class FeeCollectionService {
         if (discount.getFeeStructureId() != null && !discount.getFeeStructureId().equals(invoice.getFeeStructureId())) {
             throw new ApiException("This discount does not apply to this invoice's fee structure", HttpStatus.BAD_REQUEST);
         }
-        LocalDate today = LocalDate.now();
+        LocalDate today = clock.today();
         if ((discount.getValidFrom() != null && today.isBefore(discount.getValidFrom()))
                 || (discount.getValidTo() != null && today.isAfter(discount.getValidTo()))) {
             throw new ApiException("This discount is not currently valid", HttpStatus.BAD_REQUEST);
@@ -227,7 +230,7 @@ public class FeeCollectionService {
         if (structure.getLateFeeAmount() == null) {
             throw new ApiException("No late fee is configured for this fee structure", HttpStatus.BAD_REQUEST);
         }
-        if (!LocalDate.now().isAfter(structure.getDueDate())) {
+        if (!clock.today().isAfter(structure.getDueDate())) {
             throw new ApiException("This invoice is not yet overdue", HttpStatus.BAD_REQUEST);
         }
 
@@ -414,7 +417,7 @@ public class FeeCollectionService {
         BigDecimal totalPaid = BigDecimal.ZERO;
         BigDecimal totalBalance = BigDecimal.ZERO;
         List<InvoiceStatementLine> lines = new ArrayList<>();
-        LocalDate today = LocalDate.now();
+        LocalDate today = clock.today();
 
         for (Invoice invoice : invoices) {
             FeeStructure structure = structures.get(invoice.getFeeStructureId());

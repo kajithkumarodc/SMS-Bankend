@@ -1,5 +1,6 @@
 package com.smsapp.portal;
 
+import com.smsapp.homework.HomeworkService;
 import com.smsapp.attendance.AttendanceRecord;
 import com.smsapp.attendance.AttendanceService;
 import com.smsapp.common.ApiException;
@@ -63,13 +64,16 @@ class PortalServiceTest {
     @Mock
     private FeeCollectionService feeCollectionService;
 
+    @Mock
+    private HomeworkService homeworkService;
+
     private final UUID studentUserId = UUID.randomUUID();
     private final UUID guardianUserId = UUID.randomUUID();
     private final UUID studentId = UUID.randomUUID();
 
     private PortalService service() {
         return new PortalService(studentRepository, attendanceService, examService, invoiceRepository,
-                bookLoanRepository, transportService, hostelService, feeCollectionService);
+                bookLoanRepository, transportService, hostelService, feeCollectionService, homeworkService);
     }
 
     private Student linkedStudent() {

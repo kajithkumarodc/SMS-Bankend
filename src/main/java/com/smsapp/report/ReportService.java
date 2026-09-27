@@ -1,6 +1,7 @@
 package com.smsapp.report;
 
 import com.smsapp.attendance.AttendanceStatus;
+import com.smsapp.common.SchoolClock;
 import com.smsapp.report.ReportDtos.AttendanceTrendPoint;
 import com.smsapp.report.ReportDtos.BalanceFeeEntry;
 import com.smsapp.report.ReportDtos.DailyCollectionPoint;
@@ -35,9 +36,11 @@ import java.util.UUID;
 public class ReportService {
 
     private final ReportRepository reportRepository;
+    private final SchoolClock clock;
 
-    public ReportService(ReportRepository reportRepository) {
+    public ReportService(ReportRepository reportRepository, SchoolClock clock) {
         this.reportRepository = reportRepository;
+        this.clock = clock;
     }
 
     /** Daily present/absent/late tallies + attendance % over an inclusive {@code [from, to]} range. */
@@ -94,7 +97,7 @@ public class ReportService {
         BigDecimal invoiced = zeroIfNull(totals == null ? null : totals.getInvoiced());
         BigDecimal collected = zeroIfNull(totals == null ? null : totals.getCollected());
 
-        List<OverdueInvoice> overdue = reportRepository.overdueInvoices(LocalDate.now()).stream()
+        List<OverdueInvoice> overdue = reportRepository.overdueInvoices(clock.today()).stream()
                 .map(row -> new OverdueInvoice(row.getInvoiceId(), row.getStudentId(),
                         row.getFeeStructureName(), row.getAmount(), row.getDueDate()))
                 .toList();
@@ -120,7 +123,7 @@ public class ReportService {
     /** Daily Collection: real payments over an inclusive {@code [from, to]} date range, grouped by day then method. */
     @Transactional(readOnly = true)
     public List<DailyCollectionPoint> dailyCollection(LocalDate from, LocalDate to) {
-        ZoneId zone = ZoneId.systemDefault();
+        ZoneId zone = clock.zone();
         OffsetDateTime start = from.atStartOfDay(zone).toOffsetDateTime();
         OffsetDateTime end = to.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
 
@@ -146,7 +149,7 @@ public class ReportService {
     @Transactional(readOnly = true)
     public FeeCollectionTransactionsReport feeCollectionTransactions(LocalDate from, LocalDate to, String method,
             UUID collectedByUserId, UUID studentId, UUID classId) {
-        ZoneId zone = ZoneId.systemDefault();
+        ZoneId zone = clock.zone();
         OffsetDateTime start = from.atStartOfDay(zone).toOffsetDateTime();
         OffsetDateTime end = to.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
 

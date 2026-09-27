@@ -1,5 +1,6 @@
 package com.smsapp.frontoffice;
 
+import com.smsapp.common.SchoolClock;
 import com.smsapp.academics.ClassRepository;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
@@ -35,6 +36,10 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class EnquiryServiceTest {
 
+    /** A real clock rather than a mock: it is a value object, and the tests'
+     * date expectations only make sense against the school's own zone. */
+    private static final SchoolClock CLOCK = new SchoolClock("Asia/Kolkata");
+
     @Mock
     private AdmissionEnquiryRepository enquiryRepository;
 
@@ -60,7 +65,7 @@ class EnquiryServiceTest {
 
     private EnquiryService service() {
         return new EnquiryService(enquiryRepository, followUpRepository, sourceRepository, classRepository,
-                userRepository, studentService, auditService);
+                userRepository, studentService, auditService, CLOCK);
     }
 
     private static AdmissionEnquiry enquiry(UUID id, String status) {

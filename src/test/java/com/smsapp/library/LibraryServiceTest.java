@@ -1,5 +1,6 @@
 package com.smsapp.library;
 
+import com.smsapp.common.SchoolClock;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
@@ -31,6 +32,10 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class LibraryServiceTest {
 
+    /** A real clock rather than a mock: it is a value object, and the tests'
+     * date expectations only make sense against the school's own zone. */
+    private static final SchoolClock CLOCK = new SchoolClock("Asia/Kolkata");
+
     @Mock
     private LibraryBookRepository bookRepository;
 
@@ -44,7 +49,7 @@ class LibraryServiceTest {
     private AuditService auditService;
 
     private LibraryService service() {
-        return new LibraryService(bookRepository, loanRepository, studentRepository, auditService);
+        return new LibraryService(bookRepository, loanRepository, studentRepository, auditService, CLOCK);
     }
 
     private final UUID bookId = UUID.randomUUID();

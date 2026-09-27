@@ -1,6 +1,7 @@
 package com.smsapp.portal;
 
 import com.smsapp.fee.FeeDtos.ReceiptResponse;
+import com.smsapp.homework.HomeworkDtos.StudentHomeworkResponse;
 import com.smsapp.fee.FeeDtos.StudentFeeStatementResponse;
 import com.smsapp.portal.PortalDtos.AttendanceEntryView;
 import com.smsapp.portal.PortalDtos.ExamResultView;
@@ -13,14 +14,17 @@ import com.smsapp.user.Roles;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedModel;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -87,6 +91,29 @@ public class PortalController {
     public List<ExamResultView> childResults(@PathVariable UUID studentId, Authentication authentication) {
         return portalService.childResults(userId(authentication), studentId)
                 .stream().map(ExamResultView::from).toList();
+    }
+
+    /**
+     * STUDENT: their own homework, newest first, each row carrying their own submission
+     * state. {@code from} optionally bounds how far back the list reaches. 404 if no
+     * student record is linked yet.
+     */
+    @GetMapping("/student/homework")
+    @PreAuthorize(Roles.HAS_STUDENT)
+    public List<StudentHomeworkResponse> ownHomework(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            Authentication authentication) {
+        return portalService.ownHomework(userId(authentication), from);
+    }
+
+    /** PARENT: one of their own children's homework. 404 if the student is not this parent's child. */
+    @GetMapping("/children/{studentId}/homework")
+    @PreAuthorize(Roles.HAS_PARENT)
+    public List<StudentHomeworkResponse> childHomework(
+            @PathVariable UUID studentId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            Authentication authentication) {
+        return portalService.childHomework(userId(authentication), studentId, from);
     }
 
     /** PARENT: one of their own children's invoices (fee dues). 404 if the student is not this parent's child. */

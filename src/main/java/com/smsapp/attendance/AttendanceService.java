@@ -5,6 +5,7 @@ import com.smsapp.attendance.AttendanceDtos.MarkAttendanceRequest;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
+import com.smsapp.common.SchoolClock;
 import com.smsapp.student.StudentRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,13 +25,15 @@ public class AttendanceService {
     private final StudentRepository studentRepository;
     private final SectionRepository sectionRepository;
     private final AuditService auditService;
+    private final SchoolClock clock;
 
     public AttendanceService(AttendanceRepository attendanceRepository, StudentRepository studentRepository,
-                             SectionRepository sectionRepository, AuditService auditService) {
+                             SectionRepository sectionRepository, AuditService auditService, SchoolClock clock) {
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
         this.sectionRepository = sectionRepository;
         this.auditService = auditService;
+        this.clock = clock;
     }
 
     /** {@code created} is true when the record was newly inserted, false when an existing one was updated. */
@@ -52,7 +55,9 @@ public class AttendanceService {
         if (status == null) {
             throw new ApiException("Status must be PRESENT, ABSENT or LATE", HttpStatus.BAD_REQUEST);
         }
-        if (request.date().isAfter(LocalDate.now())) {
+        // Against the school's own calendar day, not the JVM's -- on a UTC host a
+        // morning mark in IST would otherwise be rejected as "in the future".
+        if (request.date().isAfter(clock.today())) {
             throw new ApiException("Attendance date cannot be in the future", HttpStatus.BAD_REQUEST);
         }
         requireStudent(request.studentId());

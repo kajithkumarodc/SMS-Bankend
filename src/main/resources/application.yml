@@ -75,6 +75,11 @@ server:
   port: ${PORT:8080}
 
 app:
+  # The school's wall-clock zone. Every domain date (attendance days, fee due
+  # dates, loan dates) is read off this, never the JVM default -- on Railway the
+  # JVM default is UTC, which makes "today" the previous day for a morning in IST.
+  # See com.smsapp.common.SchoolClock.
+  timezone: ${APP_TIMEZONE:Asia/Kolkata}
   # Local/self-hosted file storage for uploaded student documents (plan Phase 3
   # section 2) -- never a paid cloud bucket. Outside any statically-served
   # directory; files are only ever read back through the authenticated

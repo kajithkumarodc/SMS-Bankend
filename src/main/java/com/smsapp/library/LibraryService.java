@@ -3,6 +3,7 @@ package com.smsapp.library;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
+import com.smsapp.common.SchoolClock;
 import com.smsapp.library.BookLoanRepository.ActiveLoan;
 import com.smsapp.library.BookLoanRepository.LoanWithBook;
 import com.smsapp.library.LibraryDtos.CreateBookRequest;
@@ -33,13 +34,15 @@ public class LibraryService {
     private final BookLoanRepository loanRepository;
     private final StudentRepository studentRepository;
     private final AuditService auditService;
+    private final SchoolClock clock;
 
     public LibraryService(LibraryBookRepository bookRepository, BookLoanRepository loanRepository,
-                          StudentRepository studentRepository, AuditService auditService) {
+                          StudentRepository studentRepository, AuditService auditService, SchoolClock clock) {
         this.bookRepository = bookRepository;
         this.loanRepository = loanRepository;
         this.studentRepository = studentRepository;
         this.auditService = auditService;
+        this.clock = clock;
     }
 
     // --- Catalog ---------------------------------------------------
@@ -88,7 +91,7 @@ public class LibraryService {
         book.setAvailableCopies(book.getAvailableCopies() - 1);
         bookRepository.save(book);
 
-        LocalDate issued = LocalDate.now();
+        LocalDate issued = clock.today();
         BookLoan loan = new BookLoan();
         loan.setBookId(book.getId());
         loan.setStudentId(request.studentId());
@@ -114,7 +117,7 @@ public class LibraryService {
             throw new ApiException("This loan has already been returned", HttpStatus.CONFLICT);
         }
 
-        loan.setReturnedDate(LocalDate.now());
+        loan.setReturnedDate(clock.today());
         loanRepository.save(loan);
 
         // Put the copy back. Guard against exceeding total (should never happen).

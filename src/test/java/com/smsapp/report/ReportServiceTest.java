@@ -1,5 +1,6 @@
 package com.smsapp.report;
 
+import com.smsapp.common.SchoolClock;
 import com.smsapp.report.ReportDtos.AttendanceTrendPoint;
 import com.smsapp.report.ReportDtos.ExamPerformancePoint;
 import com.smsapp.report.ReportDtos.FeeCollectionReport;
@@ -23,11 +24,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ReportServiceTest {
 
+    /** A real clock rather than a mock: it is a value object, and the tests'
+     * date expectations only make sense against the school's own zone. */
+    private static final SchoolClock CLOCK = new SchoolClock("Asia/Kolkata");
+
     @Mock
     private ReportRepository reportRepository;
 
     private ReportService service() {
-        return new ReportService(reportRepository);
+        return new ReportService(reportRepository, CLOCK);
     }
 
     private static DailyStatusCount row(LocalDate date, String status, long count) {

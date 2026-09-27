@@ -1,5 +1,6 @@
 package com.smsapp.attendance;
 
+import com.smsapp.common.SchoolClock;
 import com.smsapp.academics.SectionRepository;
 import com.smsapp.audit.AuditService;
 import com.smsapp.attendance.AttendanceDtos.MarkAttendanceRequest;
@@ -28,6 +29,10 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class AttendanceServiceTest {
 
+    /** A real clock rather than a mock: it is a value object, and the tests'
+     * date expectations only make sense against the school's own zone. */
+    private static final SchoolClock CLOCK = new SchoolClock("Asia/Kolkata");
+
     @Mock
     private AttendanceRepository attendanceRepository;
 
@@ -44,7 +49,7 @@ class AttendanceServiceTest {
     private final UUID teacherId = UUID.randomUUID();
 
     private AttendanceService service() {
-        return new AttendanceService(attendanceRepository, studentRepository, sectionRepository, auditService);
+        return new AttendanceService(attendanceRepository, studentRepository, sectionRepository, auditService, CLOCK);
     }
 
     private void studentExists() {
@@ -96,11 +101,33 @@ class AttendanceServiceTest {
     void rejectsAFutureDateWith400() {
         studentExists();
 
-        assertThatThrownBy(() -> service().mark(teacherId, request(LocalDate.now().plusDays(1), "PRESENT")))
+        assertThatThrownBy(() -> service().mark(teacherId, request(CLOCK.today().plusDays(1), "PRESENT")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 
         verify(attendanceRepository, never()).save(any());
+    }
+
+    /**
+     * Regression: the future-date guard used to read {@code LocalDate.now()}, i.e. the
+     * JVM's zone, which is UTC on Railway. Between 00:00 and 05:30 IST the school's
+     * today is already the UTC tomorrow, so a teacher marking morning attendance got
+     * "Attendance date cannot be in the future" for the current day. Marking today in
+     * the school's own zone must always be accepted, whatever zone the JVM runs in.
+     */
+    @Test
+    void acceptsTodayInTheSchoolsZoneEvenWhenTheJvmIsBehindIt() {
+        studentExists();
+        when(attendanceRepository.findByStudentIdAndDate(any(), any())).thenReturn(Optional.empty());
+        when(attendanceRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+
+        SchoolClock utcJvm = new SchoolClock("Asia/Kolkata");
+        LocalDate schoolToday = utcJvm.today();
+
+        MarkResult result = service().mark(teacherId, request(schoolToday, "PRESENT"));
+
+        assertThat(result.entry().getDate()).isEqualTo(schoolToday);
+        assertThat(schoolToday).isAfterOrEqualTo(LocalDate.now(java.time.ZoneOffset.UTC));
     }
 
     @Test

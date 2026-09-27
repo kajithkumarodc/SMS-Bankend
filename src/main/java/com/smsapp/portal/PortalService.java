@@ -3,6 +3,8 @@ package com.smsapp.portal;
 import com.smsapp.attendance.AttendanceRecord;
 import com.smsapp.attendance.AttendanceService;
 import com.smsapp.common.ApiException;
+import com.smsapp.homework.HomeworkDtos.StudentHomeworkResponse;
+import com.smsapp.homework.HomeworkService;
 import com.smsapp.exam.ExamMarkRepository.StudentExamResult;
 import com.smsapp.exam.ExamService;
 import com.smsapp.fee.FeeCollectionService;
@@ -24,6 +26,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -46,11 +49,13 @@ public class PortalService {
     private final TransportService transportService;
     private final HostelService hostelService;
     private final FeeCollectionService feeCollectionService;
+    private final HomeworkService homeworkService;
 
     public PortalService(StudentRepository studentRepository, AttendanceService attendanceService,
                          ExamService examService, InvoiceRepository invoiceRepository,
                          BookLoanRepository bookLoanRepository, TransportService transportService,
-                         HostelService hostelService, FeeCollectionService feeCollectionService) {
+                         HostelService hostelService, FeeCollectionService feeCollectionService,
+                         HomeworkService homeworkService) {
         this.studentRepository = studentRepository;
         this.attendanceService = attendanceService;
         this.examService = examService;
@@ -59,6 +64,7 @@ public class PortalService {
         this.transportService = transportService;
         this.hostelService = hostelService;
         this.feeCollectionService = feeCollectionService;
+        this.homeworkService = homeworkService;
     }
 
     /**
@@ -113,6 +119,26 @@ public class PortalService {
         Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
                 .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
         return examService.studentResults(child.getId());
+    }
+
+    /**
+     * A STUDENT's own homework, newest first, each row carrying their own submission
+     * state. {@code from} optionally bounds how far back the list reaches.
+     */
+    @Transactional(readOnly = true)
+    public List<StudentHomeworkResponse> ownHomework(UUID studentUserId, LocalDate from) {
+        return homeworkService.forStudent(ownStudent(studentUserId), from);
+    }
+
+    /**
+     * A parent's own child's homework. The {@code studentId} from the URL is only
+     * honoured if that student's {@code guardian_user_id} is this parent -- otherwise 404.
+     */
+    @Transactional(readOnly = true)
+    public List<StudentHomeworkResponse> childHomework(UUID guardianUserId, UUID studentId, LocalDate from) {
+        Student child = studentRepository.findByIdAndGuardianUserId(studentId, guardianUserId)
+                .orElseThrow(() -> new ApiException(CHILD_NOT_FOUND, HttpStatus.NOT_FOUND));
+        return homeworkService.forStudent(child, from);
     }
 
     /**
