@@ -106,7 +106,14 @@ public class FaceServiceClient {
         // mid-request; a classroom photo at det_size 1024 can take several seconds. The
         // connect timeout stays short, because an unreachable sidecar should fail fast.
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
+                HttpClient.newBuilder()
+                        // Pin HTTP/1.1. Java's HttpClient defaults to HTTP/2 and attempts an
+                        // h2c cleartext upgrade, which uvicorn does not support: it logs
+                        // "Unsupported upgrade request", then "Invalid HTTP request
+                        // received", and answers 400 to a request that is otherwise valid.
+                        .version(HttpClient.Version.HTTP_1_1)
+                        .connectTimeout(Duration.ofSeconds(5))
+                        .build());
         requestFactory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
 
         boolean hasBaseUrl = baseUrl != null && !baseUrl.isBlank();
