@@ -1,6 +1,7 @@
 package com.smsapp.face;
 
 import com.smsapp.common.ApiException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
@@ -68,6 +69,10 @@ public class FaceServiceClient {
     private final RestClient client;
     private final boolean configured;
 
+    // Explicit, because this class has two constructors: Spring only auto-selects when
+    // there is exactly one, and without this it looks for a no-arg constructor and the
+    // whole context fails to start.
+    @Autowired
     public FaceServiceClient(RestClient.Builder builder,
                              @Value("${app.face.base-url:}") String baseUrl,
                              @Value("${app.face.api-key:}") String apiKey,
