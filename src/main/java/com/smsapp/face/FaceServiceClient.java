@@ -1,6 +1,8 @@
 package com.smsapp.face;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smsapp.common.ApiException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,6 +72,7 @@ public class FaceServiceClient {
     private record WireDetect(String model_version, int faces_detected, List<WireFace> faces) {
     }
 
+    private static final Logger log = LoggerFactory.getLogger(FaceServiceClient.class);
     private static final ObjectMapper ERROR_MAPPER = new ObjectMapper();
     private static final String GENERIC_REJECTION = "the image was rejected";
 
@@ -191,10 +194,23 @@ public class FaceServiceClient {
         } catch (ApiException alreadyMapped) {
             throw alreadyMapped;
         } catch (RestClientException error) {
-            // Never leak the sidecar's URL or stack into an API response.
+            // Log the real cause before replacing it. The API response stays generic so it
+            // never leaks the sidecar's URL or a stack trace, but swallowing the cause
+            // entirely makes a connectivity failure undiagnosable from the outside -- which
+            // is exactly how an IPv6/port misconfiguration cost hours to find once already.
+            log.error("face service call to {} failed: {}", path, describe(error), error);
             throw new ApiException("The face recognition service is unavailable. Please try again.",
                     HttpStatus.BAD_GATEWAY);
         }
+    }
+
+    /** The root cause's type and message -- the part that actually says what went wrong. */
+    private static String describe(Throwable error) {
+        Throwable root = error;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        return root.getClass().getSimpleName() + ": " + root.getMessage();
     }
 
     /**
