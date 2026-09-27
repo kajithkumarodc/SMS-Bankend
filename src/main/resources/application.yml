@@ -114,6 +114,15 @@ app:
   # Used to build links in outgoing email (portal activation, status lookup) --
   # the frontend origin, not this backend's own.
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  # Face-assisted attendance (SMS-FaceService sidecar). Unset base-url = the feature
+  # is off, and the endpoints answer 503 rather than failing obscurely. The sidecar is
+  # reached over the platform's PRIVATE network and must never have a public domain;
+  # api-key is a shared secret checked by the sidecar itself.
+  face:
+    base-url: ${FACE_SERVICE_BASE_URL:}
+    api-key: ${FACE_SERVICE_API_KEY:}
+    timeout-seconds: ${FACE_SERVICE_TIMEOUT_SECONDS:30}
+    max-enrolments-per-student: ${FACE_MAX_ENROLMENTS_PER_STUDENT:5}
   # Public-endpoint abuse protection (plan part 4/27): a simple in-memory
   # sliding-window limiter, no external service/dependency -- appropriate for a
   # single self-hosted instance. Applies to the public admission-application
