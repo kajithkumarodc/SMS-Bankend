@@ -17,11 +17,16 @@ public final class AuditActions {
     public static final String STUDENT_CREATED = "STUDENT_CREATED";
     public static final String STUDENT_UPDATED = "STUDENT_UPDATED";
     public static final String STUDENT_STATUS_CHANGED = "STUDENT_STATUS_CHANGED";
+    /** A student record permanently removed via Bulk Delete (only possible while it has no dependent history). */
+    public static final String STUDENT_DELETED = "STUDENT_DELETED";
     public static final String SECTION_ASSIGNED = "SECTION_ASSIGNED";
     public static final String CLASS_CREATED = "CLASS_CREATED";
     public static final String SECTION_CREATED = "SECTION_CREATED";
     public static final String SECTION_UPDATED = "SECTION_UPDATED";
     public static final String SECTION_DELETED = "SECTION_DELETED";
+    public static final String MEDIUM_CREATED = "MEDIUM_CREATED";
+    public static final String MEDIUM_UPDATED = "MEDIUM_UPDATED";
+    public static final String MEDIUM_DELETED = "MEDIUM_DELETED";
     public static final String SUBJECT_CREATED = "SUBJECT_CREATED";
     public static final String CLASS_SUBJECT_ASSIGNED = "CLASS_SUBJECT_ASSIGNED";
     public static final String ATTENDANCE_MARKED = "ATTENDANCE_MARKED";
@@ -30,6 +35,10 @@ public final class AuditActions {
     public static final String EXAM_MARK_RECORDED = "EXAM_MARK_RECORDED";
     public static final String EXAM_MARK_CHANGED = "EXAM_MARK_CHANGED";
     public static final String FEE_STRUCTURE_CREATED = "FEE_STRUCTURE_CREATED";
+    public static final String FEE_STRUCTURE_UPDATED = "FEE_STRUCTURE_UPDATED";
+    public static final String FEE_ADJUSTED = "FEE_ADJUSTED";
+    public static final String FEE_TYPE_UPDATED = "FEE_TYPE_UPDATED";
+    public static final String FEE_STRUCTURE_DELETED = "FEE_STRUCTURE_DELETED";
     public static final String INVOICE_CREATED = "INVOICE_CREATED";
     public static final String INVOICE_CHECKOUT_STARTED = "INVOICE_CHECKOUT_STARTED";
     public static final String INVOICE_PAID = "INVOICE_PAID";
@@ -133,6 +142,7 @@ public final class AuditActions {
     public static final String STUDENT = "STUDENT";
     public static final String CLASS = "CLASS";
     public static final String SECTION = "SECTION";
+    public static final String MEDIUM = "MEDIUM";
     public static final String SUBJECT = "SUBJECT";
     public static final String CLASS_SUBJECT = "CLASS_SUBJECT";
     public static final String ATTENDANCE_RECORD = "ATTENDANCE_RECORD";

@@ -1,5 +1,6 @@
 package com.smsapp.fee;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -29,6 +30,9 @@ public final class FeeDtos {
     record CreateFeeTypeRequest(@NotBlank @Size(max = 100) String name) {
     }
 
+    record UpdateFeeTypeRequest(@NotBlank @Size(max = 100) String name, Boolean active) {
+    }
+
     record FeeTypeResponse(UUID id, String name, boolean active) {
 
         static FeeTypeResponse from(FeeType type) {
@@ -54,7 +58,15 @@ public final class FeeDtos {
             @NotNull LocalDate dueDate,
             String frequency,
             @DecimalMin(value = "0.01") BigDecimal lateFeeAmount,
-            List<LineItemRequest> items) {
+            @Valid List<LineItemRequest> items,
+            /** Null = the same fees for every medium. */
+            UUID mediumId) {
+
+        CreateFeeStructureRequest(UUID schoolId, UUID classId, String academicYear, String name, BigDecimal amount,
+                                  LocalDate dueDate, String frequency, BigDecimal lateFeeAmount,
+                                  List<LineItemRequest> items) {
+            this(schoolId, classId, academicYear, name, amount, dueDate, frequency, lateFeeAmount, items, null);
+        }
     }
 
     /** One Application/Admission/Term-N/Other line; {@code sequenceOrder} is derived from list position. */
@@ -62,7 +74,13 @@ public final class FeeDtos {
             @NotBlank String category,
             @Size(max = 150) String label,
             UUID feeTypeId,
-            @NotNull @DecimalMin(value = "0.01") BigDecimal amount) {
+            @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
+            /** Null = the structure's due date. */
+            LocalDate dueDate) {
+
+        LineItemRequest(String category, String label, UUID feeTypeId, BigDecimal amount) {
+            this(category, label, feeTypeId, amount, null);
+        }
     }
 
     record FeeStructureItemResponse(
@@ -72,11 +90,12 @@ public final class FeeDtos {
             UUID feeTypeId,
             String feeTypeName,
             BigDecimal amount,
-            int sequenceOrder) {
+            int sequenceOrder,
+            LocalDate dueDate) {
 
         static FeeStructureItemResponse from(FeeStructureItem item, String feeTypeName) {
             return new FeeStructureItemResponse(item.getId(), item.getCategory(), item.getLabel(),
-                    item.getFeeTypeId(), feeTypeName, item.getAmount(), item.getSequenceOrder());
+                    item.getFeeTypeId(), feeTypeName, item.getAmount(), item.getSequenceOrder(), item.getDueDate());
         }
     }
 
@@ -92,9 +111,16 @@ public final class FeeDtos {
             BigDecimal lateFeeAmount,
             String status,
             List<FeeStructureItemResponse> items,
-            OffsetDateTime createdAt) {
+            OffsetDateTime createdAt,
+            UUID mediumId,
+            /** How many students have been billed for this structure. */
+            long billedCount) {
 
         static FeeStructureResponse from(FeeStructure structure, List<FeeStructureItemResponse> items) {
+            return from(structure, items, 0);
+        }
+
+        static FeeStructureResponse from(FeeStructure structure, List<FeeStructureItemResponse> items, long billedCount) {
             return new FeeStructureResponse(
                     structure.getId(),
                     structure.getSchoolId(),
@@ -107,7 +133,9 @@ public final class FeeDtos {
                     structure.getLateFeeAmount(),
                     structure.getStatus(),
                     items,
-                    structure.getCreatedAt());
+                    structure.getCreatedAt(),
+                    structure.getMediumId(),
+                    billedCount);
         }
     }
 
@@ -148,7 +176,18 @@ public final class FeeDtos {
     /** Generate an invoice for one student against one fee structure. The amount is copied from the structure. */
     record CreateInvoiceRequest(
             @NotNull UUID studentId,
-            @NotNull UUID feeStructureId) {
+            @NotNull UUID feeStructureId,
+            /** Admission-time adjustment of the template amount for this one student; null = the template amount. */
+            @DecimalMin(value = "0.00") BigDecimal amount,
+            @Size(max = 500) String adjustmentReason) {
+
+        CreateInvoiceRequest(UUID studentId, UUID feeStructureId) {
+            this(studentId, feeStructureId, null, null);
+        }
+    }
+
+    /** Result of editing a fee structure: how many existing bills were changed (only when asked to). */
+    record UpdateFeeStructureResponse(FeeStructureResponse structure, int adjustedInvoices, List<String> skipped) {
     }
 
     /** Bulk-assign one fee structure to every id in {@code studentIds}; a student already invoiced for it is skipped, not duplicated. */

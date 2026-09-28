@@ -14,11 +14,17 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
     List<Invoice> findByStudentIdOrderByCreatedAtDesc(UUID studentId);
 
+    List<Invoice> findByFeeStructureId(UUID feeStructureId);
+
+    long countByFeeStructureId(UUID feeStructureId);
+
     /** Webhook: resolve the invoice a Razorpay order was created for. */
     Optional<Invoice> findByRazorpayOrderId(String razorpayOrderId);
 
     /** Duplicate-assignment guard (plan Phase 5 part C): has this student already been billed against this structure? */
     boolean existsByStudentIdAndFeeStructureId(UUID studentId, UUID feeStructureId);
+
+    boolean existsByFeeStructureId(UUID feeStructureId);
 
     /** Bulk assignment: which of these students already have an invoice for this structure (to skip, not duplicate). */
     @Query("select i.studentId from Invoice i where i.feeStructureId = :feeStructureId and i.studentId in :studentIds")

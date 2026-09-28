@@ -51,10 +51,20 @@ public class ClassService {
         schoolClass.setName(name);
         SchoolClass saved = classRepository.save(schoolClass);
 
+        // Until real sections are added, students join the class through its hidden default section.
+        Section defaultSection = new Section();
+        defaultSection.setClassId(saved.getId());
+        defaultSection.setName(DEFAULT_SECTION_NAME);
+        defaultSection.setDefaultSection(true);
+        sectionRepository.save(defaultSection);
+
         auditService.log(AuditActions.CLASS_CREATED, AuditActions.CLASS, saved.getId(),
                 Map.of("name", saved.getName(), "schoolId", saved.getSchoolId().toString()));
         return saved;
     }
+
+    /** Stored name of a class's hidden default section (V39); the UI shows the class name instead. */
+    static final String DEFAULT_SECTION_NAME = "No section";
 
     /**
      * @throws ApiException 404 if the class does not exist, 409 if a section with
@@ -66,16 +76,22 @@ public class ClassService {
         if (classRepository.findById(classId).isEmpty()) {
             throw new ApiException("Class not found", HttpStatus.NOT_FOUND);
         }
-        if (sectionRepository.existsByClassIdAndName(classId, name)) {
+        Section defaultSection = sectionRepository.findByClassIdAndDefaultSectionTrue(classId).orElse(null);
+        if (sectionRepository.existsByClassIdAndName(classId, name)
+                && (defaultSection == null || !defaultSection.getName().equals(name))) {
             throw new ApiException("A section named '" + name + "' already exists in this class", HttpStatus.CONFLICT);
         }
-        Section section = new Section();
+        // The class's first real section takes over its hidden default section in place, so students already
+        // in the class (and their academic history) end up in this section instead of being left behind.
+        Section section = defaultSection != null ? defaultSection : new Section();
         section.setClassId(classId);
         section.setName(name);
+        section.setDefaultSection(false);
         Section saved = sectionRepository.save(section);
 
         auditService.log(AuditActions.SECTION_CREATED, AuditActions.SECTION, saved.getId(),
-                Map.of("name", saved.getName(), "classId", saved.getClassId().toString()));
+                Map.of("name", saved.getName(), "classId", saved.getClassId().toString(),
+                        "fromWholeClass", defaultSection != null));
         return saved;
     }
 
@@ -114,13 +130,24 @@ public class ClassService {
             throw new ApiException("Section " + section.getName() + " still has " + students + " student"
                     + (students == 1 ? "" : "s") + " -- move them to another section first", HttpStatus.CONFLICT);
         }
-        sectionRepository.delete(section);
+        String name = section.getName();
+        if (sectionRepository.countByClassIdAndDefaultSectionFalse(classId) == 1) {
+            // Last real section: it becomes the class's hidden default section again, so the class can
+            // still take students without any section.
+            section.setName(DEFAULT_SECTION_NAME);
+            section.setDefaultSection(true);
+            sectionRepository.save(section);
+        } else {
+            sectionRepository.delete(section);
+        }
         auditService.log(AuditActions.SECTION_DELETED, AuditActions.SECTION, sectionId,
-                Map.of("classId", classId.toString(), "name", section.getName()));
+                Map.of("classId", classId.toString(), "name", name));
     }
 
+    /** A real (named) section of the class -- the hidden default section can't be renamed or deleted. */
     private Section requireSection(UUID classId, UUID sectionId) {
         return sectionRepository.findByIdAndClassId(sectionId, classId)
+                .filter(section -> !section.isDefaultSection())
                 .orElseThrow(() -> new ApiException("Section not found", HttpStatus.NOT_FOUND));
     }
 

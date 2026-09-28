@@ -201,7 +201,7 @@ public class FeeCollectionService {
         return saved;
     }
 
-    private static BigDecimal computeDiscountAmount(FeeDiscount discount, BigDecimal grossAmount) {
+    static BigDecimal computeDiscountAmount(FeeDiscount discount, BigDecimal grossAmount) {
         BigDecimal raw = FeeDiscountType.PERCENTAGE.equals(discount.getDiscountType())
                 ? grossAmount.multiply(discount.getValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
                 : discount.getValue();
@@ -349,7 +349,7 @@ public class FeeCollectionService {
         if (student.getSectionId() != null) {
             Section section = sectionRepository.findById(student.getSectionId()).orElse(null);
             if (section != null) {
-                sectionName = section.getName();
+                sectionName = section.isDefaultSection() ? null : section.getName();
                 className = classRepository.findById(section.getClassId()).map(SchoolClass::getName).orElse(null);
             }
         }

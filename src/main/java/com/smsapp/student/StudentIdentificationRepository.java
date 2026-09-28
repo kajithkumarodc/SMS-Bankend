@@ -8,4 +8,6 @@ import java.util.UUID;
 public interface StudentIdentificationRepository extends JpaRepository<StudentIdentification, UUID> {
 
     List<StudentIdentification> findByStudentIdOrderByCreatedAtDesc(UUID studentId);
+
+    List<StudentIdentification> findByStudentIdInOrderByCreatedAtAsc(java.util.Collection<UUID> studentIds);
 }

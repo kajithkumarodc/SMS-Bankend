@@ -291,7 +291,8 @@ class EnquiryServiceTest {
                 // familyId (1)
                 null,
                 // comm prefs (4)
-                null, null, null, null);
+                null, null, null, null,
+                null);
     }
 
     @Test

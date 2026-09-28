@@ -208,6 +208,49 @@ public class Student extends UuidEntity {
     @Column(nullable = false, length = 30)
     private String status;
 
+    // --- Smart School admission-form fields (V40) ---
+    @Column(name = "medium_id")
+    private UUID mediumId;
+
+    @Column(length = 100)
+    private String caste;
+
+    /** The student's own mobile number (parents' numbers are separate fields). */
+    @Column(name = "mobile_number", length = 20)
+    private String mobileNumber;
+
+    @Column(length = 200)
+    private String email;
+
+    /** Free text, e.g. "4'2" or "128 cm". */
+    @Column(length = 20)
+    private String height;
+
+    /** Free text, e.g. "34 kg". */
+    @Column(length = 20)
+    private String weight;
+
+    @Column(name = "measurement_date")
+    private java.time.LocalDate measurementDate;
+
+    @Column(name = "medical_history", columnDefinition = "text")
+    private String medicalHistory;
+
+    @Column(name = "guardian_address", columnDefinition = "text")
+    private String guardianAddress;
+
+    @Column(name = "bank_account_number", length = 40)
+    private String bankAccountNumber;
+
+    @Column(name = "bank_name", length = 150)
+    private String bankName;
+
+    @Column(name = "ifsc_code", length = 20)
+    private String ifscCode;
+
+    @Column(columnDefinition = "text")
+    private String note;
+
     /** Section the student is assigned to, or null if not assigned yet. */
     @Column(name = "section_id")
     private UUID sectionId;

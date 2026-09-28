@@ -10,28 +10,21 @@ import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.OffsetDateTime;
-import java.util.UUID;
 
-/** A section within a class (e.g. "A"). */
+/** Medium of instruction (e.g. "English Medium"). Fees can differ per medium (V40). */
 @Entity
-@Table(name = "sections")
+@Table(name = "mediums")
 @Getter
 @Setter
 @NoArgsConstructor
-public class Section extends UuidEntity {
-
-    @Column(name = "class_id", nullable = false, updatable = false)
-    private UUID classId;
+public class Medium extends UuidEntity {
 
     @Column(nullable = false, length = 100)
     private String name;
 
-    /**
-     * The hidden section of a class that has no real sections: its students belong to the whole class.
-     * See V39 for the lifecycle; the UI shows only the class name for it.
-     */
-    @Column(name = "is_default", nullable = false)
-    private boolean defaultSection;
+    /** Inactive mediums stay on existing students and fees but can't be picked for new ones. */
+    @Column(nullable = false)
+    private boolean active = true;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -34,8 +34,11 @@ public class Invoice extends UuidEntity {
     @Column(name = "fee_structure_id", nullable = false, updatable = false)
     private UUID feeStructureId;
 
-    /** The gross amount copied from the fee structure at creation time -- never changes afterward. */
-    @Column(nullable = false, precision = 12, scale = 2, updatable = false)
+    /**
+     * The gross amount: the fee structure's amount (or an admission-time adjustment) at creation. It changes only
+     * through a recorded {@link FeeAdjustment} (a Fees Master change the school chose to apply to existing bills).
+     */
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
     @Column(nullable = false, length = 20)

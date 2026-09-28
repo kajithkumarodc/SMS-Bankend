@@ -16,6 +16,11 @@ public interface SectionRepository extends JpaRepository<Section, UUID> {
 
     java.util.Optional<Section> findByIdAndClassId(UUID id, UUID classId);
 
+    /** The hidden whole-class section, present only while the class has no real sections (V39). */
+    java.util.Optional<Section> findByClassIdAndDefaultSectionTrue(UUID classId);
+
+    long countByClassIdAndDefaultSectionFalse(UUID classId);
+
     /** Students currently placed in a section -- a section can't be deleted while this is above zero. */
     @org.springframework.data.jpa.repository.Query(
             value = "SELECT count(*) FROM students WHERE section_id = :sectionId", nativeQuery = true)

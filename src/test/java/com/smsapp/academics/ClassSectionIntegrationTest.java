@@ -19,6 +19,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -280,6 +281,63 @@ class ClassSectionIntegrationTest {
                 .andExpect(status().isNotFound());
         mockMvc.perform(delete("/api/v1/classes/" + classId + "/sections/" + sectionA).cookie(login(TEACHER_A)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aClassWithoutSectionsTakesStudentsThroughItsDefaultSection() throws Exception {
+        Cookie admin = login(ADMIN_A);
+        UUID lkg = createClassA(admin, "LKG");
+
+        // A new class has one hidden default section that students can be placed in directly.
+        var listed = JSON.readTree(mockMvc.perform(get("/api/v1/classes").cookie(admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        var sections = listed.get(0).get("sections");
+        assertThat(sections).hasSize(1);
+        assertThat(sections.get(0).get("isDefault").asBoolean()).isTrue();
+        UUID defaultSection = UUID.fromString(sections.get(0).get("id").asText());
+        mockMvc.perform(patch("/api/v1/students/" + studentA + "/section").cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"sectionId\":\"" + defaultSection + "\"}"))
+                .andExpect(status().isOk());
+
+        // The default section can't be renamed or deleted directly.
+        mockMvc.perform(put("/api/v1/classes/" + lkg + "/sections/" + defaultSection).cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"X\"}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/v1/classes/" + lkg + "/sections/" + defaultSection).cookie(admin))
+                .andExpect(status().isNotFound());
+
+        // The first real section takes it over in place: the student is now in section A.
+        UUID sectionA = createSection(admin, lkg, "A");
+        assertThat(sectionA).isEqualTo(defaultSection);
+        mockMvc.perform(get("/api/v1/classes").cookie(admin))
+                .andExpect(jsonPath("$[0].sections.length()").value(1))
+                .andExpect(jsonPath("$[0].sections[0].name").value("A"))
+                .andExpect(jsonPath("$[0].sections[0].isDefault").value(false));
+        mockMvc.perform(get("/api/v1/students").param("sectionId", sectionA.toString()).cookie(admin))
+                .andExpect(jsonPath("$.content[0].id").value(studentA.toString()));
+
+        // Deleting the last (empty) real section turns it back into the default section.
+        UUID sectionB = createSection(admin, lkg, "B");
+        mockMvc.perform(patch("/api/v1/students/" + studentA + "/section").cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"sectionId\":\"" + sectionB + "\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/v1/classes/" + lkg + "/sections/" + sectionA).cookie(admin))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/classes").cookie(admin))
+                .andExpect(jsonPath("$[0].sections.length()").value(1))
+                .andExpect(jsonPath("$[0].sections[0].name").value("B"));
+    }
+
+    @Test
+    void deletingTheLastSectionLeavesTheClassWithADefaultSection() throws Exception {
+        Cookie admin = login(ADMIN_A);
+        UUID classId = createClassA(admin, "UKG");
+        UUID sectionA = createSection(admin, classId, "A");
+        mockMvc.perform(delete("/api/v1/classes/" + classId + "/sections/" + sectionA).cookie(admin))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/classes").cookie(admin))
+                .andExpect(jsonPath("$[0].sections.length()").value(1))
+                .andExpect(jsonPath("$[0].sections[0].isDefault").value(true));
     }
 
     @Test

@@ -196,6 +196,14 @@ public class StudentController {
 
     // --- Identification documents (plan Phase 3 section: Identification) ---
 
+    /** Identification numbers (national ID, local ID, ...) of many students in one call. */
+    @PostMapping("/identifications/lookup")
+    @PreAuthorize(Permissions.HAS_STUDENT_VIEW)
+    List<IdentificationLookupEntry> identificationLookup(@RequestBody IdentificationLookupRequest request) {
+        List<UUID> ids = request.studentIds() == null ? List.of() : request.studentIds();
+        return identificationService.listForStudents(ids).stream().map(IdentificationLookupEntry::from).toList();
+    }
+
     @GetMapping("/{id}/identifications")
     @PreAuthorize(Permissions.HAS_STUDENT_VIEW)
     List<IdentificationEntry> identifications(@PathVariable UUID id) {
@@ -287,6 +295,16 @@ public class StudentController {
     }
 
     record AddIdentificationRequest(@NotBlank String idType, @NotBlank String idValue, String notes) {
+    }
+
+    record IdentificationLookupRequest(List<UUID> studentIds) {
+    }
+
+    record IdentificationLookupEntry(UUID studentId, String idType, String idValue) {
+        static IdentificationLookupEntry from(StudentIdentification identification) {
+            return new IdentificationLookupEntry(identification.getStudentId(), identification.getIdType(),
+                    identification.getIdValue());
+        }
     }
 
     record IdentificationEntry(UUID id, String idType, String idValue, String notes) {

@@ -391,7 +391,8 @@ public class AdmissionApplicationService {
                 a.getAddressLine1(), a.getAddressLine2(), a.getCity(), a.getState(), a.getCountry(), a.getPincode(),
                 true, null, null, null, null, null, null,
                 null,
-                null, null, null, null);
+                null, null, null, null,
+                null);
     }
 
     private record GuardianUser(UUID userId, boolean created) {
