@@ -38,17 +38,20 @@ public class CapturePhotoPurgeService {
     private static final Logger log = LoggerFactory.getLogger(CapturePhotoPurgeService.class);
 
     private final AttendanceCaptureRepository captureRepository;
+    private final AttendanceCaptureFaceRepository faceRepository;
     private final AuditService auditService;
     private final SchoolClock clock;
     private final Path baseDir;
     private final int batchSize;
 
     public CapturePhotoPurgeService(AttendanceCaptureRepository captureRepository,
+                                    AttendanceCaptureFaceRepository faceRepository,
                                     AuditService auditService,
                                     SchoolClock clock,
                                     @Value("${app.storage.base-dir}") String baseDir,
                                     @Value("${app.face.purge.batch-size:500}") int batchSize) {
         this.captureRepository = captureRepository;
+        this.faceRepository = faceRepository;
         this.auditService = auditService;
         this.clock = clock;
         this.baseDir = Path.of(baseDir).toAbsolutePath().normalize();
@@ -101,8 +104,16 @@ public class CapturePhotoPurgeService {
 
         int deleted = 0;
         int failed = 0;
+        int facesDropped = 0;
         for (AttendanceCapture capture : due) {
             if (deletePhoto(capture)) {
+                // Untagged faces go with the photo. An untagged face is a vector for a
+                // child nobody identified, so no consent basis was ever established for
+                // it -- keeping it past the retention window would be exactly the thing
+                // the consent design exists to prevent. Tagged faces survive: those are
+                // the consented, hand-labelled corpus phase 3 trains on.
+                facesDropped += dropUntaggedFaces(capture.getId());
+
                 capture.setPhotoPath(null);
                 captureRepository.save(capture);
                 deleted++;
@@ -113,9 +124,24 @@ public class CapturePhotoPurgeService {
                 failed++;
             }
         }
+        if (facesDropped > 0) {
+            log.info("capture photo purge: dropped {} untagged face vectors", facesDropped);
+        }
 
         long remaining = captureRepository.countByPhotoPathIsNotNullAndPhotoPurgeAfterLessThanEqual(now);
         return new PurgeResult(deleted, failed, remaining);
+    }
+
+    private int dropUntaggedFaces(java.util.UUID captureId) {
+        List<AttendanceCaptureFace> untagged =
+                faceRepository.findByCaptureIdAndAssignedStudentIdIsNull(captureId);
+        if (untagged.isEmpty()) {
+            return 0;
+        }
+        faceRepository.deleteAll(untagged);
+        auditService.log(AuditActions.CAPTURE_FACES_PURGED, AuditActions.ATTENDANCE_CAPTURE,
+                captureId, Map.of("untaggedFacesDeleted", String.valueOf(untagged.size())));
+        return untagged.size();
     }
 
     /**

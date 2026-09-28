@@ -33,14 +33,17 @@ class CapturePhotoPurgeServiceTest {
     private AttendanceCaptureRepository captureRepository;
 
     @Mock
+    private AttendanceCaptureFaceRepository faceRepository;
+
+    @Mock
     private AuditService auditService;
 
     @TempDir
     Path storage;
 
     private CapturePhotoPurgeService service() {
-        return new CapturePhotoPurgeService(captureRepository, auditService, CLOCK,
-                storage.toString(), 500);
+        return new CapturePhotoPurgeService(captureRepository, faceRepository, auditService,
+                CLOCK, storage.toString(), 500);
     }
 
     private AttendanceCapture capture(String photoPath) {
@@ -155,6 +158,49 @@ class CapturePhotoPurgeServiceTest {
         } finally {
             Files.deleteIfExists(escape);
         }
+    }
+
+    private AttendanceCaptureFace faceRow(UUID assignedStudentId) {
+        AttendanceCaptureFace face = new AttendanceCaptureFace();
+        face.setId(UUID.randomUUID());
+        face.setAssignedStudentId(assignedStudentId);
+        return face;
+    }
+
+    /**
+     * The privacy promise the schema is built around: an untagged face is a vector for a
+     * child nobody identified, so no consent basis was ever established for it and it
+     * must not outlive the retention window.
+     */
+    @Test
+    void deletesUntaggedFaceVectorsAlongWithThePhoto() throws IOException {
+        Path photo = Files.writeString(storage.resolve("room.jpg"), "image-bytes");
+        AttendanceCapture overdue = capture(photo.toString());
+        due(overdue);
+        List<AttendanceCaptureFace> untagged = List.of(faceRow(null), faceRow(null));
+        when(faceRepository.findByCaptureIdAndAssignedStudentIdIsNull(overdue.getId()))
+                .thenReturn(untagged);
+
+        service().purgeDuePhotos();
+
+        verify(faceRepository).deleteAll(untagged);
+    }
+
+    /** Tagged faces survive: that is the consented, hand-labelled corpus phase 3 needs. */
+    @Test
+    void keepsTaggedFacesWhenThePhotoIsPurged() throws IOException {
+        Path photo = Files.writeString(storage.resolve("room.jpg"), "image-bytes");
+        AttendanceCapture overdue = capture(photo.toString());
+        due(overdue);
+        // The repository query only ever returns untagged rows, so an empty result here
+        // is what "every face was tagged" looks like.
+        when(faceRepository.findByCaptureIdAndAssignedStudentIdIsNull(overdue.getId()))
+                .thenReturn(List.of());
+
+        service().purgeDuePhotos();
+
+        verify(faceRepository, never()).deleteAll(any());
+        assertThat(Files.exists(photo)).isFalse();
     }
 
     @Test

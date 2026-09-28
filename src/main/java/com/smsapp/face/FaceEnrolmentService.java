@@ -38,6 +38,7 @@ public class FaceEnrolmentService {
     private static final double MIN_ENROLMENT_QUALITY = 0.45;
 
     private final StudentFaceEnrolmentRepository enrolmentRepository;
+    private final AttendanceCaptureFaceRepository captureFaceRepository;
     private final StudentRepository studentRepository;
     private final FaceConsentService consentService;
     private final FaceServiceClient faceService;
@@ -46,6 +47,7 @@ public class FaceEnrolmentService {
     private final int maxPerStudent;
 
     public FaceEnrolmentService(StudentFaceEnrolmentRepository enrolmentRepository,
+                               AttendanceCaptureFaceRepository captureFaceRepository,
                                StudentRepository studentRepository,
                                FaceConsentService consentService,
                                FaceServiceClient faceService,
@@ -53,6 +55,7 @@ public class FaceEnrolmentService {
                                SchoolClock clock,
                                @Value("${app.face.max-enrolments-per-student:5}") int maxPerStudent) {
         this.enrolmentRepository = enrolmentRepository;
+        this.captureFaceRepository = captureFaceRepository;
         this.studentRepository = studentRepository;
         this.consentService = consentService;
         this.faceService = faceService;
@@ -180,6 +183,11 @@ public class FaceEnrolmentService {
     @Transactional
     public ErasureResult revokeConsentAndErase(UUID studentId) {
         FaceConsent consent = consentService.revoke(studentId);
+
+        // Tagged capture faces are biometric data about this student too, so a
+        // withdrawal has to take them as well -- erasing only the enrolments would
+        // leave the corpus holding their face under their name.
+        captureFaceRepository.deleteByAssignedStudentId(studentId);
 
         long held = enrolmentRepository.countByStudentId(studentId);
         if (held > 0) {

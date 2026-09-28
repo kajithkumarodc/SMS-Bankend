@@ -17,6 +17,10 @@ public interface AttendanceCaptureRepository extends JpaRepository<AttendanceCap
     List<AttendanceCapture> findByPhotoPathIsNotNullAndPhotoPurgeAfterLessThanEqualOrderByPhotoPurgeAfterAsc(
             OffsetDateTime cutoff, Limit limit);
 
+    /** A section's captures for one day, newest first. */
+    List<AttendanceCapture> findBySectionIdAndCaptureDateOrderByCreatedAtDesc(
+            UUID sectionId, java.time.LocalDate captureDate);
+
     /** How much is still awaiting deletion -- surfaced for monitoring. */
     long countByPhotoPathIsNotNullAndPhotoPurgeAfterLessThanEqual(OffsetDateTime cutoff);
 }

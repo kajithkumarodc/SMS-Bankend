@@ -53,6 +53,9 @@ public final class AuditActions {
     public static final String FACE_ENROLMENT_REMOVED = "FACE_ENROLMENT_REMOVED";
     public static final String FACE_ENROLMENT_ERASED = "FACE_ENROLMENT_ERASED";
     public static final String CAPTURE_PHOTO_PURGED = "CAPTURE_PHOTO_PURGED";
+    public static final String ATTENDANCE_CAPTURE_CREATED = "ATTENDANCE_CAPTURE_CREATED";
+    public static final String CAPTURE_FACE_TAGGED = "CAPTURE_FACE_TAGGED";
+    public static final String CAPTURE_FACES_PURGED = "CAPTURE_FACES_PURGED";
     public static final String LIBRARY_BOOK_ADDED = "LIBRARY_BOOK_ADDED";
     public static final String LIBRARY_BOOK_ISSUED = "LIBRARY_BOOK_ISSUED";
     public static final String LIBRARY_BOOK_RETURNED = "LIBRARY_BOOK_RETURNED";
@@ -127,6 +130,7 @@ public final class AuditActions {
     public static final String FACE_CONSENT = "FACE_CONSENT";
     public static final String FACE_ENROLMENT = "FACE_ENROLMENT";
     public static final String ATTENDANCE_CAPTURE = "ATTENDANCE_CAPTURE";
+    public static final String ATTENDANCE_CAPTURE_FACE = "ATTENDANCE_CAPTURE_FACE";
     public static final String LIBRARY_BOOK = "LIBRARY_BOOK";
     public static final String BOOK_LOAN = "BOOK_LOAN";
     public static final String TRANSPORT_ROUTE = "TRANSPORT_ROUTE";

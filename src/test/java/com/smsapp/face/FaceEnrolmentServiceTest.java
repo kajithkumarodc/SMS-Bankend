@@ -40,6 +40,9 @@ class FaceEnrolmentServiceTest {
     private StudentFaceEnrolmentRepository enrolmentRepository;
 
     @Mock
+    private AttendanceCaptureFaceRepository captureFaceRepository;
+
+    @Mock
     private StudentRepository studentRepository;
 
     @Mock
@@ -55,8 +58,8 @@ class FaceEnrolmentServiceTest {
     private final UUID adminId = UUID.randomUUID();
 
     private FaceEnrolmentService service() {
-        return new FaceEnrolmentService(enrolmentRepository, studentRepository, consentService,
-                faceService, auditService, CLOCK, 5);
+        return new FaceEnrolmentService(enrolmentRepository, captureFaceRepository,
+                studentRepository, consentService, faceService, auditService, CLOCK, 5);
     }
 
     private void studentExists() {
@@ -171,6 +174,9 @@ class FaceEnrolmentServiceTest {
         assertThat(deleted).isEqualTo(3);
         verify(consentService).revoke(studentId);
         verify(enrolmentRepository).deleteByStudentId(studentId);
+        // Tagged capture faces are this student's biometrics too -- erasing only the
+        // enrolments would leave the corpus holding their face under their name.
+        verify(captureFaceRepository).deleteByAssignedStudentId(studentId);
     }
 
     /** Safe to retry: a second withdrawal deletes nothing and claims nothing. */
