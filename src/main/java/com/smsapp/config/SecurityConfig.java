@@ -75,6 +75,20 @@ public class SecurityConfig {
                 // other admission endpoint (admin review, cycles) stays behind normal permission checks.
                 .requestMatchers("/api/v1/public/admissions/**")
                 .permitAll()
+                // The frontend's built assets (index.html, /assets/**, favicon, etc.) are
+                // baked into this jar's static resources for the combined single-image
+                // deploy (see SpaForwardController) and must be publicly readable --
+                // there is no login page to show if "/" itself required a JWT. Every
+                // actual API endpoint lives under /api, /actuator or the API-docs paths
+                // already matched above, so excluding those prefixes here cannot
+                // accidentally expose a protected endpoint.
+                .requestMatchers(request -> {
+                    String uri = request.getRequestURI();
+                    return !uri.startsWith("/api/")
+                        && !uri.startsWith("/actuator")
+                        && !uri.startsWith("/v3/api-docs")
+                        && !uri.startsWith("/swagger-ui");
+                }).permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
