@@ -179,11 +179,21 @@ public final class FeeDtos {
             @NotNull UUID feeStructureId,
             /** Admission-time adjustment of the template amount for this one student; null = the template amount. */
             @DecimalMin(value = "0.00") BigDecimal amount,
-            @Size(max = 500) String adjustmentReason) {
+            @Size(max = 500) String adjustmentReason,
+            /** Admission-time fee lines for this one student (amounts per fee type and term); null = the template. */
+            @Valid List<InvoiceLineRequest> lines) {
 
         CreateInvoiceRequest(UUID studentId, UUID feeStructureId) {
-            this(studentId, feeStructureId, null, null);
+            this(studentId, feeStructureId, null, null, null);
         }
+    }
+
+    record InvoiceLineRequest(
+            @NotBlank @Size(max = 150) String label,
+            UUID feeTypeId,
+            @Size(max = 20) String category,
+            @NotNull LocalDate dueDate,
+            @NotNull @DecimalMin(value = "0.00") BigDecimal amount) {
     }
 
     /** Result of editing a fee structure: how many existing bills were changed (only when asked to). */

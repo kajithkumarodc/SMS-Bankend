@@ -74,7 +74,7 @@ class FeeCollectionServiceTest {
     private FeeCollectionService service() {
         return new FeeCollectionService(invoiceRepository, feeStructureRepository, feeDiscountRepository,
                 feePaymentRepository, studentRepository, schoolRepository, classRepository, sectionRepository,
-                userRepository, paymentRecorder, auditService);
+                userRepository, paymentRecorder, auditService, org.mockito.Mockito.mock(FeeLineService.class));
     }
 
     private Invoice invoice(BigDecimal amount, BigDecimal netAmount, BigDecimal paidAmount) {

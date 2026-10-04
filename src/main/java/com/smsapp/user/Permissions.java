@@ -101,6 +101,29 @@ public final class Permissions {
     public static final String COMPLAINT_EXPORT = "COMPLAINT_EXPORT";
     public static final String COMPLAINT_PRINT = "COMPLAINT_PRINT";
 
+    public static final String EXPENSE_VIEW = "EXPENSE_VIEW";
+    public static final String EXPENSE_CREATE = "EXPENSE_CREATE";
+    public static final String EXPENSE_EDIT = "EXPENSE_EDIT";
+    public static final String EXPENSE_DELETE = "EXPENSE_DELETE";
+    public static final String EXPENSE_EXPORT = "EXPENSE_EXPORT";
+    public static final String EXPENSE_PRINT = "EXPENSE_PRINT";
+
+    // Seeded in V22; used by the Human Resource > Staff Directory pages.
+    public static final String STAFF_VIEW = "STAFF_VIEW";
+    public static final String STAFF_CREATE = "STAFF_CREATE";
+    public static final String STAFF_EDIT = "STAFF_EDIT";
+    public static final String LEAVE_VIEW = "LEAVE_VIEW";
+    public static final String LEAVE_CREATE = "LEAVE_CREATE";
+    public static final String LEAVE_APPROVE = "LEAVE_APPROVE";
+    public static final String LEAVE_TYPE_MANAGE = "LEAVE_TYPE_MANAGE";
+    public static final String TEACHER_RATING_VIEW = "TEACHER_RATING_VIEW";
+    public static final String TEACHER_RATING_MANAGE = "TEACHER_RATING_MANAGE";
+    public static final String PAYROLL_VIEW = "PAYROLL_VIEW";
+    public static final String PAYROLL_CREATE = "PAYROLL_CREATE";
+    public static final String PAYROLL_APPROVE = "PAYROLL_APPROVE";
+    public static final String STAFF_ATTENDANCE_VIEW = "STAFF_ATTENDANCE_VIEW";
+    public static final String STAFF_ATTENDANCE_EDIT = "STAFF_ATTENDANCE_EDIT";
+
     public static final String FRONT_OFFICE_SETUP = "FRONT_OFFICE_SETUP";
 
     public static final String HAS_STUDENT_VIEW = HAS_AUTHORITY_OPEN + STUDENT_VIEW + CLOSE;
@@ -176,6 +199,26 @@ public final class Permissions {
     public static final String HAS_COMPLAINT_CREATE = HAS_AUTHORITY_OPEN + COMPLAINT_CREATE + CLOSE;
     public static final String HAS_COMPLAINT_EDIT = HAS_AUTHORITY_OPEN + COMPLAINT_EDIT + CLOSE;
     public static final String HAS_COMPLAINT_DELETE = HAS_AUTHORITY_OPEN + COMPLAINT_DELETE + CLOSE;
+
+    public static final String HAS_STAFF_VIEW = HAS_AUTHORITY_OPEN + STAFF_VIEW + CLOSE;
+    public static final String HAS_STAFF_CREATE = HAS_AUTHORITY_OPEN + STAFF_CREATE + CLOSE;
+    public static final String HAS_STAFF_EDIT = HAS_AUTHORITY_OPEN + STAFF_EDIT + CLOSE;
+    public static final String HAS_LEAVE_VIEW = HAS_AUTHORITY_OPEN + LEAVE_VIEW + CLOSE;
+    public static final String HAS_LEAVE_CREATE = HAS_AUTHORITY_OPEN + LEAVE_CREATE + CLOSE;
+    public static final String HAS_TEACHER_RATING_VIEW = HAS_AUTHORITY_OPEN + TEACHER_RATING_VIEW + CLOSE;
+    public static final String HAS_TEACHER_RATING_MANAGE = HAS_AUTHORITY_OPEN + TEACHER_RATING_MANAGE + CLOSE;
+    public static final String HAS_LEAVE_TYPE_MANAGE = HAS_AUTHORITY_OPEN + LEAVE_TYPE_MANAGE + CLOSE;
+    public static final String HAS_LEAVE_APPROVE = HAS_AUTHORITY_OPEN + LEAVE_APPROVE + CLOSE;
+    public static final String HAS_PAYROLL_VIEW = HAS_AUTHORITY_OPEN + PAYROLL_VIEW + CLOSE;
+    public static final String HAS_PAYROLL_CREATE = HAS_AUTHORITY_OPEN + PAYROLL_CREATE + CLOSE;
+    public static final String HAS_PAYROLL_APPROVE = HAS_AUTHORITY_OPEN + PAYROLL_APPROVE + CLOSE;
+    public static final String HAS_STAFF_ATTENDANCE_VIEW = HAS_AUTHORITY_OPEN + STAFF_ATTENDANCE_VIEW + CLOSE;
+    public static final String HAS_STAFF_ATTENDANCE_EDIT = HAS_AUTHORITY_OPEN + STAFF_ATTENDANCE_EDIT + CLOSE;
+
+    public static final String HAS_EXPENSE_VIEW = HAS_AUTHORITY_OPEN + EXPENSE_VIEW + CLOSE;
+    public static final String HAS_EXPENSE_CREATE = HAS_AUTHORITY_OPEN + EXPENSE_CREATE + CLOSE;
+    public static final String HAS_EXPENSE_EDIT = HAS_AUTHORITY_OPEN + EXPENSE_EDIT + CLOSE;
+    public static final String HAS_EXPENSE_DELETE = HAS_AUTHORITY_OPEN + EXPENSE_DELETE + CLOSE;
 
     public static final String HAS_FRONT_OFFICE_SETUP = HAS_AUTHORITY_OPEN + FRONT_OFFICE_SETUP + CLOSE;
 

@@ -323,44 +323,7 @@ public class StudentImportService {
         }
     }
 
-    /** RFC 4180 CSV: comma-separated, double-quoted fields may contain commas, quotes ("") and line breaks. */
     static List<List<String>> parseCsv(String text) {
-        List<List<String>> records = new ArrayList<>();
-        List<String> current = new ArrayList<>();
-        StringBuilder field = new StringBuilder();
-        boolean quoted = false;
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (quoted) {
-                if (c == '"') {
-                    if (i + 1 < text.length() && text.charAt(i + 1) == '"') {
-                        field.append('"');
-                        i++;
-                    } else {
-                        quoted = false;
-                    }
-                } else {
-                    field.append(c);
-                }
-            } else if (c == '"') {
-                quoted = true;
-            } else if (c == ',') {
-                current.add(field.toString());
-                field.setLength(0);
-            } else if (c == '\n' || c == '\r') {
-                if (c == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n') i++;
-                current.add(field.toString());
-                field.setLength(0);
-                records.add(current);
-                current = new ArrayList<>();
-            } else {
-                field.append(c);
-            }
-        }
-        if (field.length() > 0 || !current.isEmpty()) {
-            current.add(field.toString());
-            records.add(current);
-        }
-        return records;
+        return com.smsapp.common.CsvParser.parse(text);
     }
 }
