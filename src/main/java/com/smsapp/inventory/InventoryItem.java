@@ -29,6 +29,12 @@ public class InventoryItem extends UuidEntity {
     @Column(nullable = false)
     private int stock;
 
+    @Column(nullable = false, length = 30)
+    private String unit = "Piece";
+
+    @Column(length = 500)
+    private String description;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

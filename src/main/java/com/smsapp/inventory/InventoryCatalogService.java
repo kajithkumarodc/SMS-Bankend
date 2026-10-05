@@ -47,13 +47,14 @@ public class InventoryCatalogService {
 
     /** @throws ApiException 409 if a category with that name already exists. */
     @Transactional
-    public InventoryCategory createCategory(String name) {
+    public InventoryCategory createCategory(String name, String description) {
         String trimmed = name.trim();
         if (categoryRepository.existsByNameIgnoreCase(trimmed)) {
             throw categoryNameTaken(trimmed);
         }
         InventoryCategory category = new InventoryCategory();
         category.setName(trimmed);
+        category.setDescription(blankToNull(description));
         InventoryCategory saved = saveCategory(category, trimmed);
         auditService.log(AuditActions.INVENTORY_CATEGORY_CREATED, AuditActions.INVENTORY_CATEGORY, saved.getId(), Map.of("name", trimmed));
         return saved;
@@ -61,13 +62,14 @@ public class InventoryCatalogService {
 
     /** @throws ApiException 404 if no such category, 409 if another one already has that name. */
     @Transactional
-    public InventoryCategory renameCategory(UUID id, String name) {
+    public InventoryCategory updateCategory(UUID id, String name, String description) {
         InventoryCategory category = requireCategory(id);
         String trimmed = name.trim();
         if (categoryRepository.existsByNameIgnoreCaseAndIdNot(trimmed, id)) {
             throw categoryNameTaken(trimmed);
         }
         category.setName(trimmed);
+        category.setDescription(blankToNull(description));
         InventoryCategory saved = saveCategory(category, trimmed);
         auditService.log(AuditActions.INVENTORY_CATEGORY_UPDATED, AuditActions.INVENTORY_CATEGORY, id, Map.of("name", trimmed));
         return saved;
@@ -107,10 +109,11 @@ public class InventoryCatalogService {
         InventoryItem item = new InventoryItem();
         item.setName(name);
         item.setCategoryId(category.getId());
-        item.setStock(request.stock());
+        item.setUnit(request.unit().trim());
+        item.setDescription(blankToNull(request.description()));
         InventoryItem saved = saveItem(item, name, category);
         auditService.log(AuditActions.INVENTORY_ITEM_CREATED, AuditActions.INVENTORY_ITEM, saved.getId(),
-                Map.of("name", name, "stock", saved.getStock()));
+                Map.of("name", name, "unit", saved.getUnit()));
         return toResponse(saved, category.getName());
     }
 
@@ -125,9 +128,10 @@ public class InventoryCatalogService {
         }
         item.setName(name);
         item.setCategoryId(category.getId());
-        item.setStock(request.stock());
+        item.setUnit(request.unit().trim());
+        item.setDescription(blankToNull(request.description()));
         InventoryItem saved = saveItem(item, name, category);
-        auditService.log(AuditActions.INVENTORY_ITEM_UPDATED, AuditActions.INVENTORY_ITEM, id, Map.of("name", name, "stock", saved.getStock()));
+        auditService.log(AuditActions.INVENTORY_ITEM_UPDATED, AuditActions.INVENTORY_ITEM, id, Map.of("name", name, "unit", saved.getUnit()));
         return toResponse(saved, category.getName());
     }
 
@@ -168,7 +172,8 @@ public class InventoryCatalogService {
     }
 
     private static ItemResponse toResponse(InventoryItem item, String categoryName) {
-        return new ItemResponse(item.getId(), item.getName(), item.getCategoryId(), categoryName, item.getStock());
+        return new ItemResponse(item.getId(), item.getName(), item.getCategoryId(), categoryName, item.getUnit(), item.getDescription(),
+                item.getStock());
     }
 
     private static ApiException categoryNameTaken(String name) {
@@ -177,5 +182,13 @@ public class InventoryCatalogService {
 
     private static ApiException itemNameTaken(String name, InventoryCategory category) {
         return new ApiException("'" + category.getName() + "' already has an item named '" + name + "'", HttpStatus.CONFLICT);
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

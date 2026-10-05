@@ -118,6 +118,9 @@ public final class Permissions {
     public static final String LEAVE_TYPE_MANAGE = "LEAVE_TYPE_MANAGE";
     public static final String DEPARTMENT_MANAGE = "DEPARTMENT_MANAGE";
     public static final String DESIGNATION_MANAGE = "DESIGNATION_MANAGE";
+    public static final String TIMETABLE_VIEW = "TIMETABLE_VIEW";
+    public static final String TIMETABLE_MANAGE = "TIMETABLE_MANAGE";
+    public static final String SUBJECT_MANAGE = "SUBJECT_MANAGE";
     public static final String INVENTORY_VIEW = "INVENTORY_VIEW";
     public static final String INVENTORY_ISSUE = "INVENTORY_ISSUE";
     public static final String INVENTORY_MANAGE = "INVENTORY_MANAGE";
@@ -215,7 +218,10 @@ public final class Permissions {
     public static final String HAS_LEAVE_TYPE_MANAGE = HAS_AUTHORITY_OPEN + LEAVE_TYPE_MANAGE + CLOSE;
     public static final String HAS_DEPARTMENT_MANAGE = HAS_AUTHORITY_OPEN + DEPARTMENT_MANAGE + CLOSE;
     public static final String HAS_DESIGNATION_MANAGE = HAS_AUTHORITY_OPEN + DESIGNATION_MANAGE + CLOSE;
-    public static final String HAS_INVENTORY_VIEW = HAS_AUTHORITY_OPEN + INVENTORY_VIEW + CLOSE;
+    public static final String HAS_TIMETABLE_VIEW = HAS_AUTHORITY_OPEN + TIMETABLE_VIEW + CLOSE;
+    public static final String HAS_TIMETABLE_MANAGE = HAS_AUTHORITY_OPEN + TIMETABLE_MANAGE + CLOSE;
+    public static final String HAS_SUBJECT_MANAGE = HAS_AUTHORITY_OPEN + SUBJECT_MANAGE + CLOSE;
+    public static final String HAS_INVENTORY_VIEW =HAS_AUTHORITY_OPEN + INVENTORY_VIEW + CLOSE;
     public static final String HAS_INVENTORY_ISSUE = HAS_AUTHORITY_OPEN + INVENTORY_ISSUE + CLOSE;
     public static final String HAS_INVENTORY_MANAGE = HAS_AUTHORITY_OPEN + INVENTORY_MANAGE + CLOSE;
     public static final String HAS_LEAVE_APPROVE = HAS_AUTHORITY_OPEN + LEAVE_APPROVE + CLOSE;

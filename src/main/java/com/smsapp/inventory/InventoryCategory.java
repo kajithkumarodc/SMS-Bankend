@@ -22,6 +22,9 @@ public class InventoryCategory extends UuidEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
+    @Column(length = 500)
+    private String description;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

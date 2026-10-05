@@ -125,9 +125,13 @@ class InventoryIntegrationTest {
         var body = new LinkedHashMap<String, Object>();
         body.put("name", name);
         body.put("categoryId", sportsId);
-        body.put("stock", stock);
-        return JSON.readTree(postJson("/api/v1/inventory/items", body).andExpect(status().isCreated()).andReturn().getResponse()
+        body.put("unit", "Piece");
+        String id = JSON.readTree(postJson("/api/v1/inventory/items", body).andExpect(status().isCreated()).andReturn().getResponse()
                 .getContentAsString()).get("id").asText();
+        if (stock > 0) {
+            postJson("/api/v1/inventory/stock", stockBody(id, stock, null, null)).andExpect(status().isCreated());
+        }
+        return id;
     }
 
     private Map<String, Object> issueBody(String itemId, int quantity) {
@@ -156,16 +160,23 @@ class InventoryIntegrationTest {
     void categoriesAndItemsFollowTheNameRules() throws Exception {
         postJson("/api/v1/inventory/categories", Map.of("name", "sports")).andExpect(status().isConflict());
         postJson("/api/v1/inventory/categories", Map.of("name", " ")).andExpect(status().isBadRequest());
-        String bat = addItem("Cricket Bat", 5);
+        String lab = idOf(postJson("/api/v1/inventory/categories", Map.of("name", "Chemistry Lab", "description", " Apparatus ")));
+        mockMvc.perform(get("/api/v1/inventory/categories").cookie(admin)).andExpect(jsonPath("$[0].name").value("Chemistry Lab"))
+                .andExpect(jsonPath("$[0].description").value("Apparatus"));
+        mockMvc.perform(put("/api/v1/inventory/categories/" + lab).cookie(admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Chemistry Lab\",\"description\":\"\"}")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.description").doesNotExist());
+        String bat = addItem("Cricket Bat", 0);
         var dup = new LinkedHashMap<String, Object>();
         dup.put("name", "cricket bat");
         dup.put("categoryId", sportsId);
-        dup.put("stock", 1);
+        dup.put("unit", "Piece");
         postJson("/api/v1/inventory/items", dup).andExpect(status().isConflict());
-        dup.put("stock", -1);
+        dup.put("unit", " ");
         postJson("/api/v1/inventory/items", dup).andExpect(status().isBadRequest());
         mockMvc.perform(get("/api/v1/inventory/items").cookie(admin).param("categoryId", sportsId))
-                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].categoryName").value("Sports"));
+                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].categoryName").value("Sports"))
+                .andExpect(jsonPath("$[0].unit").value("Piece")).andExpect(jsonPath("$[0].stock").value(0));
         mockMvc.perform(delete("/api/v1/inventory/categories/" + sportsId).cookie(admin)).andExpect(status().isConflict());
         mockMvc.perform(delete("/api/v1/inventory/items/" + bat).cookie(admin)).andExpect(status().isNoContent());
         mockMvc.perform(delete("/api/v1/inventory/categories/" + sportsId).cookie(admin)).andExpect(status().isNoContent());

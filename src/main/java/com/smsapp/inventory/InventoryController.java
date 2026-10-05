@@ -69,13 +69,13 @@ public class InventoryController {
     @PostMapping("/categories")
     @PreAuthorize(Permissions.HAS_INVENTORY_MANAGE)
     ResponseEntity<CategoryResponse> createCategory(@Valid @RequestBody CategoryRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(CategoryResponse.from(catalog.createCategory(request.name())));
+        return ResponseEntity.status(HttpStatus.CREATED).body(CategoryResponse.from(catalog.createCategory(request.name(), request.description())));
     }
 
     @PutMapping("/categories/{id}")
     @PreAuthorize(Permissions.HAS_INVENTORY_MANAGE)
     CategoryResponse renameCategory(@PathVariable UUID id, @Valid @RequestBody CategoryRequest request) {
-        return CategoryResponse.from(catalog.renameCategory(id, request.name()));
+        return CategoryResponse.from(catalog.updateCategory(id, request.name(), request.description()));
     }
 
     @DeleteMapping("/categories/{id}")

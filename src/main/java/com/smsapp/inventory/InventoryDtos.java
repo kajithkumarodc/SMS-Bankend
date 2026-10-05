@@ -20,22 +20,24 @@ final class InventoryDtos {
     private InventoryDtos() {
     }
 
-    record CategoryRequest(@NotBlank @Size(max = 100) String name) {
+    record CategoryRequest(@NotBlank @Size(max = 100) String name, @Size(max = 500) String description) {
     }
 
-    record CategoryResponse(UUID id, String name) {
+    record CategoryResponse(UUID id, String name, String description) {
         static CategoryResponse from(InventoryCategory category) {
-            return new CategoryResponse(category.getId(), category.getName());
+            return new CategoryResponse(category.getId(), category.getName(), category.getDescription());
         }
     }
 
     record ItemRequest(
             @NotBlank @Size(max = 100) String name,
             @NotNull UUID categoryId,
-            @NotNull @Min(0) @Max(1_000_000) Integer stock) {
+            @NotBlank @Size(max = 30) String unit,
+            @Size(max = 500) String description) {
     }
 
-    record ItemResponse(UUID id, String name, UUID categoryId, String categoryName, int stock) {
+    /** {@code stock} is the available quantity: stock entries added, less what is issued. */
+    record ItemResponse(UUID id, String name, UUID categoryId, String categoryName, String unit, String description, int stock) {
     }
 
     /** Body for {@code POST /api/v1/inventory/issues}: the Issue Item form. */

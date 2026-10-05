@@ -87,6 +87,12 @@ public final class AuditActions {
     public static final String DESIGNATION_CREATED = "DESIGNATION_CREATED";
     public static final String DESIGNATION_UPDATED = "DESIGNATION_UPDATED";
     public static final String DESIGNATION_DELETED = "DESIGNATION_DELETED";
+    public static final String SUBJECT_UPDATED = "SUBJECT_UPDATED";
+    public static final String SUBJECT_DELETED = "SUBJECT_DELETED";
+    public static final String SUBJECT_GROUP_CREATED = "SUBJECT_GROUP_CREATED";
+    public static final String SUBJECT_GROUP_UPDATED = "SUBJECT_GROUP_UPDATED";
+    public static final String SUBJECT_GROUP_DELETED = "SUBJECT_GROUP_DELETED";
+    public static final String TIMETABLE_SAVED = "TIMETABLE_SAVED";
     public static final String INVENTORY_CATEGORY_CREATED = "INVENTORY_CATEGORY_CREATED";
     public static final String INVENTORY_CATEGORY_UPDATED = "INVENTORY_CATEGORY_UPDATED";
     public static final String INVENTORY_CATEGORY_DELETED = "INVENTORY_CATEGORY_DELETED";
@@ -219,6 +225,8 @@ public final class AuditActions {
     public static final String LEAVE_TYPE = "LEAVE_TYPE";
     public static final String DEPARTMENT = "DEPARTMENT";
     public static final String DESIGNATION = "DESIGNATION";
+    public static final String SUBJECT_GROUP = "SUBJECT_GROUP";
+    public static final String TIMETABLE = "TIMETABLE";
     public static final String INVENTORY_CATEGORY = "INVENTORY_CATEGORY";
     public static final String INVENTORY_ITEM = "INVENTORY_ITEM";
     public static final String INVENTORY_ISSUE = "INVENTORY_ISSUE";
