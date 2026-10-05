@@ -69,6 +69,8 @@ public final class AuditActions {
     public static final String STAFF_PHOTO_REMOVED = "STAFF_PHOTO_REMOVED";
     public static final String STAFF_DOCUMENT_UPLOADED = "STAFF_DOCUMENT_UPLOADED";
     public static final String STAFF_DOCUMENT_REMOVED = "STAFF_DOCUMENT_REMOVED";
+    public static final String STAFF_STATUS_CHANGED = "STAFF_STATUS_CHANGED";
+    public static final String STAFF_PASSWORD_RESET = "STAFF_PASSWORD_RESET";
     public static final String STAFF_IMPORTED = "STAFF_IMPORTED";
     public static final String STAFF_ATTENDANCE_MARKED = "STAFF_ATTENDANCE_MARKED";
     public static final String LEAVE_REQUEST_CREATED = "LEAVE_REQUEST_CREATED";
@@ -79,6 +81,12 @@ public final class AuditActions {
     public static final String LEAVE_TYPE_CREATED = "LEAVE_TYPE_CREATED";
     public static final String LEAVE_TYPE_UPDATED = "LEAVE_TYPE_UPDATED";
     public static final String LEAVE_TYPE_DELETED = "LEAVE_TYPE_DELETED";
+    public static final String DEPARTMENT_CREATED = "DEPARTMENT_CREATED";
+    public static final String DEPARTMENT_UPDATED = "DEPARTMENT_UPDATED";
+    public static final String DEPARTMENT_DELETED = "DEPARTMENT_DELETED";
+    public static final String DESIGNATION_CREATED = "DESIGNATION_CREATED";
+    public static final String DESIGNATION_UPDATED = "DESIGNATION_UPDATED";
+    public static final String DESIGNATION_DELETED = "DESIGNATION_DELETED";
     public static final String LEAVE_REQUEST_UPDATED = "LEAVE_REQUEST_UPDATED";
     public static final String LEAVE_REQUEST_DELETED = "LEAVE_REQUEST_DELETED";
     public static final String LEAVE_REQUEST_ATTACHMENT_UPLOADED = "LEAVE_REQUEST_ATTACHMENT_UPLOADED";
@@ -191,6 +199,8 @@ public final class AuditActions {
     public static final String STAFF_ATTENDANCE = "STAFF_ATTENDANCE";
     public static final String LEAVE_REQUEST = "LEAVE_REQUEST";
     public static final String LEAVE_TYPE = "LEAVE_TYPE";
+    public static final String DEPARTMENT = "DEPARTMENT";
+    public static final String DESIGNATION = "DESIGNATION";
     public static final String TEACHER_RATING = "TEACHER_RATING";
     public static final String PAYROLL_RECORD = "PAYROLL_RECORD";
     public static final String ROLE = "ROLE";

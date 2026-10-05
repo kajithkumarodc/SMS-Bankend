@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -276,5 +277,63 @@ class AttendanceIntegrationTest {
             mockMvc.perform(get("/api/v1/sections/" + sectionA + "/students").cookie(session))
                     .andExpect(status().isForbidden());
         }
+    }
+
+    // --- Student Attendance page: GET /roster and PUT /bulk ----------------------------------
+
+    private String bulkBody(String date, String entries) {
+        return "{\"sectionId\":\"" + sectionA + "\",\"date\":\"" + date + "\",\"entries\":" + entries + "}";
+    }
+
+    @Test
+    void rosterListsActiveStudentsWithTheirSavedMarks() throws Exception {
+        Cookie teacher = login(TEACHER_A);
+        mockMvc.perform(get("/api/v1/attendance/roster").param("sectionId", sectionA.toString()).param("date", TODAY).cookie(teacher))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].admissionNumber").value("ADM-A"))
+                .andExpect(jsonPath("$[0].status").doesNotExist())
+                .andExpect(jsonPath("$[0].source").value("MANUAL"));
+
+        mockMvc.perform(put("/api/v1/attendance/bulk").cookie(teacher).contentType(MediaType.APPLICATION_JSON)
+                        .content(bulkBody(TODAY, "[{\"studentId\":\"" + studentA + "\",\"status\":\"half_day\",\"entryTime\":\"09:00\","
+                                + "\"exitTime\":\"13:00\",\"note\":\" Doctor visit \"}]")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.saved").value(1));
+        mockMvc.perform(get("/api/v1/attendance/roster").param("sectionId", sectionA.toString()).param("date", TODAY).cookie(teacher))
+                .andExpect(jsonPath("$[0].status").value("HALF_DAY"))
+                .andExpect(jsonPath("$[0].entryTime").value("09:00:00"))
+                .andExpect(jsonPath("$[0].note").value("Doctor visit"));
+
+        // Saving again replaces the mark (and clears what is left out).
+        mockMvc.perform(put("/api/v1/attendance/bulk").cookie(teacher).contentType(MediaType.APPLICATION_JSON)
+                        .content(bulkBody(TODAY, "[{\"studentId\":\"" + studentA + "\",\"status\":\"HOLIDAY\"}]")))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/attendance/roster").param("sectionId", sectionA.toString()).param("date", TODAY).cookie(teacher))
+                .andExpect(jsonPath("$[0].status").value("HOLIDAY"))
+                .andExpect(jsonPath("$[0].entryTime").doesNotExist())
+                .andExpect(jsonPath("$[0].note").doesNotExist());
+    }
+
+    @Test
+    void bulkSaveValidatesTheRequest() throws Exception {
+        Cookie teacher = login(TEACHER_A);
+        String student = "\"studentId\":\"" + studentA + "\"";
+        String tomorrow = LocalDate.now().plusDays(1).toString();
+        for (String[] bad : new String[][] {
+                {TODAY, "[{" + student + ",\"status\":\"BUNK\"}]"},
+                {TODAY, "[{\"studentId\":\"" + UUID.randomUUID() + "\",\"status\":\"PRESENT\"}]"},
+                {TODAY, "[{" + student + ",\"status\":\"PRESENT\",\"entryTime\":\"10:00\",\"exitTime\":\"09:00\"}]"},
+                {tomorrow, "[{" + student + ",\"status\":\"PRESENT\"}]"},
+                {TODAY, "[]"}}) {
+            mockMvc.perform(put("/api/v1/attendance/bulk").cookie(teacher).contentType(MediaType.APPLICATION_JSON)
+                    .content(bulkBody(bad[0], bad[1]))).andExpect(status().isBadRequest());
+        }
+        mockMvc.perform(get("/api/v1/attendance/roster").param("sectionId", UUID.randomUUID().toString()).param("date", TODAY).cookie(teacher))
+                .andExpect(status().isNotFound());
+        // A student can't mark or read the roster.
+        Cookie student1 = login(STUDENT_A);
+        mockMvc.perform(get("/api/v1/attendance/roster").param("sectionId", sectionA.toString()).param("date", TODAY).cookie(student1))
+                .andExpect(status().isForbidden());
     }
 }

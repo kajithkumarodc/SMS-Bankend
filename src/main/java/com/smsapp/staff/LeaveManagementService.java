@@ -208,6 +208,26 @@ public class LeaveManagementService {
                 year, balances);
     }
 
+    /** One staff member's leave balances for a year and all their requests, as shown on the staff profile. */
+    public record StaffLeaves(List<LeaveBalance> balances, List<LeaveResponse> requests) {
+    }
+
+    @Transactional(readOnly = true)
+    public StaffLeaves forStaff(UUID staffProfileId, int year, LeaveActor actor) {
+        StaffProfile profile = requireStaff(staffProfileId);
+        List<LeaveRequest> all = leaveRepository.findByStaffUserIdOrderByStartDateDescCreatedAtDesc(profile.getUserId());
+        List<LeaveRequest> counted = all.stream()
+                .filter(r -> !LeaveRequestStatus.REJECTED.equals(r.getStatus()) && r.getStartDate().getYear() == year).toList();
+        List<LeaveBalance> balances = leaveTypeRepository.findByActiveTrueOrderByName().stream().map(type -> {
+            Integer allotted = entitlement(profile, type.getName());
+            BigDecimal used = counted.stream().filter(r -> type.getId().equals(r.getLeaveTypeId()))
+                    .map(LeaveRequest::getDays).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal available = allotted == null ? null : BigDecimal.valueOf(allotted).subtract(used).max(BigDecimal.ZERO);
+            return new LeaveBalance(type.getId(), type.getName(), allotted, used, available);
+        }).toList();
+        return new StaffLeaves(balances, toResponses(all, actor));
+    }
+
     /**
      * Withdraws the actor's own request while it is still Pending.
      *

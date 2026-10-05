@@ -194,6 +194,33 @@ public class StaffDirectoryService {
         return saved;
     }
 
+    // --- Status and login ---------------------------------------------------------------------------
+
+    /** Disables or re-enables a staff member: their directory status and their login. */
+    @Transactional
+    public StaffProfile setActive(UUID id, boolean active) {
+        StaffProfile profile = require(id);
+        User user = userRepository.findById(profile.getUserId())
+                .orElseThrow(() -> new ApiException("Staff member not found", HttpStatus.NOT_FOUND));
+        profile.setStatus(active ? ACTIVE : "INACTIVE");
+        user.setStatus(active ? "ACTIVE" : "INACTIVE");
+        userRepository.save(user);
+        StaffProfile saved = profileRepository.save(profile);
+        auditService.log(AuditActions.STAFF_STATUS_CHANGED, AuditActions.STAFF_PROFILE, id,
+                Map.of("employeeCode", saved.getEmployeeCode(), "status", saved.getStatus()));
+        return saved;
+    }
+
+    /** Issues a new temporary password for the staff member's login; returned once. */
+    @Transactional
+    public String resetPassword(UUID id) {
+        StaffProfile profile = require(id);
+        String password = userService.resetPasswordForStaff(profile.getUserId());
+        auditService.log(AuditActions.STAFF_PASSWORD_RESET, AuditActions.STAFF_PROFILE, id,
+                Map.of("employeeCode", profile.getEmployeeCode()));
+        return password;
+    }
+
     // --- Photo ----------------------------------------------------------------------------------
 
     /** @throws ApiException 404 if no such staff member, 400 if the file isn't an image, is empty or over 10 MB. */

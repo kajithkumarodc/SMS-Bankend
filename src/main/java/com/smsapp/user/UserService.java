@@ -130,6 +130,12 @@ public class UserService {
         return UserResponse.from(saved, roleRepository.findNamesByUserId(id));
     }
 
+    /** {@link #resetPassword} for callers outside this package (the staff profile): just the temporary password. */
+    @Transactional
+    public String resetPasswordForStaff(UUID id) {
+        return resetPassword(id).temporaryPassword();
+    }
+
     /**
      * Admin-triggered reset: generates a new temporary password, returned once, and
      * flags the account so the next login must change it.
