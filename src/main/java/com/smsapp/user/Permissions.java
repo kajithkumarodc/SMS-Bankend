@@ -118,6 +118,9 @@ public final class Permissions {
     public static final String LEAVE_TYPE_MANAGE = "LEAVE_TYPE_MANAGE";
     public static final String DEPARTMENT_MANAGE = "DEPARTMENT_MANAGE";
     public static final String DESIGNATION_MANAGE = "DESIGNATION_MANAGE";
+    public static final String INVENTORY_VIEW = "INVENTORY_VIEW";
+    public static final String INVENTORY_ISSUE = "INVENTORY_ISSUE";
+    public static final String INVENTORY_MANAGE = "INVENTORY_MANAGE";
     public static final String TEACHER_RATING_VIEW = "TEACHER_RATING_VIEW";
     public static final String TEACHER_RATING_MANAGE = "TEACHER_RATING_MANAGE";
     public static final String PAYROLL_VIEW = "PAYROLL_VIEW";
@@ -212,6 +215,9 @@ public final class Permissions {
     public static final String HAS_LEAVE_TYPE_MANAGE = HAS_AUTHORITY_OPEN + LEAVE_TYPE_MANAGE + CLOSE;
     public static final String HAS_DEPARTMENT_MANAGE = HAS_AUTHORITY_OPEN + DEPARTMENT_MANAGE + CLOSE;
     public static final String HAS_DESIGNATION_MANAGE = HAS_AUTHORITY_OPEN + DESIGNATION_MANAGE + CLOSE;
+    public static final String HAS_INVENTORY_VIEW = HAS_AUTHORITY_OPEN + INVENTORY_VIEW + CLOSE;
+    public static final String HAS_INVENTORY_ISSUE = HAS_AUTHORITY_OPEN + INVENTORY_ISSUE + CLOSE;
+    public static final String HAS_INVENTORY_MANAGE = HAS_AUTHORITY_OPEN + INVENTORY_MANAGE + CLOSE;
     public static final String HAS_LEAVE_APPROVE = HAS_AUTHORITY_OPEN + LEAVE_APPROVE + CLOSE;
     public static final String HAS_PAYROLL_VIEW = HAS_AUTHORITY_OPEN + PAYROLL_VIEW + CLOSE;
     public static final String HAS_PAYROLL_CREATE = HAS_AUTHORITY_OPEN + PAYROLL_CREATE + CLOSE;
