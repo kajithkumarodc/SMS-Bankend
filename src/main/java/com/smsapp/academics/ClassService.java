@@ -130,6 +130,12 @@ public class ClassService {
             throw new ApiException("Section " + section.getName() + " still has " + students + " student"
                     + (students == 1 ? "" : "s") + " -- move them to another section first", HttpStatus.CONFLICT);
         }
+        if (sectionRepository.countTimetablePeriods(sectionId) > 0) {
+            throw new ApiException("Section " + section.getName() + " has timetable periods -- clear its timetable first", HttpStatus.CONFLICT);
+        }
+        if (sectionRepository.countSubjectGroups(sectionId) > 0) {
+            throw new ApiException("Section " + section.getName() + " is in a subject group -- remove it from the group first", HttpStatus.CONFLICT);
+        }
         String name = section.getName();
         if (sectionRepository.countByClassIdAndDefaultSectionFalse(classId) == 1) {
             // Last real section: it becomes the class's hidden default section again, so the class can
