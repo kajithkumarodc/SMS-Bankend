@@ -30,8 +30,7 @@ public class MeController {
         return Map.of(
                 "userId", jwt.getSubject(),
                 "roles", jwt.getClaimAsStringList("roles"),
-                "permissions", jwt.getClaimAsStringList("permissions") == null
-                        ? java.util.List.of() : jwt.getClaimAsStringList("permissions"));
+                "permissions", com.smsapp.auth.PermissionClaim.read(jwt));
     }
 
     /**

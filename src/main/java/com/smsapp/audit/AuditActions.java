@@ -92,6 +92,12 @@ public final class AuditActions {
     public static final String SECTION_NAME_CREATED = "SECTION_NAME_CREATED";
     public static final String SECTION_NAME_UPDATED = "SECTION_NAME_UPDATED";
     public static final String SECTION_NAME_DELETED = "SECTION_NAME_DELETED";
+    public static final String HOLIDAY_TYPE_CREATED = "HOLIDAY_TYPE_CREATED";
+    public static final String HOLIDAY_TYPE_UPDATED = "HOLIDAY_TYPE_UPDATED";
+    public static final String HOLIDAY_TYPE_DELETED = "HOLIDAY_TYPE_DELETED";
+    public static final String CALENDAR_EVENT_CREATED = "CALENDAR_EVENT_CREATED";
+    public static final String CALENDAR_EVENT_UPDATED = "CALENDAR_EVENT_UPDATED";
+    public static final String CALENDAR_EVENT_DELETED = "CALENDAR_EVENT_DELETED";
     public static final String CLASS_TEACHER_ASSIGNED = "CLASS_TEACHER_ASSIGNED";
     public static final String CLASS_TEACHER_REMOVED = "CLASS_TEACHER_REMOVED";
     public static final String SUBJECT_UPDATED = "SUBJECT_UPDATED";
@@ -234,6 +240,8 @@ public final class AuditActions {
     public static final String DESIGNATION = "DESIGNATION";
     public static final String SECTION_NAME = "SECTION_NAME";
     public static final String CLASS_TEACHER = "CLASS_TEACHER";
+    public static final String HOLIDAY_TYPE = "HOLIDAY_TYPE";
+    public static final String CALENDAR_EVENT = "CALENDAR_EVENT";
     public static final String SUBJECT_GROUP = "SUBJECT_GROUP";
     public static final String TIMETABLE = "TIMETABLE";
     public static final String INVENTORY_CATEGORY = "INVENTORY_CATEGORY";

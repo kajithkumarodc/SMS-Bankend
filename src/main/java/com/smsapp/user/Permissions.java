@@ -118,6 +118,8 @@ public final class Permissions {
     public static final String LEAVE_TYPE_MANAGE = "LEAVE_TYPE_MANAGE";
     public static final String DEPARTMENT_MANAGE = "DEPARTMENT_MANAGE";
     public static final String DESIGNATION_MANAGE = "DESIGNATION_MANAGE";
+    public static final String CALENDAR_VIEW = "CALENDAR_VIEW";
+    public static final String CALENDAR_MANAGE = "CALENDAR_MANAGE";
     public static final String TIMETABLE_VIEW = "TIMETABLE_VIEW";
     public static final String TIMETABLE_MANAGE = "TIMETABLE_MANAGE";
     public static final String SUBJECT_MANAGE = "SUBJECT_MANAGE";
@@ -218,7 +220,9 @@ public final class Permissions {
     public static final String HAS_LEAVE_TYPE_MANAGE = HAS_AUTHORITY_OPEN + LEAVE_TYPE_MANAGE + CLOSE;
     public static final String HAS_DEPARTMENT_MANAGE = HAS_AUTHORITY_OPEN + DEPARTMENT_MANAGE + CLOSE;
     public static final String HAS_DESIGNATION_MANAGE = HAS_AUTHORITY_OPEN + DESIGNATION_MANAGE + CLOSE;
-    public static final String HAS_TIMETABLE_VIEW = HAS_AUTHORITY_OPEN + TIMETABLE_VIEW + CLOSE;
+    public static final String HAS_CALENDAR_VIEW = HAS_AUTHORITY_OPEN + CALENDAR_VIEW + CLOSE;
+    public static final String HAS_CALENDAR_MANAGE = HAS_AUTHORITY_OPEN + CALENDAR_MANAGE + CLOSE;
+    public static final String HAS_TIMETABLE_VIEW =HAS_AUTHORITY_OPEN + TIMETABLE_VIEW + CLOSE;
     public static final String HAS_TIMETABLE_MANAGE = HAS_AUTHORITY_OPEN + TIMETABLE_MANAGE + CLOSE;
     public static final String HAS_SUBJECT_MANAGE = HAS_AUTHORITY_OPEN + SUBJECT_MANAGE + CLOSE;
     public static final String HAS_INVENTORY_VIEW =HAS_AUTHORITY_OPEN + INVENTORY_VIEW + CLOSE;

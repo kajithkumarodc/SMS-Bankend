@@ -120,7 +120,7 @@ public class SecurityConfig {
         if (roles != null) {
             roles.forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));
         }
-        List<String> permissions = jwt.getClaimAsStringList("permissions");
+        List<String> permissions = com.smsapp.auth.PermissionClaim.read(jwt);
         if (permissions != null) {
             permissions.forEach(permission -> authorities.add(new SimpleGrantedAuthority(permission)));
         }

@@ -202,7 +202,7 @@ public class AuthService {
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(user.getId().toString())
                 .claim("roles", roles)
-                .claim("permissions", permissions)
+                .claim(PermissionClaim.CLAIM, PermissionClaim.encode(permissions))
                 .claim("name", user.getFullName())
                 .issuedAt(Instant.now())
                 .expiresAt(expiresAt)
