@@ -113,7 +113,7 @@ class DevToolsDisabledTest {
         UUID invoiceId = createInvoice(admin);
 
         mockMvc.perform(post("/api/v1/dev/invoices/" + invoiceId + "/simulate-payment-success").cookie(admin))
-                .andExpect(status().isNotFound());
+                .andExpect(DevToolsDisabledTest::routeIsNotServed);
 
         // Nothing happened: the invoice is still PENDING, only the real webhook can change that.
         mockMvc.perform(get("/api/v1/invoices").param("studentId", studentId.toString()).cookie(admin))
@@ -125,12 +125,21 @@ class DevToolsDisabledTest {
     void theDevEndpointIs404EvenForARandomInvoiceId() throws Exception {
         mockMvc.perform(post("/api/v1/dev/invoices/" + UUID.randomUUID() + "/simulate-payment-success")
                         .cookie(loginAsAdmin()))
-                .andExpect(status().isNotFound());
+                .andExpect(DevToolsDisabledTest::routeIsNotServed);
     }
 
     @Test
     void noDevRouteExistsAtAll() throws Exception {
         mockMvc.perform(post("/api/v1/dev/anything").cookie(loginAsAdmin()))
-                .andExpect(status().isNotFound());
+                .andExpect(DevToolsDisabledTest::routeIsNotServed);
+    }
+
+    /**
+     * "Not served": 404, or 405 when the unmapped path falls through to Spring's static-resource
+     * handler (GET/HEAD only) for a POST. Either way the dev endpoint does nothing.
+     */
+    private static void routeIsNotServed(org.springframework.test.web.servlet.MvcResult result) {
+        int status = result.getResponse().getStatus();
+        org.assertj.core.api.Assertions.assertThat(status).isIn(404, 405);
     }
 }
