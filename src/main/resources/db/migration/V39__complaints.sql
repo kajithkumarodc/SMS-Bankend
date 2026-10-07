@@ -2,7 +2,7 @@
 -- attached document.
 
 -- --- 1. Configurable complaint types ------------------------------------------------
--- Same lookup-table shape as front_office_purposes (V32). Setup Front Office will
+-- Same lookup-table shape as front_office_purposes (V35). Setup Front Office will
 -- manage these; the defaults match the school's current categories.
 
 CREATE TABLE complaint_types (

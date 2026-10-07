@@ -1,4 +1,4 @@
--- Human Resource -> Leave Type: managing the list of leave types (V47). The admin roles get the permission;
+-- Human Resource -> Leave Type: managing the list of leave types (V50). The admin roles get the permission;
 -- everyone who can see leave requests already reads the active types through the leave pages.
 
 INSERT INTO permissions (id, name)

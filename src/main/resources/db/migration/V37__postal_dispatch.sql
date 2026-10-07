@@ -56,7 +56,7 @@ CREATE TABLE postal_dispatch_documents (
 CREATE INDEX postal_dispatch_documents_dispatch_id_idx ON postal_dispatch_documents(dispatch_id);
 
 -- --- 4. Permissions ------------------------------------------------------------------
--- Same split as the Visitor Book (V32) and Phone Call Log (V33).
+-- Same split as the Visitor Book (V35) and Phone Call Log (V36).
 
 INSERT INTO permissions (id, name)
 SELECT gen_random_uuid(), name FROM (VALUES

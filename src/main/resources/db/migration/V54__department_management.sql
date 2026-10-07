@@ -1,4 +1,4 @@
--- Human Resource -> Department: managing the list of departments staff are assigned to (V44). The admin roles
+-- Human Resource -> Department: managing the list of departments staff are assigned to (V47). The admin roles
 -- get the permission; everyone who can see staff already reads the departments through the staff pages.
 
 INSERT INTO permissions (id, name)

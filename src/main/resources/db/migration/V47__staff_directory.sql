@@ -3,7 +3,7 @@
 -- plus the Department and Designation lookup lists the Add Staff form picks from.
 
 -- --- 1. Departments and designations ----------------------------------------------------
--- Same lookup-table shape as expense_heads (V43).
+-- Same lookup-table shape as expense_heads (V46).
 
 CREATE TABLE departments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

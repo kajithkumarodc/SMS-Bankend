@@ -3,8 +3,8 @@
 -- REJECTED -- shown as "Disapproved").
 
 -- --- 1. Configurable leave types ---------------------------------------------------------------
--- Same lookup-table shape as expense_heads (V43). The defaults match the leave entitlements on the Add Staff
--- form (V44); the Leave Type page will manage the list.
+-- Same lookup-table shape as expense_heads (V46). The defaults match the leave entitlements on the Add Staff
+-- form (V47); the Leave Type page will manage the list.
 
 CREATE TABLE leave_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -23,7 +23,7 @@ CREATE TABLE phone_call_logs (
 CREATE INDEX phone_call_logs_call_date_idx ON phone_call_logs(call_date);
 CREATE INDEX phone_call_logs_phone_idx ON phone_call_logs(phone);
 
--- Permissions, same split as the Visitor Book (V32): admins everything, the
+-- Permissions, same split as the Visitor Book (V35): admins everything, the
 -- receptionist runs the call log day to day (delete stays admin-only), the
 -- principal gets oversight.
 

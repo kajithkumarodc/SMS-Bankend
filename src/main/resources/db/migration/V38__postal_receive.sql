@@ -1,6 +1,6 @@
 -- Front Office: Postal Receive. Letters and parcels the school receives, each with an
 -- auto-generated reference number (PRC-YYYY-NNNNN, from document_number_counters,
--- V34) and any number of supporting documents. Mirrors Postal Dispatch (V34).
+-- V37) and any number of supporting documents. Mirrors Postal Dispatch (V37).
 
 CREATE TABLE postal_receives (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

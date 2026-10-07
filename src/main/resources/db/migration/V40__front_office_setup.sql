@@ -1,6 +1,6 @@
 -- Setup Front Office: one page manages the four lookup lists the Front Office forms use --
--- Purpose (visitors, V32), Complaint Type (complaints, V36), Source (enquiries and complaints,
--- V23) and Reference (enquiries, V31). Each gains a description, and managing them gets its
+-- Purpose (visitors, V35), Complaint Type (complaints, V39), Source (enquiries and complaints,
+-- V23) and Reference (enquiries, V34). Each gains a description, and managing them gets its
 -- own permission.
 
 ALTER TABLE front_office_purposes ADD COLUMN description VARCHAR(500);

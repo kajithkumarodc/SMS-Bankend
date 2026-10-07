@@ -1,4 +1,4 @@
--- Human Resource -> Designation: managing the list of designations staff are assigned to (V44). The admin roles
+-- Human Resource -> Designation: managing the list of designations staff are assigned to (V47). The admin roles
 -- get the permission; everyone who can see staff already reads the designations through the staff pages.
 
 INSERT INTO permissions (id, name)

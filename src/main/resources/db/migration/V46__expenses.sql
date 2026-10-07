@@ -2,7 +2,7 @@
 -- attached invoice or receipt.
 
 -- --- 1. Configurable expense heads ------------------------------------------------------
--- Same lookup-table shape as fee_types (V26) and complaint_types (V36).
+-- Same lookup-table shape as fee_types (V26) and complaint_types (V39).
 
 CREATE TABLE expense_heads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

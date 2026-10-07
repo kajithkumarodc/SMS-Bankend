@@ -3,7 +3,7 @@
 -- attached document (e.g. a scan of their ID).
 
 -- --- 1. Configurable visit purposes ---------------------------------------------
--- Same lookup-table shape as enquiry_sources (V23) / enquiry_references (V31).
+-- Same lookup-table shape as enquiry_sources (V23) / enquiry_references (V34).
 -- Setup Front Office will manage these; defaults are seeded so the form works
 -- from day one.
 
