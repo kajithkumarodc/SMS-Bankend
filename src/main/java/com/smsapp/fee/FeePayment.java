@@ -66,4 +66,12 @@ public class FeePayment extends UuidEntity {
     @CreationTimestamp
     @Column(name = "paid_at", nullable = false, updatable = false)
     private OffsetDateTime paidAt;
+
+    /** The date the money was received, as entered by the collector (V42); defaults to today. */
+    @Column(name = "payment_date", nullable = false, updatable = false)
+    private java.time.LocalDate paymentDate = java.time.LocalDate.now();
+
+    /** Groups the payments made together in one "Collect Fees" (one per bill touched). */
+    @Column(name = "collection_id", updatable = false)
+    private UUID collectionId;
 }

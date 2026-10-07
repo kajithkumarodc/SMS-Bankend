@@ -26,6 +26,13 @@ public class Section extends UuidEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
+    /**
+     * The hidden section of a class that has no real sections: its students belong to the whole class.
+     * See V39 for the lifecycle; the UI shows only the class name for it.
+     */
+    @Column(name = "is_default", nullable = false)
+    private boolean defaultSection;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

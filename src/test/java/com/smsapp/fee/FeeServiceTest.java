@@ -81,7 +81,11 @@ class FeeServiceTest {
     private FeeService service() {
         return new FeeService(feeStructureRepository, feeStructureItemRepository, invoiceRepository,
                 schoolRepository, classRepository, studentRepository, feeTypeRepository, feePaymentRepository,
-                razorpayGateway, properties, paymentRecorder, auditService);
+                razorpayGateway, properties, paymentRecorder, auditService,
+                org.mockito.Mockito.mock(com.smsapp.academics.MediumRepository.class),
+                org.mockito.Mockito.mock(FeeDiscountRepository.class),
+                org.mockito.Mockito.mock(FeeAdjustmentRepository.class),
+                org.mockito.Mockito.mock(FeeLineService.class));
     }
 
     private FeeStructure structure(String amount) {

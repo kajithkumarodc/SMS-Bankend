@@ -26,6 +26,12 @@ public class Subject extends UuidEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
+    @Column(length = 30)
+    private String code;
+
+    @Column(name = "subject_type", nullable = false, length = 20)
+    private String subjectType = "THEORY";
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

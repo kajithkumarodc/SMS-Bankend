@@ -75,7 +75,7 @@ public class PublicAdmissionController {
     /** Minimal, safe class/grade picker for the "applying for" field -- id and name only, never enrollment data. */
     @GetMapping("/schools/{schoolId}/classes")
     List<ClassOption> classes(@PathVariable UUID schoolId) {
-        return classRepository.findAllByOrderByName().stream()
+        return classRepository.findAllByOrderBySortOrderAscNameAsc().stream()
                 .filter(c -> schoolId.equals(c.getSchoolId()))
                 .map(c -> new ClassOption(c.getId(), c.getName())).toList();
     }

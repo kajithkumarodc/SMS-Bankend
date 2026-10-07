@@ -46,6 +46,10 @@ public class FeeStructureItem extends UuidEntity {
     @Column(name = "sequence_order", nullable = false)
     private int sequenceOrder;
 
+    /** When this line falls due (e.g. June Month Fees); null = the structure's due date (V40). */
+    @Column(name = "due_date")
+    private java.time.LocalDate dueDate;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

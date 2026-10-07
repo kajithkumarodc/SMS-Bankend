@@ -28,8 +28,18 @@ public class FeeTypeController {
 
     @GetMapping
     @PreAuthorize(Permissions.HAS_FEE_VIEW)
-    List<FeeTypeResponse> list() {
-        return feeTypeService.listActive().stream().map(FeeTypeResponse::from).toList();
+    List<FeeTypeResponse> list(@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false")
+                               boolean includeInactive) {
+        return (includeInactive ? feeTypeService.listAll() : feeTypeService.listActive()).stream()
+                .map(FeeTypeResponse::from).toList();
+    }
+
+    /** Rename and/or (de)activate. */
+    @org.springframework.web.bind.annotation.PutMapping("/{id}")
+    @PreAuthorize(Permissions.HAS_FEE_EDIT)
+    FeeTypeResponse update(@org.springframework.web.bind.annotation.PathVariable java.util.UUID id,
+                           @Valid @RequestBody com.smsapp.fee.FeeDtos.UpdateFeeTypeRequest request) {
+        return FeeTypeResponse.from(feeTypeService.update(id, request.name(), request.active()));
     }
 
     @PostMapping

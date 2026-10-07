@@ -50,6 +50,8 @@ class EnquiryIntegrationTest {
     private PasswordEncoder passwordEncoder;
 
     private UUID schoolA;
+    private UUID websiteSourceId;
+    private UUID parentReferenceId;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -72,10 +74,14 @@ class EnquiryIntegrationTest {
             // repeat 201 into a 409. Self-seed the one default row a test relies on,
             // same reasoning as the permissions self-seed below.
             st.execute("TRUNCATE schools, users, roles, permissions, user_roles, role_permissions, "
-                    + "students, admission_enquiries, enquiry_follow_ups, enquiry_sources, classes, sections CASCADE");
+                    + "students, admission_enquiries, enquiry_follow_ups, enquiry_sources, enquiry_references, classes, "
+                    + "sections CASCADE");
 
             st.execute("INSERT INTO schools (id, name) VALUES ('" + schoolA + "', 'Front Office School')");
-            st.execute("INSERT INTO enquiry_sources (id, name) VALUES ('" + UUID.randomUUID() + "', 'Website')");
+            websiteSourceId = UUID.randomUUID();
+            st.execute("INSERT INTO enquiry_sources (id, name) VALUES ('" + websiteSourceId + "', 'Website')");
+            parentReferenceId = UUID.randomUUID();
+            st.execute("INSERT INTO enquiry_references (id, name) VALUES ('" + parentReferenceId + "', 'Parent')");
 
             UUID adminRoleId = seedUser(st, ADMIN, "SCHOOL_ADMIN");
             UUID receptionistRoleId = seedUser(st, RECEPTIONIST, "RECEPTIONIST");
@@ -122,11 +128,29 @@ class EnquiryIntegrationTest {
                 .andReturn().getResponse().getCookie("access_token");
     }
 
+    /** A valid Admission Enquiry form body; {@code overrides} are key/value pairs that replace or add fields. */
+    private String formJson(String applicantName, String enquiryDate, Object... overrides) throws Exception {
+        var body = new java.util.LinkedHashMap<String, Object>();
+        body.put("applicantName", applicantName);
+        body.put("phone", "+911234500000");
+        body.put("enquiryDate", enquiryDate);
+        body.put("nextFollowUpDate", enquiryDate);
+        body.put("sourceId", websiteSourceId);
+        for (int i = 0; i < overrides.length; i += 2) {
+            body.put((String) overrides[i], overrides[i + 1]);
+        }
+        return JSON.writeValueAsString(body);
+    }
+
     private UUID createEnquiry(Cookie caller, String applicantName) throws Exception {
+        return createEnquiry(caller, applicantName, "2026-09-01");
+    }
+
+    private UUID createEnquiry(Cookie caller, String applicantName, String enquiryDate) throws Exception {
         var result = mockMvc.perform(post("/api/v1/enquiries").cookie(caller)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"applicantName\":\"" + applicantName + "\",\"guardianName\":\"Guardian G\","
-                                + "\"phone\":\"+911234500000\",\"email\":\"lead@example.com\"}"))
+                        .content(formJson(applicantName, enquiryDate,
+                                "guardianName", "Guardian G", "email", "lead@example.com")))
                 .andExpect(status().isCreated())
                 .andReturn();
         return UUID.fromString(JSON.readTree(result.getResponse().getContentAsString()).get("id").asText());
@@ -138,11 +162,47 @@ class EnquiryIntegrationTest {
     void schoolAdminCanCreateAnEnquiryWithAGeneratedNumber() throws Exception {
         mockMvc.perform(post("/api/v1/enquiries").cookie(login(ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"applicantName\":\"Alex Applicant\"}"))
+                        .content(formJson("Alex Applicant", "2026-09-26",
+                                "nextFollowUpDate", "2026-09-30", "address", "12 Main Street",
+                                "description", "Science stream", "remarks", "Call after 5pm",
+                                "referenceId", parentReferenceId, "numberOfChildren", 2)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.enquiryNumber").value(org.hamcrest.Matchers.matchesPattern("ENQ-\\d{6}")))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.archived").value(false));
+                .andExpect(jsonPath("$.archived").value(false))
+                .andExpect(jsonPath("$.enquiryDate").value("2026-09-26"))
+                .andExpect(jsonPath("$.followUpDate").value("2026-09-30"))
+                .andExpect(jsonPath("$.sourceName").value("Website"))
+                .andExpect(jsonPath("$.referenceName").value("Parent"))
+                .andExpect(jsonPath("$.address").value("12 Main Street"))
+                .andExpect(jsonPath("$.description").value("Science stream"))
+                .andExpect(jsonPath("$.remarks").value("Call after 5pm"))
+                .andExpect(jsonPath("$.numberOfChildren").value(2))
+                .andExpect(jsonPath("$.lastFollowUpDate").doesNotExist());
+    }
+
+    @Test
+    void createRejectsAFormMissingItsRequiredFieldsWith400() throws Exception {
+        mockMvc.perform(post("/api/v1/enquiries").cookie(login(ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applicantName\":\"Alex Applicant\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createRejectsAnInvalidPhoneNumberWith400() throws Exception {
+        mockMvc.perform(post("/api/v1/enquiries").cookie(login(ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(formJson("Alex Applicant", "2026-09-26", "phone", "call me")))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createRejectsANextFollowUpBeforeTheEnquiryDateWith400() throws Exception {
+        mockMvc.perform(post("/api/v1/enquiries").cookie(login(ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(formJson("Alex Applicant", "2026-09-26", "nextFollowUpDate", "2026-09-20")))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -160,7 +220,7 @@ class EnquiryIntegrationTest {
         Cookie teacher = login(TEACHER);
         mockMvc.perform(post("/api/v1/enquiries").cookie(teacher)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"applicantName\":\"Blocked Lead\"}"))
+                        .content(formJson("Blocked Lead", "2026-09-26")))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/enquiries").cookie(teacher))
                 .andExpect(status().isForbidden());
@@ -188,6 +248,45 @@ class EnquiryIntegrationTest {
                 .andExpect(jsonPath("$.content[0].id").value(matching.toString()));
     }
 
+    @Test
+    void searchFiltersByEnquiryDateRange() throws Exception {
+        Cookie admin = login(ADMIN);
+        createEnquiry(admin, "August Lead", "2026-08-15");
+        UUID september = createEnquiry(admin, "September Lead", "2026-09-10");
+
+        mockMvc.perform(get("/api/v1/enquiries").cookie(admin)
+                        .param("from", "2026-09-01").param("to", "2026-09-30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(september.toString()));
+    }
+
+    @Test
+    void listSortsBySourceNameAndRejectsUnknownSortKeys() throws Exception {
+        Cookie admin = login(ADMIN);
+        UUID otherSource = UUID.randomUUID();
+        try (var connection = DriverManager.getConnection(
+                System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
+                System.getProperty("DB_USERNAME", "postgres"),
+                System.getProperty("DB_PASSWORD", "1234"));
+             Statement st = connection.createStatement()) {
+            st.execute("INSERT INTO enquiry_sources (id, name) VALUES ('" + otherSource + "', 'Advertisement')");
+        }
+        createEnquiry(admin, "Website Lead");
+        mockMvc.perform(post("/api/v1/enquiries").cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(formJson("Advert Lead", "2026-09-01", "sourceId", otherSource)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/enquiries").cookie(admin).param("sort", "sourceName,asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].sourceName").value("Advertisement"))
+                .andExpect(jsonPath("$.content[1].sourceName").value("Website"));
+
+        mockMvc.perform(get("/api/v1/enquiries").cookie(admin).param("sort", "passwordHash,asc"))
+                .andExpect(status().isBadRequest());
+    }
+
     // --- Edit ---------------------------------------------------------
 
     @Test
@@ -197,11 +296,15 @@ class EnquiryIntegrationTest {
 
         mockMvc.perform(put("/api/v1/enquiries/" + id).cookie(admin)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"applicantName\":\"Edited Lead\",\"guardianName\":\"New Guardian\","
-                                + "\"phone\":\"+919999999999\",\"remarks\":\"Updated remarks\"}"))
+                        .content(formJson("Edited Lead", "2026-09-05",
+                                "phone", "+919999999999", "remarks", "Updated remarks")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.applicantName").value("Edited Lead"))
-                .andExpect(jsonPath("$.remarks").value("Updated remarks"));
+                .andExpect(jsonPath("$.phone").value("+919999999999"))
+                .andExpect(jsonPath("$.enquiryDate").value("2026-09-05"))
+                .andExpect(jsonPath("$.remarks").value("Updated remarks"))
+                // Not on the form, so an edit that doesn't send it keeps it.
+                .andExpect(jsonPath("$.guardianName").value("Guardian G"));
     }
 
     @Test
@@ -210,14 +313,14 @@ class EnquiryIntegrationTest {
 
         mockMvc.perform(put("/api/v1/enquiries/" + id).cookie(login(TEACHER))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"applicantName\":\"Hacked Lead\"}"))
+                        .content(formJson("Hacked Lead", "2026-09-01")))
                 .andExpect(status().isForbidden());
     }
 
     // --- Follow-ups --------------------------------------------------
 
     @Test
-    void recordingAFollowUpMovesActiveEnquiryToFollowUpStatus() throws Exception {
+    void recordingAFollowUpSetsLastAndNextDatesAndKeepsTheStatus() throws Exception {
         Cookie admin = login(ADMIN);
         UUID id = createEnquiry(admin, "Follow Up Lead");
 
@@ -230,7 +333,8 @@ class EnquiryIntegrationTest {
 
         mockMvc.perform(get("/api/v1/enquiries/" + id).cookie(admin))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("FOLLOW_UP"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.lastFollowUpDate").value("2026-01-10"))
                 .andExpect(jsonPath("$.followUpDate").value("2026-01-17"));
 
         mockMvc.perform(get("/api/v1/enquiries/" + id + "/follow-ups").cookie(admin))

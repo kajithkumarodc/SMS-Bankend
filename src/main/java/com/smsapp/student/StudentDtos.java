@@ -1,5 +1,6 @@
 package com.smsapp.student;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,6 +29,29 @@ public final class StudentDtos {
     private StudentDtos() {
     }
 
+    /** Admission-form fields added in V40. Every field is optional. */
+    public record ExtraDetails(
+            UUID mediumId,
+            @Size(max = 100) String caste,
+            @Pattern(regexp = MOBILE_REGEX, message = MOBILE_MESSAGE) String mobileNumber,
+            @Email @Size(max = 200) String email,
+            @Size(max = 20) String height,
+            @Size(max = 20) String weight,
+            LocalDate measurementDate,
+            @Size(max = 4000) String medicalHistory,
+            @Size(max = 1000) String guardianAddress,
+            @Size(max = 40) String bankAccountNumber,
+            @Size(max = 150) String bankName,
+            @Size(max = 20) String ifscCode,
+            @Size(max = 4000) String note) {
+
+        static ExtraDetails from(Student s) {
+            return new ExtraDetails(s.getMediumId(), s.getCaste(), s.getMobileNumber(), s.getEmail(), s.getHeight(),
+                    s.getWeight(), s.getMeasurementDate(), s.getMedicalHistory(), s.getGuardianAddress(),
+                    s.getBankAccountNumber(), s.getBankName(), s.getIfscCode(), s.getNote());
+        }
+    }
+
     /**
      * The full "professional admission form" (plan Phase 3 section 1). {@code fullName} is deliberately
      * absent -- {@link StudentService} always derives it from first/middle/last, so there is exactly one
@@ -41,7 +65,7 @@ public final class StudentDtos {
             // --- personal information ---
             @NotBlank @Size(max = 100) String firstName,
             @Size(max = 100) String middleName,
-            @NotBlank @Size(max = 100) String lastName,
+            @Size(max = 100) String lastName,
             @Pattern(regexp = "MALE|FEMALE|OTHER", message = "Not a recognized gender") String gender,
             @NotNull @Past LocalDate dateOfBirth,
             @Pattern(regexp = "A\\+|A-|B\\+|B-|AB\\+|AB-|O\\+|O-|UNKNOWN", message = "Not a recognized blood group")
@@ -117,7 +141,9 @@ public final class StudentDtos {
             Boolean whatsappNotificationsEnabled,
             Boolean emailNotificationsEnabled,
             @Pattern(regexp = "ENGLISH|TAMIL|HINDI|OTHER", message = "Not a recognized language")
-            String preferredLanguage) {
+            String preferredLanguage,
+            /** Smart School admission-form extras (medium, caste, bank details, ...); null = none. */
+            @Valid ExtraDetails extra) {
     }
 
     /**
@@ -127,7 +153,7 @@ public final class StudentDtos {
     record UpdateStudentRequest(
             @NotBlank @Size(max = 100) String firstName,
             @Size(max = 100) String middleName,
-            @NotBlank @Size(max = 100) String lastName,
+            @Size(max = 100) String lastName,
             @Pattern(regexp = "MALE|FEMALE|OTHER", message = "Not a recognized gender") String gender,
             @Past LocalDate dateOfBirth,
             @Pattern(regexp = "A\\+|A-|B\\+|B-|AB\\+|AB-|O\\+|O-|UNKNOWN", message = "Not a recognized blood group")
@@ -194,7 +220,9 @@ public final class StudentDtos {
             @Pattern(regexp = "ENGLISH|TAMIL|HINDI|OTHER", message = "Not a recognized language")
             String preferredLanguage,
 
-            @NotBlank String status) {
+            @NotBlank String status,
+            /** Null leaves the extra fields unchanged. */
+            @Valid ExtraDetails extra) {
     }
 
     /** Body for {@code PATCH /api/v1/students/{id}/status} -- the soft-delete / reactivate toggle. */
@@ -294,7 +322,8 @@ public final class StudentDtos {
             String status,
             UUID transportRouteId,
             UUID hostelRoomId,
-            OffsetDateTime createdAt) {
+            OffsetDateTime createdAt,
+            ExtraDetails extra) {
 
         public static StudentResponse from(Student student) {
             return new StudentResponse(
@@ -368,7 +397,8 @@ public final class StudentDtos {
                     student.getStatus(),
                     student.getTransportRouteId(),
                     student.getHostelRoomId(),
-                    student.getCreatedAt());
+                    student.getCreatedAt(),
+                    ExtraDetails.from(student));
         }
     }
 }

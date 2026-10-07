@@ -27,10 +27,12 @@ final class AcademicsDtos {
             @NotBlank @Size(max = 100) String name) {
     }
 
-    record SectionResponse(UUID id, UUID classId, String name) {
+    /** {@code isDefault}: the hidden whole-class section of a class that has no real sections (V39). */
+    record SectionResponse(UUID id, UUID classId, String name, boolean isDefault) {
 
         static SectionResponse from(Section section) {
-            return new SectionResponse(section.getId(), section.getClassId(), section.getName());
+            return new SectionResponse(section.getId(), section.getClassId(), section.getName(),
+                    section.isDefaultSection());
         }
     }
 

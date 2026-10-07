@@ -33,6 +33,31 @@ public class FeeTypeService {
         return feeTypeRepository.findAllByOrderByName();
     }
 
+    /**
+     * Rename and/or (de)activate a fee type. Types are never deleted -- fee lines keep pointing at them -- so
+     * "remove" is deactivate: it disappears from pickers but old fee structures still show its name.
+     *
+     * @throws ApiException 404 if missing, 409 if another type already has the name.
+     */
+    @Transactional
+    public FeeType update(java.util.UUID id, String name, Boolean active) {
+        FeeType type = feeTypeRepository.findById(id)
+                .orElseThrow(() -> new ApiException("Fee type not found", HttpStatus.NOT_FOUND));
+        String trimmed = name.trim();
+        if (!type.getName().equals(trimmed) && feeTypeRepository.existsByName(trimmed)) {
+            throw new ApiException("A fee type named '" + trimmed + "' already exists", HttpStatus.CONFLICT);
+        }
+        String before = type.getName();
+        type.setName(trimmed);
+        if (active != null) {
+            type.setActive(active);
+        }
+        FeeType saved = feeTypeRepository.save(type);
+        auditService.log(AuditActions.FEE_TYPE_UPDATED, AuditActions.FEE_TYPE, id,
+                Map.of("from", before, "to", saved.getName(), "active", saved.isActive()));
+        return saved;
+    }
+
     /** @throws ApiException 409 if a type with that name already exists. */
     @Transactional
     public FeeType create(String name) {

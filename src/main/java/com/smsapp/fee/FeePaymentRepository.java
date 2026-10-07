@@ -12,6 +12,10 @@ public interface FeePaymentRepository extends JpaRepository<FeePayment, UUID> {
     /** One invoice's full ledger (payments + any reversals), newest first -- the receipt/payment history. */
     List<FeePayment> findByInvoiceIdOrderByPaidAtDesc(UUID invoiceId);
 
+    List<FeePayment> findByInvoiceIdInOrderByPaidAtAsc(java.util.Collection<UUID> invoiceIds);
+
+    List<FeePayment> findByCollectionIdOrderByPaidAtAsc(UUID collectionId);
+
     Optional<FeePayment> findByReceiptNumber(String receiptNumber);
 
     /** Double-reversal guard: has this PAYMENT row already been reversed? */

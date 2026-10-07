@@ -29,6 +29,19 @@ public class AttendanceRecord extends UuidEntity {
     @Column(nullable = false, length = 20)
     private String status;
 
+    /** Where the mark came from; only MANUAL for now. */
+    @Column(nullable = false, length = 20)
+    private String source = "MANUAL";
+
+    @Column(name = "entry_time")
+    private java.time.LocalTime entryTime;
+
+    @Column(name = "exit_time")
+    private java.time.LocalTime exitTime;
+
+    @Column(length = 500)
+    private String note;
+
     /** The user (teacher or admin) who last marked this record. */
     @Column(name = "marked_by", nullable = false)
     private UUID markedBy;

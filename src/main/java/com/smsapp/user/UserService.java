@@ -130,6 +130,12 @@ public class UserService {
         return UserResponse.from(saved, roleRepository.findNamesByUserId(id));
     }
 
+    /** {@link #resetPassword} for callers outside this package (the staff profile): just the temporary password. */
+    @Transactional
+    public String resetPasswordForStaff(UUID id) {
+        return resetPassword(id).temporaryPassword();
+    }
+
     /**
      * Admin-triggered reset: generates a new temporary password, returned once, and
      * flags the account so the next login must change it.
@@ -208,6 +214,63 @@ public class UserService {
         auditService.log(AuditActions.USER_CREATED, AuditActions.USER, saved.getId(),
                 Map.of("email", saved.getEmail(), "source", "admission_application"));
         return saved;
+    }
+
+    /** A newly created login with the one-time temporary password the admin hands over. */
+    public record CreatedAccount(User user, String temporaryPassword) {
+    }
+
+    /**
+     * Creates a login for a staff member with one role and a generated temporary password (the user must
+     * change it at first login) -- the same creation path as {@link #create}, with plain parameters so the
+     * staff directory can reuse it.
+     *
+     * @throws ApiException 409 if the email is already in use, 400 if the role does not exist.
+     */
+    @Transactional
+    public CreatedAccount createAccount(String email, String fullName, UUID roleId) {
+        String normalizedEmail = email.trim().toLowerCase(java.util.Locale.ROOT);
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            throw new ApiException("A user with email '" + normalizedEmail + "' already exists", HttpStatus.CONFLICT);
+        }
+        requireValidRoleIds(Set.of(roleId));
+
+        String temporaryPassword = generatePassword();
+        User user = new User();
+        user.setEmail(normalizedEmail);
+        user.setFullName(fullName.trim());
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setStatus(UserStatus.ACTIVE);
+        user.setMustChangePassword(true);
+
+        User saved;
+        try {
+            saved = userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException("A user with email '" + normalizedEmail + "' already exists", HttpStatus.CONFLICT);
+        }
+        assignRoles(saved.getId(), Set.of(roleId));
+
+        auditService.log(AuditActions.USER_CREATED, AuditActions.USER, saved.getId(),
+                Map.of("email", saved.getEmail(), "source", "staff_directory"));
+        return new CreatedAccount(saved, temporaryPassword);
+    }
+
+    /** Renames a login and gives it exactly one role. @throws ApiException 404 if no such user, 400 if no such role. */
+    @Transactional
+    public void updateNameAndRole(UUID userId, String fullName, UUID roleId) {
+        User user = requireUser(userId);
+        requireValidRoleIds(Set.of(roleId));
+        user.setFullName(fullName.trim());
+        userRepository.save(user);
+        if (userRoleRepository.findByUserId(userId).stream().noneMatch(link -> link.getRoleId().equals(roleId))
+                || userRoleRepository.findByUserId(userId).size() != 1) {
+            userRoleRepository.deleteByUserId(userId);
+            userRoleRepository.flush();
+            assignRoles(userId, Set.of(roleId));
+        }
+        auditService.log(AuditActions.USER_UPDATED, AuditActions.USER, userId,
+                Map.of("source", "staff_directory", "roleCount", 1));
     }
 
     private void assignRoles(UUID userId, Set<UUID> roleIds) {

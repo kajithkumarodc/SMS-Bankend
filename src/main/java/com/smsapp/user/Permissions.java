@@ -66,6 +66,76 @@ public final class Permissions {
     public static final String ENQUIRY_EXPORT = "ENQUIRY_EXPORT";
     public static final String ENQUIRY_PRINT = "ENQUIRY_PRINT";
 
+    public static final String VISITOR_VIEW = "VISITOR_VIEW";
+    public static final String VISITOR_CREATE = "VISITOR_CREATE";
+    public static final String VISITOR_EDIT = "VISITOR_EDIT";
+    public static final String VISITOR_DELETE = "VISITOR_DELETE";
+    public static final String VISITOR_EXPORT = "VISITOR_EXPORT";
+    public static final String VISITOR_PRINT = "VISITOR_PRINT";
+
+    public static final String PHONE_CALL_VIEW = "PHONE_CALL_VIEW";
+    public static final String PHONE_CALL_CREATE = "PHONE_CALL_CREATE";
+    public static final String PHONE_CALL_EDIT = "PHONE_CALL_EDIT";
+    public static final String PHONE_CALL_DELETE = "PHONE_CALL_DELETE";
+    public static final String PHONE_CALL_EXPORT = "PHONE_CALL_EXPORT";
+    public static final String PHONE_CALL_PRINT = "PHONE_CALL_PRINT";
+
+    public static final String POSTAL_DISPATCH_VIEW = "POSTAL_DISPATCH_VIEW";
+    public static final String POSTAL_DISPATCH_CREATE = "POSTAL_DISPATCH_CREATE";
+    public static final String POSTAL_DISPATCH_EDIT = "POSTAL_DISPATCH_EDIT";
+    public static final String POSTAL_DISPATCH_DELETE = "POSTAL_DISPATCH_DELETE";
+    public static final String POSTAL_DISPATCH_EXPORT = "POSTAL_DISPATCH_EXPORT";
+    public static final String POSTAL_DISPATCH_PRINT = "POSTAL_DISPATCH_PRINT";
+
+    public static final String POSTAL_RECEIVE_VIEW = "POSTAL_RECEIVE_VIEW";
+    public static final String POSTAL_RECEIVE_CREATE = "POSTAL_RECEIVE_CREATE";
+    public static final String POSTAL_RECEIVE_EDIT = "POSTAL_RECEIVE_EDIT";
+    public static final String POSTAL_RECEIVE_DELETE = "POSTAL_RECEIVE_DELETE";
+    public static final String POSTAL_RECEIVE_EXPORT = "POSTAL_RECEIVE_EXPORT";
+    public static final String POSTAL_RECEIVE_PRINT = "POSTAL_RECEIVE_PRINT";
+
+    public static final String COMPLAINT_VIEW = "COMPLAINT_VIEW";
+    public static final String COMPLAINT_CREATE = "COMPLAINT_CREATE";
+    public static final String COMPLAINT_EDIT = "COMPLAINT_EDIT";
+    public static final String COMPLAINT_DELETE = "COMPLAINT_DELETE";
+    public static final String COMPLAINT_EXPORT = "COMPLAINT_EXPORT";
+    public static final String COMPLAINT_PRINT = "COMPLAINT_PRINT";
+
+    public static final String EXPENSE_VIEW = "EXPENSE_VIEW";
+    public static final String EXPENSE_CREATE = "EXPENSE_CREATE";
+    public static final String EXPENSE_EDIT = "EXPENSE_EDIT";
+    public static final String EXPENSE_DELETE = "EXPENSE_DELETE";
+    public static final String EXPENSE_EXPORT = "EXPENSE_EXPORT";
+    public static final String EXPENSE_PRINT = "EXPENSE_PRINT";
+
+    // Seeded in V22; used by the Human Resource > Staff Directory pages.
+    public static final String STAFF_VIEW = "STAFF_VIEW";
+    public static final String STAFF_CREATE = "STAFF_CREATE";
+    public static final String STAFF_EDIT = "STAFF_EDIT";
+    public static final String LEAVE_VIEW = "LEAVE_VIEW";
+    public static final String LEAVE_CREATE = "LEAVE_CREATE";
+    public static final String LEAVE_APPROVE = "LEAVE_APPROVE";
+    public static final String LEAVE_TYPE_MANAGE = "LEAVE_TYPE_MANAGE";
+    public static final String DEPARTMENT_MANAGE = "DEPARTMENT_MANAGE";
+    public static final String DESIGNATION_MANAGE = "DESIGNATION_MANAGE";
+    public static final String CALENDAR_VIEW = "CALENDAR_VIEW";
+    public static final String CALENDAR_MANAGE = "CALENDAR_MANAGE";
+    public static final String TIMETABLE_VIEW = "TIMETABLE_VIEW";
+    public static final String TIMETABLE_MANAGE = "TIMETABLE_MANAGE";
+    public static final String SUBJECT_MANAGE = "SUBJECT_MANAGE";
+    public static final String INVENTORY_VIEW = "INVENTORY_VIEW";
+    public static final String INVENTORY_ISSUE = "INVENTORY_ISSUE";
+    public static final String INVENTORY_MANAGE = "INVENTORY_MANAGE";
+    public static final String TEACHER_RATING_VIEW = "TEACHER_RATING_VIEW";
+    public static final String TEACHER_RATING_MANAGE = "TEACHER_RATING_MANAGE";
+    public static final String PAYROLL_VIEW = "PAYROLL_VIEW";
+    public static final String PAYROLL_CREATE = "PAYROLL_CREATE";
+    public static final String PAYROLL_APPROVE = "PAYROLL_APPROVE";
+    public static final String STAFF_ATTENDANCE_VIEW = "STAFF_ATTENDANCE_VIEW";
+    public static final String STAFF_ATTENDANCE_EDIT = "STAFF_ATTENDANCE_EDIT";
+
+    public static final String FRONT_OFFICE_SETUP = "FRONT_OFFICE_SETUP";
+
     public static final String HAS_STUDENT_VIEW = HAS_AUTHORITY_OPEN + STUDENT_VIEW + CLOSE;
     public static final String HAS_STUDENT_CREATE = HAS_AUTHORITY_OPEN + STUDENT_CREATE + CLOSE;
     public static final String HAS_STUDENT_EDIT = HAS_AUTHORITY_OPEN + STUDENT_EDIT + CLOSE;
@@ -114,6 +184,63 @@ public final class Permissions {
     public static final String HAS_ENQUIRY_CONVERT = HAS_AUTHORITY_OPEN + ENQUIRY_CONVERT + CLOSE;
     public static final String HAS_ENQUIRY_EXPORT = HAS_AUTHORITY_OPEN + ENQUIRY_EXPORT + CLOSE;
     public static final String HAS_ENQUIRY_PRINT = HAS_AUTHORITY_OPEN + ENQUIRY_PRINT + CLOSE;
+
+    public static final String HAS_VISITOR_VIEW = HAS_AUTHORITY_OPEN + VISITOR_VIEW + CLOSE;
+    public static final String HAS_VISITOR_CREATE = HAS_AUTHORITY_OPEN + VISITOR_CREATE + CLOSE;
+    public static final String HAS_VISITOR_EDIT = HAS_AUTHORITY_OPEN + VISITOR_EDIT + CLOSE;
+    public static final String HAS_VISITOR_DELETE = HAS_AUTHORITY_OPEN + VISITOR_DELETE + CLOSE;
+
+    public static final String HAS_PHONE_CALL_VIEW = HAS_AUTHORITY_OPEN + PHONE_CALL_VIEW + CLOSE;
+    public static final String HAS_PHONE_CALL_CREATE = HAS_AUTHORITY_OPEN + PHONE_CALL_CREATE + CLOSE;
+    public static final String HAS_PHONE_CALL_EDIT = HAS_AUTHORITY_OPEN + PHONE_CALL_EDIT + CLOSE;
+    public static final String HAS_PHONE_CALL_DELETE = HAS_AUTHORITY_OPEN + PHONE_CALL_DELETE + CLOSE;
+
+    public static final String HAS_POSTAL_DISPATCH_VIEW = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_VIEW + CLOSE;
+    public static final String HAS_POSTAL_DISPATCH_CREATE = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_CREATE + CLOSE;
+    public static final String HAS_POSTAL_DISPATCH_EDIT = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_EDIT + CLOSE;
+    public static final String HAS_POSTAL_DISPATCH_DELETE = HAS_AUTHORITY_OPEN + POSTAL_DISPATCH_DELETE + CLOSE;
+
+    public static final String HAS_POSTAL_RECEIVE_VIEW = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_VIEW + CLOSE;
+    public static final String HAS_POSTAL_RECEIVE_CREATE = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_CREATE + CLOSE;
+    public static final String HAS_POSTAL_RECEIVE_EDIT = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_EDIT + CLOSE;
+    public static final String HAS_POSTAL_RECEIVE_DELETE = HAS_AUTHORITY_OPEN + POSTAL_RECEIVE_DELETE + CLOSE;
+
+    public static final String HAS_COMPLAINT_VIEW = HAS_AUTHORITY_OPEN + COMPLAINT_VIEW + CLOSE;
+    public static final String HAS_COMPLAINT_CREATE = HAS_AUTHORITY_OPEN + COMPLAINT_CREATE + CLOSE;
+    public static final String HAS_COMPLAINT_EDIT = HAS_AUTHORITY_OPEN + COMPLAINT_EDIT + CLOSE;
+    public static final String HAS_COMPLAINT_DELETE = HAS_AUTHORITY_OPEN + COMPLAINT_DELETE + CLOSE;
+
+    public static final String HAS_STAFF_VIEW = HAS_AUTHORITY_OPEN + STAFF_VIEW + CLOSE;
+    public static final String HAS_STAFF_CREATE = HAS_AUTHORITY_OPEN + STAFF_CREATE + CLOSE;
+    public static final String HAS_STAFF_EDIT = HAS_AUTHORITY_OPEN + STAFF_EDIT + CLOSE;
+    public static final String HAS_LEAVE_VIEW = HAS_AUTHORITY_OPEN + LEAVE_VIEW + CLOSE;
+    public static final String HAS_LEAVE_CREATE = HAS_AUTHORITY_OPEN + LEAVE_CREATE + CLOSE;
+    public static final String HAS_TEACHER_RATING_VIEW = HAS_AUTHORITY_OPEN + TEACHER_RATING_VIEW + CLOSE;
+    public static final String HAS_TEACHER_RATING_MANAGE = HAS_AUTHORITY_OPEN + TEACHER_RATING_MANAGE + CLOSE;
+    public static final String HAS_LEAVE_TYPE_MANAGE = HAS_AUTHORITY_OPEN + LEAVE_TYPE_MANAGE + CLOSE;
+    public static final String HAS_DEPARTMENT_MANAGE = HAS_AUTHORITY_OPEN + DEPARTMENT_MANAGE + CLOSE;
+    public static final String HAS_DESIGNATION_MANAGE = HAS_AUTHORITY_OPEN + DESIGNATION_MANAGE + CLOSE;
+    public static final String HAS_CALENDAR_VIEW = HAS_AUTHORITY_OPEN + CALENDAR_VIEW + CLOSE;
+    public static final String HAS_CALENDAR_MANAGE = HAS_AUTHORITY_OPEN + CALENDAR_MANAGE + CLOSE;
+    public static final String HAS_TIMETABLE_VIEW =HAS_AUTHORITY_OPEN + TIMETABLE_VIEW + CLOSE;
+    public static final String HAS_TIMETABLE_MANAGE = HAS_AUTHORITY_OPEN + TIMETABLE_MANAGE + CLOSE;
+    public static final String HAS_SUBJECT_MANAGE = HAS_AUTHORITY_OPEN + SUBJECT_MANAGE + CLOSE;
+    public static final String HAS_INVENTORY_VIEW =HAS_AUTHORITY_OPEN + INVENTORY_VIEW + CLOSE;
+    public static final String HAS_INVENTORY_ISSUE = HAS_AUTHORITY_OPEN + INVENTORY_ISSUE + CLOSE;
+    public static final String HAS_INVENTORY_MANAGE = HAS_AUTHORITY_OPEN + INVENTORY_MANAGE + CLOSE;
+    public static final String HAS_LEAVE_APPROVE = HAS_AUTHORITY_OPEN + LEAVE_APPROVE + CLOSE;
+    public static final String HAS_PAYROLL_VIEW = HAS_AUTHORITY_OPEN + PAYROLL_VIEW + CLOSE;
+    public static final String HAS_PAYROLL_CREATE = HAS_AUTHORITY_OPEN + PAYROLL_CREATE + CLOSE;
+    public static final String HAS_PAYROLL_APPROVE = HAS_AUTHORITY_OPEN + PAYROLL_APPROVE + CLOSE;
+    public static final String HAS_STAFF_ATTENDANCE_VIEW = HAS_AUTHORITY_OPEN + STAFF_ATTENDANCE_VIEW + CLOSE;
+    public static final String HAS_STAFF_ATTENDANCE_EDIT = HAS_AUTHORITY_OPEN + STAFF_ATTENDANCE_EDIT + CLOSE;
+
+    public static final String HAS_EXPENSE_VIEW = HAS_AUTHORITY_OPEN + EXPENSE_VIEW + CLOSE;
+    public static final String HAS_EXPENSE_CREATE = HAS_AUTHORITY_OPEN + EXPENSE_CREATE + CLOSE;
+    public static final String HAS_EXPENSE_EDIT = HAS_AUTHORITY_OPEN + EXPENSE_EDIT + CLOSE;
+    public static final String HAS_EXPENSE_DELETE = HAS_AUTHORITY_OPEN + EXPENSE_DELETE + CLOSE;
+
+    public static final String HAS_FRONT_OFFICE_SETUP = HAS_AUTHORITY_OPEN + FRONT_OFFICE_SETUP + CLOSE;
 
     private Permissions() {
     }
