@@ -57,6 +57,10 @@ public class FeeService {
     private final RazorpayProperties razorpayProperties;
     private final FeePaymentRecorder paymentRecorder;
     private final AuditService auditService;
+    private final com.smsapp.academics.MediumRepository mediumRepository;
+    private final FeeDiscountRepository feeDiscountRepository;
+    private final FeeAdjustmentRepository feeAdjustmentRepository;
+    private final FeeLineService feeLineService;
 
     public FeeService(FeeStructureRepository feeStructureRepository,
                       FeeStructureItemRepository feeStructureItemRepository, InvoiceRepository invoiceRepository,
@@ -64,7 +68,13 @@ public class FeeService {
                       StudentRepository studentRepository, FeeTypeRepository feeTypeRepository,
                       FeePaymentRepository feePaymentRepository, RazorpayGateway razorpayGateway,
                       RazorpayProperties razorpayProperties, FeePaymentRecorder paymentRecorder,
-                      AuditService auditService) {
+                      AuditService auditService, com.smsapp.academics.MediumRepository mediumRepository,
+                      FeeDiscountRepository feeDiscountRepository, FeeAdjustmentRepository feeAdjustmentRepository,
+                      FeeLineService feeLineService) {
+        this.feeLineService = feeLineService;
+        this.feeAdjustmentRepository = feeAdjustmentRepository;
+        this.mediumRepository = mediumRepository;
+        this.feeDiscountRepository = feeDiscountRepository;
         this.feeStructureRepository = feeStructureRepository;
         this.feeStructureItemRepository = feeStructureItemRepository;
         this.invoiceRepository = invoiceRepository;
@@ -95,8 +105,153 @@ public class FeeService {
         if (!schoolRepository.existsById(request.schoolId())) {
             throw new ApiException("School not found", HttpStatus.NOT_FOUND);
         }
+        FeeStructure structure = new FeeStructure();
+        structure.setSchoolId(request.schoolId());
+        structure.setStatus(FeeStructureStatus.ACTIVE);
+        FeeStructure saved = saveStructure(structure, request, true);
+
+        auditService.log(AuditActions.FEE_STRUCTURE_CREATED, AuditActions.FEE_STRUCTURE, saved.getId(),
+                Map.of("name", saved.getName(), "amount", saved.getAmount().toPlainString(),
+                        "schoolId", saved.getSchoolId().toString(),
+                        "itemCount", request.items() == null ? 0 : request.items().size()));
+        return saved;
+    }
+
+    /**
+     * Edits a fee structure (Fees Master): name, class, medium, dates, late fee and the full list of fee lines
+     * (replaced). Invoices already raised keep the amount they were raised with.
+     *
+     * @throws ApiException 404 if the structure, class, medium or a fee type doesn't exist; 400 on bad input.
+     */
+    @Transactional
+    public FeeStructure updateFeeStructure(UUID id, CreateFeeStructureRequest request) {
+        return updateFeeStructure(id, request, false, null).structure();
+    }
+
+    /** What {@link #updateFeeStructure(UUID, CreateFeeStructureRequest, boolean, UUID)} changed. */
+    public record UpdateOutcome(FeeStructure structure, int adjustedInvoices, List<String> skipped) {
+    }
+
+    /**
+     * Edits a fee structure. By default only future bills get the new amounts. With {@code applyToExisting}
+     * every unpaid bill already raised for it moves by the same difference (keeping any per-student adjustment),
+     * each change recorded as a STRUCTURE_CHANGE adjustment and audited. Fully paid bills, and bills that would
+     * drop below what was already paid, are left alone and reported in {@code skipped}.
+     */
+    @Transactional
+    public UpdateOutcome updateFeeStructure(UUID id, CreateFeeStructureRequest request, boolean applyToExisting,
+                                           UUID actorUserId) {
+        FeeStructure structure = feeStructureRepository.findById(id)
+                .orElseThrow(() -> new ApiException("Fee structure not found", HttpStatus.NOT_FOUND));
+        BigDecimal oldTotal = structure.getAmount();
+        List<FeeLineService.LineSpec> oldSpecs = feeLineService.specsFor(structure);
+        String before = structure.getName() + " " + oldTotal.toPlainString();
+        FeeStructure saved = saveStructure(structure, request, false);
+        auditService.log(AuditActions.FEE_STRUCTURE_UPDATED, AuditActions.FEE_STRUCTURE, id,
+                Map.of("before", before, "name", saved.getName(), "amount", saved.getAmount().toPlainString(),
+                        "applyToExisting", applyToExisting));
+
+        int adjusted = 0;
+        List<String> skipped = new ArrayList<>();
+        BigDecimal delta = saved.getAmount().subtract(oldTotal);
+        if (applyToExisting && delta.signum() != 0) {
+            for (Invoice invoice : invoiceRepository.findByFeeStructureId(id)) {
+                String who = studentRepository.findById(invoice.getStudentId())
+                        .map(s -> s.getFullName() + " (" + s.getAdmissionNumber() + ")").orElse("A student");
+                if (InvoiceStatus.PAID.equals(invoice.getStatus())) {
+                    skipped.add(who + ": already paid in full");
+                    continue;
+                }
+                BigDecimal oldAmount = invoice.getAmount();
+                FeeLineService.LineChange change = feeLineService.planStructureChange(invoice, oldSpecs,
+                        feeLineService.specsFor(saved));
+                if (change == null) {
+                    skipped.add(who + ": has already paid more than a changed fee");
+                    continue;
+                }
+                BigDecimal newAmount = change.newTotal();
+                BigDecimal discount = invoice.getDiscountAmount();
+                if (invoice.getDiscountId() != null) {
+                    FeeDiscount d = feeDiscountRepository.findById(invoice.getDiscountId()).orElse(null);
+                    if (d != null) {
+                        discount = FeeCollectionService.computeDiscountAmount(d, newAmount);
+                    }
+                }
+                discount = discount.min(newAmount);
+                BigDecimal newNet = newAmount.subtract(discount).add(invoice.getLateFeeAmount());
+                if (newNet.compareTo(invoice.getPaidAmount()) < 0) {
+                    skipped.add(who + ": has already paid more than the new amount");
+                    continue;
+                }
+                invoice.setAmount(newAmount);
+                invoice.setDiscountAmount(discount);
+                invoice.setNetAmount(newNet);
+                InvoiceStatusCalculator.apply(invoice);
+                invoiceRepository.save(invoice);
+                feeLineService.applyStructureChange(invoice, change);
+                if (!feeLineService.linesCoverPayments(invoice)) {
+                    throw new ApiException("Changing the fees would leave a fee paid beyond its new amount for " + who
+                            + " -- nothing was saved", HttpStatus.CONFLICT);
+                }
+                recordAdjustment(invoice.getId(), FeeAdjustment.STRUCTURE_CHANGE, oldAmount, newAmount,
+                        "Fees Master change to \"" + saved.getName() + "\"", actorUserId);
+                adjusted++;
+            }
+        }
+        return new UpdateOutcome(saved, adjusted, skipped);
+    }
+
+    private void recordAdjustment(UUID invoiceId, String kind, BigDecimal oldAmount, BigDecimal newAmount,
+                                  String reason, UUID actorUserId) {
+        FeeAdjustment adjustment = new FeeAdjustment();
+        adjustment.setInvoiceId(invoiceId);
+        adjustment.setKind(kind);
+        adjustment.setOldAmount(oldAmount);
+        adjustment.setNewAmount(newAmount);
+        adjustment.setReason(reason.length() > 500 ? reason.substring(0, 500) : reason);
+        adjustment.setCreatedBy(actorUserId);
+        feeAdjustmentRepository.save(adjustment);
+        auditService.log(AuditActions.FEE_ADJUSTED, AuditActions.INVOICE, invoiceId,
+                Map.of("kind", kind, "from", oldAmount.toPlainString(), "to", newAmount.toPlainString(),
+                        "reason", adjustment.getReason()));
+    }
+
+    /** How many students have been billed for a structure (Fees Master shows it; admission warns on edits). */
+    @Transactional(readOnly = true)
+    public long billedCount(UUID feeStructureId) {
+        return invoiceRepository.countByFeeStructureId(feeStructureId);
+    }
+
+    /**
+     * Deletes a fee structure nobody has been billed for.
+     *
+     * @throws ApiException 404 if missing; 409 if invoices or discounts still reference it.
+     */
+    @Transactional
+    public void deleteFeeStructure(UUID id) {
+        FeeStructure structure = feeStructureRepository.findById(id)
+                .orElseThrow(() -> new ApiException("Fee structure not found", HttpStatus.NOT_FOUND));
+        if (invoiceRepository.existsByFeeStructureId(id)) {
+            throw new ApiException("Students have already been billed for \"" + structure.getName()
+                    + "\" -- set it inactive instead of deleting it", HttpStatus.CONFLICT);
+        }
+        if (feeDiscountRepository.existsByFeeStructureId(id)) {
+            throw new ApiException("A discount is linked to \"" + structure.getName()
+                    + "\" -- remove that discount first", HttpStatus.CONFLICT);
+        }
+        feeStructureItemRepository.deleteAll(feeStructureItemRepository.findByFeeStructureIdOrderBySequenceOrder(id));
+        feeStructureRepository.delete(structure);
+        auditService.log(AuditActions.FEE_STRUCTURE_DELETED, AuditActions.FEE_STRUCTURE, id,
+                Map.of("name", structure.getName()));
+    }
+
+    /** Validates the request and writes it onto {@code structure}, replacing its fee lines. */
+    private FeeStructure saveStructure(FeeStructure structure, CreateFeeStructureRequest request, boolean isNew) {
         if (request.classId() != null && !classRepository.existsById(request.classId())) {
             throw new ApiException("Class not found", HttpStatus.NOT_FOUND);
+        }
+        if (request.mediumId() != null && !mediumRepository.existsById(request.mediumId())) {
+            throw new ApiException("Medium not found", HttpStatus.NOT_FOUND);
         }
         String frequency = request.frequency() == null || request.frequency().isBlank()
                 ? FeeFrequency.ONE_TIME : request.frequency();
@@ -125,18 +280,23 @@ public class FeeService {
             totalAmount = request.amount();
         }
 
-        FeeStructure structure = new FeeStructure();
-        structure.setSchoolId(request.schoolId());
         structure.setClassId(request.classId());
+        structure.setMediumId(request.mediumId());
         structure.setAcademicYear(request.academicYear().trim());
         structure.setName(request.name().trim());
         structure.setAmount(totalAmount);
         structure.setDueDate(request.dueDate());
         structure.setFrequency(frequency);
         structure.setLateFeeAmount(request.lateFeeAmount());
-        structure.setStatus(FeeStructureStatus.ACTIVE);
         FeeStructure saved = feeStructureRepository.save(structure);
 
+        if (!isNew) {
+            List<FeeStructureItem> old = feeStructureItemRepository.findByFeeStructureIdOrderBySequenceOrder(saved.getId());
+            if (!old.isEmpty()) {
+                feeStructureItemRepository.deleteAll(old);
+                feeStructureItemRepository.flush();
+            }
+        }
         if (hasItems) {
             int sequence = 0;
             List<FeeStructureItem> items = new ArrayList<>();
@@ -147,16 +307,12 @@ public class FeeService {
                 entity.setLabel(blankToNull(item.label()));
                 entity.setFeeTypeId(item.feeTypeId());
                 entity.setAmount(item.amount());
+                entity.setDueDate(item.dueDate());
                 entity.setSequenceOrder(sequence++);
                 items.add(entity);
             }
             feeStructureItemRepository.saveAll(items);
         }
-
-        auditService.log(AuditActions.FEE_STRUCTURE_CREATED, AuditActions.FEE_STRUCTURE, saved.getId(),
-                Map.of("name", saved.getName(), "amount", saved.getAmount().toPlainString(),
-                        "schoolId", saved.getSchoolId().toString(),
-                        "itemCount", hasItems ? request.items().size() : 0));
         return saved;
     }
 
@@ -164,6 +320,13 @@ public class FeeService {
     @Transactional(readOnly = true)
     public List<FeeStructure> listFeeStructures(UUID classId, String academicYear) {
         return feeStructureRepository.search(classId, academicYear);
+    }
+
+    /** As {@link #listFeeStructures}, narrowed to one medium (structures for it or for every medium). */
+    @Transactional(readOnly = true)
+    public List<FeeStructure> listFeeStructures(UUID classId, String academicYear, UUID mediumId) {
+        return mediumId == null ? feeStructureRepository.search(classId, academicYear)
+                : feeStructureRepository.searchForMedium(classId, academicYear, mediumId);
     }
 
     /**
@@ -228,19 +391,43 @@ public class FeeService {
             throw new ApiException("This student already has an invoice for this fee structure", HttpStatus.CONFLICT);
         }
 
+        List<FeeLineService.LineSpec> specs;
+        if (request.lines() != null && !request.lines().isEmpty()) {
+            specs = request.lines().stream().map(l -> new FeeLineService.LineSpec(l.label().trim(), l.feeTypeId(),
+                    l.category() == null || l.category().isBlank() ? FeeStructureItemCategory.OTHER : l.category(),
+                    l.dueDate(), l.amount())).toList();
+        } else if (request.amount() != null && request.amount().compareTo(structure.getAmount()) != 0) {
+            specs = List.of(new FeeLineService.LineSpec(structure.getName(), null, FeeStructureItemCategory.OTHER,
+                    structure.getDueDate(), request.amount()));
+        } else {
+            specs = feeLineService.specsFor(structure);
+        }
+        if (specs == null || specs.isEmpty()) {
+            specs = List.of(new FeeLineService.LineSpec(structure.getName(), null, FeeStructureItemCategory.OTHER,
+                    structure.getDueDate(), structure.getAmount()));
+        }
+        BigDecimal amount = specs.stream().map(FeeLineService.LineSpec::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         Invoice invoice = new Invoice();
         invoice.setStudentId(request.studentId());
         invoice.setFeeStructureId(structure.getId());
-        invoice.setAmount(structure.getAmount());
-        invoice.setNetAmount(structure.getAmount());
+        invoice.setAmount(amount);
+        invoice.setNetAmount(amount);
         invoice.setStatus(InvoiceStatus.PENDING);
         invoice.setAssignedByUserId(assignedByUserId);
+        InvoiceStatusCalculator.apply(invoice);
         Invoice saved = invoiceRepository.save(invoice);
+        feeLineService.createLines(saved, specs);
 
         auditService.log(AuditActions.INVOICE_CREATED, AuditActions.INVOICE, saved.getId(),
                 Map.of("studentId", saved.getStudentId().toString(),
                         "feeStructureId", saved.getFeeStructureId().toString(),
                         "amount", saved.getAmount().toPlainString()));
+        if (amount.compareTo(structure.getAmount()) != 0) {
+            recordAdjustment(saved.getId(), FeeAdjustment.ADMISSION_ADJUSTMENT, structure.getAmount(), amount,
+                    request.adjustmentReason() == null || request.adjustmentReason().isBlank()
+                            ? "Adjusted at admission" : request.adjustmentReason().trim(),
+                    assignedByUserId);
+        }
         return saved;
     }
 

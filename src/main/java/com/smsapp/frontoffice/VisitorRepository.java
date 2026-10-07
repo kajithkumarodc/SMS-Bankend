@@ -1,0 +1,10 @@
+package com.smsapp.frontoffice;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+
+import java.util.UUID;
+
+/** {@link JpaSpecificationExecutor} for the list's optional search/date filters, same as {@link AdmissionEnquiryRepository}. */
+public interface VisitorRepository extends JpaRepository<Visitor, UUID>, JpaSpecificationExecutor<Visitor> {
+}

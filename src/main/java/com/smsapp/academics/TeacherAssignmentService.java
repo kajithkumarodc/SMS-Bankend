@@ -88,7 +88,8 @@ public class TeacherAssignmentService {
         Map<UUID, List<SectionInfo>> sectionsByClass = new HashMap<>();
         sectionRepository.findByClassIdIn(classIds).forEach(section ->
                 sectionsByClass.computeIfAbsent(section.getClassId(), k -> new java.util.ArrayList<>())
-                        .add(new SectionInfo(section.getId(), section.getName())));
+                        .add(new SectionInfo(section.getId(),
+                                section.isDefaultSection() ? "Whole class" : section.getName())));
 
         return links.stream()
                 .map(link -> new AssignmentView(

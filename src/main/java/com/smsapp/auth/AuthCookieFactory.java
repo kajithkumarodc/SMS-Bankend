@@ -23,6 +23,11 @@ public class AuthCookieFactory {
         return base(token, Duration.ofSeconds(properties.maxAgeSeconds())).build();
     }
 
+    /** A cookie for a re-issued token that must not outlive the original session. */
+    public ResponseCookie create(String token, Duration maxAge) {
+        return base(token, maxAge).build();
+    }
+
     public ResponseCookie clear() {
         return base("", Duration.ZERO).build();
     }

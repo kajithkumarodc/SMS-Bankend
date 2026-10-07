@@ -285,6 +285,31 @@ class StudentAdmissionIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
+    @Test
+    void keywordSearchFindsIdentificationNumbersAndLookupReturnsThemInBulk() throws Exception {
+        Cookie admin = login(ADMIN);
+        UUID withId = createStudent(admin, "Local", "Kid", "ADM-ID-2");
+        UUID other = createStudent(admin, "Other", "Kid", "ADM-ID-3");
+        mockMvc.perform(post("/api/v1/students/" + withId + "/identifications").cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idType\":\"LOCAL_ID\",\"idValue\":\"LOC-778899\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/students").param("q", "loc-7788").cookie(admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(withId.toString()));
+
+        mockMvc.perform(post("/api/v1/students/identifications/lookup").cookie(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"studentIds\":[\"" + withId + "\",\"" + other + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].studentId").value(withId.toString()))
+                .andExpect(jsonPath("$[0].idType").value("LOCAL_ID"))
+                .andExpect(jsonPath("$[0].idValue").value("LOC-778899"));
+    }
+
     // --- Documents ----------------------------------------------------
 
     @Test

@@ -1,6 +1,9 @@
 package com.smsapp.attendance;
 
 import com.smsapp.attendance.AttendanceDtos.AttendanceResponse;
+import com.smsapp.attendance.AttendanceDtos.BulkRequest;
+import com.smsapp.attendance.AttendanceDtos.BulkResponse;
+import com.smsapp.attendance.AttendanceDtos.RosterRow;
 import com.smsapp.attendance.AttendanceDtos.MarkAttendanceRequest;
 import com.smsapp.attendance.AttendanceService.MarkResult;
 import com.smsapp.user.Roles;
@@ -18,6 +21,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -87,5 +91,20 @@ public class AttendanceController {
 
     private static UUID userId(Authentication authentication) {
         return UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
+    }
+
+    /** The active students of a section with the mark saved for {@code date} -- the Student Attendance page. */
+    @GetMapping("/roster")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
+    List<RosterRow> roster(@RequestParam UUID sectionId,
+                           @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return attendanceService.roster(sectionId, date);
+    }
+
+    /** Saves a section's marks for one day (Save Attendance); students already marked that day are updated. */
+    @PutMapping("/bulk")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN_OR_TEACHER)
+    BulkResponse saveBulk(@Valid @RequestBody BulkRequest request, Authentication authentication) {
+        return new BulkResponse(attendanceService.saveBulk(userId(authentication), request));
     }
 }

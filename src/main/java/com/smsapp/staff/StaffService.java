@@ -223,6 +223,7 @@ public class StaffService {
         leaveRequest.setEndDate(request.endDate());
         leaveRequest.setStatus(LeaveRequestStatus.PENDING);
         leaveRequest.setReason(blankToNull(request.reason()));
+        leaveRequest.setDays(java.math.BigDecimal.valueOf(java.time.temporal.ChronoUnit.DAYS.between(request.startDate(), request.endDate()) + 1));
         LeaveRequest saved = leaveRequestRepository.save(leaveRequest);
 
         auditService.log(AuditActions.LEAVE_REQUEST_CREATED, AuditActions.LEAVE_REQUEST, saved.getId(),

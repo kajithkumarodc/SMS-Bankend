@@ -49,15 +49,14 @@ class SchoolDirectoryIntegrationTest {
                 System.getProperty("DB_PASSWORD", "1234"));
              Statement st = connection.createStatement()) {
             st.execute("TRUNCATE schools, users, roles, permissions, user_roles, students CASCADE");
-            st.execute("INSERT INTO schools (id, name) VALUES ('" + UUID.randomUUID() + "', 'Main Campus')");
-            st.execute("INSERT INTO schools (id, name) VALUES ('" + UUID.randomUUID() + "', 'West Campus')");
+            st.execute("INSERT INTO schools (id, name) VALUES ('" + UUID.randomUUID() + "', 'AKA Higher Secondary School')");
             st.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES ('" + UUID.randomUUID()
                     + "', 'admin@dir-a.example', '" + passwordEncoder.encode("secret") + "', 'Admin A')");
         }
     }
 
     @Test
-    void listsSchoolsOrderedByName() throws Exception {
+    void listsTheSchool() throws Exception {
         Cookie session = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"admin@dir-a.example\",\"password\":\"secret\"}"))
@@ -66,13 +65,26 @@ class SchoolDirectoryIntegrationTest {
 
         mockMvc.perform(get("/api/v1/schools").cookie(session))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].name").value("Main Campus"))
-                .andExpect(jsonPath("$[1].name").value("West Campus"));
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("AKA Higher Secondary School"));
     }
 
     @Test
     void requiresAuthentication() throws Exception {
         mockMvc.perform(get("/api/v1/schools")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void theDatabaseAllowsOnlyOneSchool() throws Exception {
+        try (var connection = java.sql.DriverManager.getConnection(
+                System.getProperty("DB_URL", "jdbc:postgresql://localhost:5433/sms_db_test"),
+                System.getProperty("DB_USERNAME", "postgres"),
+                System.getProperty("DB_PASSWORD", "1234"));
+             var st = connection.createStatement()) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> st.execute(
+                            "INSERT INTO schools (id, name) VALUES (gen_random_uuid(), 'Second School')"))
+                    .isInstanceOf(java.sql.SQLException.class)
+                    .hasMessageContaining("schools_single_school_idx");
+        }
     }
 }

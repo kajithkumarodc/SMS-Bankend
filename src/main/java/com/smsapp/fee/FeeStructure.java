@@ -29,6 +29,10 @@ public class FeeStructure extends UuidEntity {
     @Column(name = "class_id")
     private UUID classId;
 
+    /** Medium of instruction these fees are for (V40); null = every medium. */
+    @Column(name = "medium_id")
+    private UUID mediumId;
+
     /** E.g. "2026-2027". Null for structures created before this field existed. */
     @Column(name = "academic_year", length = 20)
     private String academicYear;

@@ -33,11 +33,14 @@ public class StudentService {
     private final SectionRepository sectionRepository;
     private final AcademicHistoryService academicHistoryService;
     private final AuditService auditService;
+    private final com.smsapp.academics.MediumRepository mediumRepository;
     private final SchoolClock clock;
 
     public StudentService(StudentRepository studentRepository, SchoolRepository schoolRepository,
                           SectionRepository sectionRepository, AcademicHistoryService academicHistoryService,
-                          AuditService auditService, SchoolClock clock) {
+                          AuditService auditService, com.smsapp.academics.MediumRepository mediumRepository,
+                          SchoolClock clock) {
+        this.mediumRepository = mediumRepository;
         this.studentRepository = studentRepository;
         this.schoolRepository = schoolRepository;
         this.sectionRepository = sectionRepository;
@@ -74,7 +77,7 @@ public class StudentService {
         // --- personal information ---
         student.setFirstName(request.firstName().trim());
         student.setMiddleName(blankToNull(request.middleName()));
-        student.setLastName(request.lastName().trim());
+        student.setLastName(request.lastName() == null ? "" : request.lastName().trim());
         student.setFullName(combineFullName(student.getFirstName(), student.getMiddleName(), student.getLastName()));
         student.setGender(request.gender());
         student.setDateOfBirth(request.dateOfBirth());
@@ -141,6 +144,7 @@ public class StudentService {
         student.setEmailNotificationsEnabled(
                 request.emailNotificationsEnabled() == null || request.emailNotificationsEnabled());
         student.setPreferredLanguage(request.preferredLanguage() != null ? request.preferredLanguage() : "ENGLISH");
+        applyExtra(student, request.extra());
 
         Student saved;
         try {
@@ -180,7 +184,14 @@ public class StudentService {
             List<Predicate> predicates = new ArrayList<>();
             if (q != null && !q.isBlank()) {
                 String like = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
+                // National ID, local ID etc. live in student_identifications.
+                var identification = query.subquery(UUID.class);
+                var ids = identification.from(StudentIdentification.class);
+                identification.select(ids.get("studentId")).where(
+                        cb.equal(ids.get("studentId"), root.get("id")),
+                        cb.like(cb.lower(ids.get("idValue")), like));
                 predicates.add(cb.or(
+                        cb.exists(identification),
                         cb.like(cb.lower(root.get("fullName")), like),
                         cb.like(cb.lower(root.get("admissionNumber")), like),
                         cb.like(cb.lower(cb.coalesce(root.get("rollNumber"), "")), like),
@@ -333,7 +344,7 @@ public class StudentService {
 
         student.setFirstName(request.firstName().trim());
         student.setMiddleName(blankToNull(request.middleName()));
-        student.setLastName(request.lastName().trim());
+        student.setLastName(request.lastName() == null ? "" : request.lastName().trim());
         student.setFullName(combineFullName(student.getFirstName(), student.getMiddleName(), student.getLastName()));
         student.setGender(request.gender());
         if (request.dateOfBirth() != null) {
@@ -407,6 +418,9 @@ public class StudentService {
             student.setPreferredLanguage(request.preferredLanguage());
         }
         student.setStatus(requireValidStatus(request.status()));
+        if (request.extra() != null) {
+            applyExtra(student, request.extra());
+        }
 
         Student saved = studentRepository.save(student);
 
@@ -468,6 +482,29 @@ public class StudentService {
         auditService.log(AuditActions.STUDENT_GUARDIAN_LINKED, AuditActions.STUDENT, studentId,
                 Map.of("guardianUserId", guardianUserId.toString()));
         return saved;
+    }
+
+    /** Copies the V40 admission-form extras onto the student (blank text becomes null). */
+    private void applyExtra(Student student, StudentDtos.ExtraDetails extra) {
+        if (extra == null) {
+            return;
+        }
+        if (extra.mediumId() != null && !mediumRepository.existsById(extra.mediumId())) {
+            throw new ApiException("Medium not found", HttpStatus.NOT_FOUND);
+        }
+        student.setMediumId(extra.mediumId());
+        student.setCaste(blankToNull(extra.caste()));
+        student.setMobileNumber(blankToNull(extra.mobileNumber()));
+        student.setEmail(blankToNull(extra.email()));
+        student.setHeight(blankToNull(extra.height()));
+        student.setWeight(blankToNull(extra.weight()));
+        student.setMeasurementDate(extra.measurementDate());
+        student.setMedicalHistory(blankToNull(extra.medicalHistory()));
+        student.setGuardianAddress(blankToNull(extra.guardianAddress()));
+        student.setBankAccountNumber(blankToNull(extra.bankAccountNumber()));
+        student.setBankName(blankToNull(extra.bankName()));
+        student.setIfscCode(blankToNull(extra.ifscCode()));
+        student.setNote(blankToNull(extra.note()));
     }
 
     private Student requireStudent(UUID id) {

@@ -21,6 +21,8 @@ public interface StudentRepository extends JpaRepository<Student, UUID>, JpaSpec
 
     Page<Student> findBySectionId(UUID sectionId, Pageable pageable);
 
+    java.util.List<Student> findBySectionIdAndStatusOrderByFullName(UUID sectionId, String status);
+
     /** Transport: all students assigned to one route. */
     List<Student> findByTransportRouteIdOrderByFullName(UUID transportRouteId);
 

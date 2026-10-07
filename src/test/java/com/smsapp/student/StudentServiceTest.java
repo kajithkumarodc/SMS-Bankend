@@ -52,7 +52,8 @@ class StudentServiceTest {
 
     private StudentService service() {
         return new StudentService(studentRepository, schoolRepository, sectionRepository, academicHistoryService,
-                auditService, CLOCK);
+                auditService, org.mockito.Mockito.mock(com.smsapp.academics.MediumRepository.class),
+                CLOCK);
     }
 
     /** Minimal create request: schoolId/firstName/lastName/dateOfBirth/admissionNumber, everything else null. */
@@ -76,7 +77,8 @@ class StudentServiceTest {
                 // familyId (1)
                 null,
                 // comm prefs (4)
-                null, null, null, null);
+                null, null, null, null,
+                null);
     }
 
     private UpdateStudentRequest updateRequest(String firstName, String lastName, String guardianName, String status) {
@@ -100,7 +102,7 @@ class StudentServiceTest {
                 // comm prefs (4)
                 null, null, null, null,
                 // status (1)
-                status);
+                status, null);
     }
 
     @Test

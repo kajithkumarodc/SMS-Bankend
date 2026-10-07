@@ -15,9 +15,12 @@ public final class PaymentMethod {
     public static final String CHEQUE = "CHEQUE";
     public static final String ONLINE = "ONLINE";
     public static final String OTHER = "OTHER";
+    public static final String DD = "DD";
+    public static final String UPI = "UPI";
+    public static final String CARD = "CARD";
 
     /** Methods a staff member may choose when manually collecting a payment -- excludes ONLINE. */
-    private static final Set<String> MANUAL = Set.of(CASH, BANK_TRANSFER, CHEQUE, OTHER);
+    private static final Set<String> MANUAL = Set.of(CASH, BANK_TRANSFER, CHEQUE, DD, UPI, CARD, OTHER);
 
     private PaymentMethod() {
     }

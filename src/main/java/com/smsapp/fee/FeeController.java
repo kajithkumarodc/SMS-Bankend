@@ -4,6 +4,7 @@ import com.smsapp.fee.FeeDtos.CheckoutResponse;
 import com.smsapp.fee.FeeDtos.CreateFeeStructureRequest;
 import com.smsapp.fee.FeeDtos.CreateInvoiceRequest;
 import com.smsapp.fee.FeeDtos.FeeStructureResponse;
+import com.smsapp.fee.FeeDtos.UpdateFeeStructureResponse;
 import com.smsapp.fee.FeeDtos.InvoiceResponse;
 import com.smsapp.user.Roles;
 import jakarta.validation.Valid;
@@ -13,6 +14,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -53,6 +56,29 @@ public class FeeController {
                 .body(FeeStructureResponse.from(created, feeService.itemResponsesFor(created)));
     }
 
+    /** Edit a fee structure and replace its fee lines (Fees Master). SCHOOL_ADMIN only. */
+    @PutMapping("/fee-structures/{id}")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    public UpdateFeeStructureResponse updateFeeStructure(@PathVariable UUID id,
+                                                         @Valid @RequestBody CreateFeeStructureRequest request,
+                                                         @RequestParam(defaultValue = "false") boolean applyToExisting,
+                                                         Authentication authentication) {
+        FeeService.UpdateOutcome outcome =
+                feeService.updateFeeStructure(id, request, applyToExisting, actorId(authentication));
+        FeeStructure updated = outcome.structure();
+        return new UpdateFeeStructureResponse(
+                FeeStructureResponse.from(updated, feeService.itemResponsesFor(updated), feeService.billedCount(id)),
+                outcome.adjustedInvoices(), outcome.skipped());
+    }
+
+    /** Delete a fee structure nobody has been billed for. SCHOOL_ADMIN only; 409 once invoiced. */
+    @DeleteMapping("/fee-structures/{id}")
+    @PreAuthorize(Roles.HAS_SCHOOL_ADMIN)
+    public ResponseEntity<Void> deleteFeeStructure(@PathVariable UUID id) {
+        feeService.deleteFeeStructure(id);
+        return ResponseEntity.noContent().build();
+    }
+
     /**
      * Fee structures (most recent first), each with its computed total and line-item
      * breakdown. Optionally filtered to one class (matches structures specific to
@@ -61,9 +87,11 @@ public class FeeController {
     @GetMapping("/fee-structures")
     List<FeeStructureResponse> listFeeStructures(
             @RequestParam(required = false) UUID classId,
-            @RequestParam(required = false) String academicYear) {
-        return feeService.listFeeStructures(classId, academicYear).stream()
-                .map(structure -> FeeStructureResponse.from(structure, feeService.itemResponsesFor(structure)))
+            @RequestParam(required = false) String academicYear,
+            @RequestParam(required = false) UUID mediumId) {
+        return feeService.listFeeStructures(classId, academicYear, mediumId).stream()
+                .map(structure -> FeeStructureResponse.from(structure, feeService.itemResponsesFor(structure),
+                        feeService.billedCount(structure.getId())))
                 .toList();
     }
 

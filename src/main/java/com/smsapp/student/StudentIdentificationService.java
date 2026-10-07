@@ -50,6 +50,21 @@ public class StudentIdentificationService {
     }
 
     /** @throws ApiException 404 if no such identification for this student. */
+    /** Identifications of many students at once (Student Details "Details View"), oldest first. */
+    @Transactional(readOnly = true)
+    public List<StudentIdentification> listForStudents(java.util.Collection<UUID> studentIds) {
+        if (studentIds.isEmpty()) {
+            return List.of();
+        }
+        if (studentIds.size() > MAX_LOOKUP) {
+            throw new com.smsapp.common.ApiException("Look up at most " + MAX_LOOKUP + " students at a time",
+                    org.springframework.http.HttpStatus.BAD_REQUEST);
+        }
+        return identificationRepository.findByStudentIdInOrderByCreatedAtAsc(studentIds);
+    }
+
+    static final int MAX_LOOKUP = 2000;
+
     @Transactional
     public void remove(UUID studentId, UUID identificationId) {
         StudentIdentification identification = identificationRepository.findById(identificationId)

@@ -137,7 +137,7 @@ class ClassServiceTest {
     void listWithSectionsNestsSectionsUnderTheirClass() {
         UUID class5 = UUID.randomUUID();
         UUID class6 = UUID.randomUUID();
-        when(classRepository.findAllByOrderByName())
+        when(classRepository.findAllByOrderBySortOrderAscNameAsc())
                 .thenReturn(List.of(schoolClass(class5, GRADE_5), schoolClass(class6, "Grade 6")));
         when(sectionRepository.findAllByOrderByName()).thenReturn(List.of(
                 section(UUID.randomUUID(), class5, "A"),

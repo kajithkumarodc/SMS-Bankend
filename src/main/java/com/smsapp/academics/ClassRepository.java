@@ -7,7 +7,8 @@ import java.util.UUID;
 
 public interface ClassRepository extends JpaRepository<SchoolClass, UUID> {
 
-    List<SchoolClass> findAllByOrderByName();
+    /** Classes in school order: LKG, UKG, Class 1 ... Class 12, then any others by name. */
+    List<SchoolClass> findAllByOrderBySortOrderAscNameAsc();
 
     boolean existsBySchoolIdAndName(UUID schoolId, String name);
 

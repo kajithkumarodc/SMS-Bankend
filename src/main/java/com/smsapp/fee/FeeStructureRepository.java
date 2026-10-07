@@ -22,4 +22,13 @@ public interface FeeStructureRepository extends JpaRepository<FeeStructure, UUID
             + "(:academicYear IS NULL OR f.academicYear = :academicYear) "
             + "ORDER BY f.createdAt DESC")
     List<FeeStructure> search(@Param("classId") UUID classId, @Param("academicYear") String academicYear);
+
+    /** Like {@link #search} but also by medium: structures for that medium or for every medium. */
+    @Query("SELECT f FROM FeeStructure f WHERE "
+            + "(:classId IS NULL OR f.classId = :classId OR f.classId IS NULL) AND "
+            + "(:academicYear IS NULL OR f.academicYear = :academicYear) AND "
+            + "(f.mediumId = :mediumId OR f.mediumId IS NULL) "
+            + "ORDER BY f.createdAt DESC")
+    List<FeeStructure> searchForMedium(@Param("classId") UUID classId, @Param("academicYear") String academicYear,
+                                       @Param("mediumId") UUID mediumId);
 }

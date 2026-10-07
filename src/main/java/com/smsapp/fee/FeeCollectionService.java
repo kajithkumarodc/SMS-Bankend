@@ -57,13 +57,15 @@ public class FeeCollectionService {
     private final FeePaymentRecorder paymentRecorder;
     private final AuditService auditService;
     private final SchoolClock clock;
+    private final FeeLineService feeLineService;
 
     public FeeCollectionService(InvoiceRepository invoiceRepository, FeeStructureRepository feeStructureRepository,
                                 FeeDiscountRepository feeDiscountRepository, FeePaymentRepository feePaymentRepository,
                                 StudentRepository studentRepository, SchoolRepository schoolRepository,
                                 ClassRepository classRepository, SectionRepository sectionRepository,
                                 UserRepository userRepository, FeePaymentRecorder paymentRecorder,
-                                AuditService auditService, SchoolClock clock) {
+                                AuditService auditService, FeeLineService feeLineService, SchoolClock clock) {
+        this.feeLineService = feeLineService;
         this.invoiceRepository = invoiceRepository;
         this.feeStructureRepository = feeStructureRepository;
         this.feeDiscountRepository = feeDiscountRepository;
@@ -122,6 +124,8 @@ public class FeeCollectionService {
             results.add(new BulkAssignResult(studentId, true, null));
         }
         invoiceRepository.saveAll(toSave);
+        List<FeeLineService.LineSpec> specs = feeLineService.specsFor(structure);
+        toSave.forEach(invoice -> feeLineService.createLines(invoice, specs));
 
         auditService.log(AuditActions.INVOICES_BULK_ASSIGNED, AuditActions.FEE_STRUCTURE, structure.getId(),
                 Map.of("assignedCount", toSave.size(), "requestedCount", studentIds.size()));
@@ -198,13 +202,14 @@ public class FeeCollectionService {
         invoice.setNetAmount(invoice.getAmount().subtract(discountAmount).add(invoice.getLateFeeAmount()));
         InvoiceStatusCalculator.apply(invoice);
         Invoice saved = invoiceRepository.save(invoice);
+        feeLineService.distributeDiscount(saved);
 
         auditService.log(AuditActions.FEE_DISCOUNT_APPLIED, AuditActions.INVOICE, invoice.getId(),
                 Map.of("discountId", discount.getId().toString(), "discountAmount", discountAmount.toPlainString()));
         return saved;
     }
 
-    private static BigDecimal computeDiscountAmount(FeeDiscount discount, BigDecimal grossAmount) {
+    static BigDecimal computeDiscountAmount(FeeDiscount discount, BigDecimal grossAmount) {
         BigDecimal raw = FeeDiscountType.PERCENTAGE.equals(discount.getDiscountType())
                 ? grossAmount.multiply(discount.getValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
                 : discount.getValue();
@@ -312,6 +317,12 @@ public class FeeCollectionService {
         reversal.setReason(reason);
         FeePayment savedReversal = feePaymentRepository.save(reversal);
 
+        // A fine collected with the payment goes away with it.
+        BigDecimal fine = feeLineService.fineOf(original.getId());
+        if (fine != null && fine.signum() > 0) {
+            invoice.setLateFeeAmount(invoice.getLateFeeAmount().subtract(fine).max(BigDecimal.ZERO));
+            invoice.setNetAmount(invoice.getAmount().subtract(invoice.getDiscountAmount()).add(invoice.getLateFeeAmount()));
+        }
         invoice.setPaidAmount(invoice.getPaidAmount().subtract(original.getAmount()).max(BigDecimal.ZERO));
         InvoiceStatusCalculator.apply(invoice);
         invoiceRepository.save(invoice);
@@ -352,7 +363,7 @@ public class FeeCollectionService {
         if (student.getSectionId() != null) {
             Section section = sectionRepository.findById(student.getSectionId()).orElse(null);
             if (section != null) {
-                sectionName = section.getName();
+                sectionName = section.isDefaultSection() ? null : section.getName();
                 className = classRepository.findById(section.getClassId()).map(SchoolClass::getName).orElse(null);
             }
         }

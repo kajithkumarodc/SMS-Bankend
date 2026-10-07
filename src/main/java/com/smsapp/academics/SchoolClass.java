@@ -12,7 +12,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-/** A class / grade (e.g. "Grade 5"). Named {@code SchoolClass} to avoid {@link java.lang.Class}. */
+/** A class (e.g. "Class 5", "LKG"). Named {@code SchoolClass} to avoid {@link java.lang.Class}. */
 @Entity
 @Table(name = "classes")
 @Getter
@@ -25,6 +25,10 @@ public class SchoolClass extends UuidEntity {
 
     @Column(nullable = false, length = 100)
     private String name;
+
+    /** Display order: the standard LKG .. Class 12 are 0-13 (V38); classes added later sort after them. */
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder = 1000;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

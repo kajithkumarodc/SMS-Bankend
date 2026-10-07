@@ -1,19 +1,23 @@
 package com.smsapp.frontoffice;
 
+import com.smsapp.academics.AcademicYear;
+import com.smsapp.academics.AcademicYearRepository;
 import com.smsapp.academics.ClassRepository;
 import com.smsapp.academics.SchoolClass;
 import com.smsapp.audit.AuditActions;
 import com.smsapp.audit.AuditService;
 import com.smsapp.common.ApiException;
 import com.smsapp.common.SchoolClock;
+import com.smsapp.frontoffice.EnquiryDtos.AcademicYearBadge;
 import com.smsapp.frontoffice.EnquiryDtos.AssignableStaffResponse;
-import com.smsapp.frontoffice.EnquiryDtos.CreateEnquiryRequest;
 import com.smsapp.frontoffice.EnquiryDtos.EnquiryConversionResult;
+import com.smsapp.frontoffice.EnquiryDtos.EnquiryGroupCount;
+import com.smsapp.frontoffice.EnquiryDtos.EnquiryNames;
+import com.smsapp.frontoffice.EnquiryDtos.EnquiryRequest;
 import com.smsapp.frontoffice.EnquiryDtos.EnquiryResponse;
 import com.smsapp.frontoffice.EnquiryDtos.EnquirySummaryResponse;
 import com.smsapp.frontoffice.EnquiryDtos.FollowUpResponse;
 import com.smsapp.frontoffice.EnquiryDtos.RecordFollowUpRequest;
-import com.smsapp.frontoffice.EnquiryDtos.UpdateEnquiryRequest;
 import com.smsapp.student.Student;
 import com.smsapp.student.StudentDtos.CreateStudentRequest;
 import com.smsapp.student.StudentDtos.StudentResponse;
@@ -30,10 +34,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -49,48 +59,80 @@ public class EnquiryService {
     private final AdmissionEnquiryRepository enquiryRepository;
     private final EnquiryFollowUpRepository followUpRepository;
     private final EnquirySourceRepository sourceRepository;
+    private final EnquiryReferenceRepository referenceRepository;
     private final ClassRepository classRepository;
+    private final AcademicYearRepository academicYearRepository;
     private final UserRepository userRepository;
     private final StudentService studentService;
     private final AuditService auditService;
     private final SchoolClock clock;
 
     public EnquiryService(AdmissionEnquiryRepository enquiryRepository, EnquiryFollowUpRepository followUpRepository,
-                          EnquirySourceRepository sourceRepository, ClassRepository classRepository,
-                          UserRepository userRepository, StudentService studentService, AuditService auditService, SchoolClock clock) {
+                          EnquirySourceRepository sourceRepository, EnquiryReferenceRepository referenceRepository,
+                          ClassRepository classRepository,
+                          AcademicYearRepository academicYearRepository, UserRepository userRepository,
+                          StudentService studentService, AuditService auditService, SchoolClock clock) {
         this.enquiryRepository = enquiryRepository;
         this.followUpRepository = followUpRepository;
         this.sourceRepository = sourceRepository;
+        this.referenceRepository = referenceRepository;
         this.classRepository = classRepository;
+        this.academicYearRepository = academicYearRepository;
         this.userRepository = userRepository;
         this.studentService = studentService;
         this.auditService = auditService;
         this.clock = clock;
     }
 
-    /** @throws ApiException 404 if {@code classId}/{@code sourceId}/{@code assignedStaffUserId} is given but unknown. */
+    /**
+     * @throws ApiException 404 if a referenced class/source/reference/staff/academic year is unknown,
+     *         400 if the next follow-up date is before the enquiry date.
+     */
     @Transactional
-    public AdmissionEnquiry create(CreateEnquiryRequest request) {
-        requireReferencesExist(request.classId(), request.sourceId(), request.assignedStaffUserId());
+    public AdmissionEnquiry create(EnquiryRequest request) {
+        validate(request);
 
         AdmissionEnquiry enquiry = new AdmissionEnquiry();
         enquiry.setEnquiryNumber(nextEnquiryNumber());
-        enquiry.setApplicantName(request.applicantName().trim());
+        applyForm(enquiry, request);
         enquiry.setGuardianName(blankToNull(request.guardianName()));
-        enquiry.setPhone(blankToNull(request.phone()));
-        enquiry.setEmail(blankToNull(request.email()));
-        enquiry.setClassId(request.classId());
-        enquiry.setEnquiryDate(request.enquiryDate() != null ? request.enquiryDate() : clock.today());
-        enquiry.setSourceId(request.sourceId());
-        enquiry.setAssignedStaffUserId(request.assignedStaffUserId());
-        enquiry.setRemarks(blankToNull(request.remarks()));
         enquiry.setStatus(EnquiryStatus.ACTIVE);
         enquiry.setArchived(false);
+        enquiry.setAcademicYearId(request.academicYearId() != null ? request.academicYearId() : currentAcademicYearId());
 
         AdmissionEnquiry saved = enquiryRepository.save(enquiry);
         auditService.log(AuditActions.ENQUIRY_CREATED, AuditActions.ENQUIRY, saved.getId(),
                 Map.of("enquiryNumber", saved.getEnquiryNumber(), "applicantName", saved.getApplicantName()));
         return saved;
+    }
+
+    private void validate(EnquiryRequest request) {
+        requireReferencesExist(request.classId(), request.sourceId(), request.referenceId(),
+                request.assignedStaffUserId(), request.academicYearId());
+        if (request.nextFollowUpDate().isBefore(request.enquiryDate())) {
+            throw new ApiException("Next follow-up date can't be before the enquiry date", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    /** Copies the fields that appear on the Admission Enquiry form. */
+    private static void applyForm(AdmissionEnquiry enquiry, EnquiryRequest request) {
+        enquiry.setApplicantName(request.applicantName().trim());
+        enquiry.setPhone(request.phone().trim());
+        enquiry.setEmail(blankToNull(request.email()));
+        enquiry.setAddress(blankToNull(request.address()));
+        enquiry.setDescription(blankToNull(request.description()));
+        enquiry.setRemarks(blankToNull(request.remarks()));
+        enquiry.setEnquiryDate(request.enquiryDate());
+        enquiry.setFollowUpDate(request.nextFollowUpDate());
+        enquiry.setAssignedStaffUserId(request.assignedStaffUserId());
+        enquiry.setReferenceId(request.referenceId());
+        enquiry.setSourceId(request.sourceId());
+        enquiry.setClassId(request.classId());
+        enquiry.setNumberOfChildren(request.numberOfChildren() == null ? null : request.numberOfChildren().shortValue());
+    }
+
+    private UUID currentAcademicYearId() {
+        return academicYearRepository.findByCurrentTrue().map(AcademicYear::getId).orElse(null);
     }
 
     /** A real DB sequence (not {@code count(*) + 1}) so concurrent creates never collide. */
@@ -104,21 +146,24 @@ public class EnquiryService {
     }
 
     /**
-     * @throws ApiException 404 if no such enquiry, or if a referenced class/source/staff id is unknown.
+     * Saves the Admission Enquiry form. {@code guardianName}/{@code academicYearId} aren't on the form,
+     * so they're only changed when the request carries them.
+     *
+     * @throws ApiException 404 if no such enquiry or a referenced id is unknown, 400 if the next
+     *         follow-up date is before the enquiry date.
      */
     @Transactional
-    public AdmissionEnquiry update(UUID id, UpdateEnquiryRequest request) {
+    public AdmissionEnquiry update(UUID id, EnquiryRequest request) {
         AdmissionEnquiry enquiry = requireEnquiry(id);
-        requireReferencesExist(request.classId(), request.sourceId(), request.assignedStaffUserId());
+        validate(request);
 
-        enquiry.setApplicantName(request.applicantName().trim());
-        enquiry.setGuardianName(blankToNull(request.guardianName()));
-        enquiry.setPhone(blankToNull(request.phone()));
-        enquiry.setEmail(blankToNull(request.email()));
-        enquiry.setClassId(request.classId());
-        enquiry.setSourceId(request.sourceId());
-        enquiry.setAssignedStaffUserId(request.assignedStaffUserId());
-        enquiry.setRemarks(blankToNull(request.remarks()));
+        applyForm(enquiry, request);
+        if (request.guardianName() != null) {
+            enquiry.setGuardianName(blankToNull(request.guardianName()));
+        }
+        if (request.academicYearId() != null) {
+            enquiry.setAcademicYearId(request.academicYearId());
+        }
         AdmissionEnquiry saved = enquiryRepository.save(enquiry);
 
         auditService.log(AuditActions.ENQUIRY_UPDATED, AuditActions.ENQUIRY, id,
@@ -132,7 +177,7 @@ public class EnquiryService {
         AdmissionEnquiry enquiry = requireEnquiry(id);
         String normalized = EnquiryStatus.normalizeOrNull(status);
         if (normalized == null) {
-            throw new ApiException("Status must be one of ACTIVE, FOLLOW_UP, WON, PASSIVE, LOST, DEAD",
+            throw new ApiException("Status must be one of ACTIVE, PASSIVE, WON, LOST, DEAD",
                     HttpStatus.BAD_REQUEST);
         }
         String previous = enquiry.getStatus();
@@ -174,6 +219,7 @@ public class EnquiryService {
                         cb.like(cb.lower(root.get("applicantName")), like),
                         cb.like(cb.lower(root.get("guardianName")), like),
                         cb.like(cb.lower(root.get("phone")), like),
+                        cb.like(cb.lower(root.get("email")), like),
                         cb.like(cb.lower(root.get("enquiryNumber")), like)));
             }
             if (status != null) {
@@ -220,13 +266,14 @@ public class EnquiryService {
         followUp.setNextFollowUpDate(request.nextFollowUpDate());
         EnquiryFollowUp saved = followUpRepository.save(followUp);
 
-        // Keep the enquiry's denormalized "latest follow-up" cache in sync, and move
-        // a still-open lead into FOLLOW_UP so the pipeline reflects that contact was made.
+        // Keep the enquiry's denormalized last/next follow-up dates in sync. The status is left
+        // alone -- a follow-up is history, not a pipeline move (V31 retired FOLLOW_UP for that reason).
+        // A back-dated follow-up never moves "last follow-up" backwards.
+        if (enquiry.getLastFollowUpDate() == null || !request.followUpDate().isBefore(enquiry.getLastFollowUpDate())) {
+            enquiry.setLastFollowUpDate(request.followUpDate());
+        }
         enquiry.setFollowUpDate(request.nextFollowUpDate());
         enquiry.setFollowUpNotes(blankToNull(request.notes()));
-        if (EnquiryStatus.ACTIVE.equals(enquiry.getStatus())) {
-            enquiry.setStatus(EnquiryStatus.FOLLOW_UP);
-        }
         enquiryRepository.save(enquiry);
 
         auditService.log(AuditActions.ENQUIRY_FOLLOWUP_RECORDED, AuditActions.ENQUIRY_FOLLOW_UP, saved.getId(),
@@ -288,49 +335,121 @@ public class EnquiryService {
 
     // --- Dashboard summary ---------------------------------------------
 
-    /** Real database counts for the Front Office overview -- nothing hardcoded. */
+    /**
+     * Real database counts for the Front Office overview -- nothing hardcoded. Scoped to
+     * whichever academic year is currently marked current (see {@code AcademicYear#isCurrent}),
+     * same rule {@code create} uses to stamp new enquiries; when no year is marked current,
+     * every enquiry ever recorded is counted instead (nothing to scope to).
+     */
     @Transactional(readOnly = true)
     public EnquirySummaryResponse summary() {
-        long total = enquiryRepository.countByArchivedFalse();
-        long active = enquiryRepository.countByStatusAndArchivedFalse(EnquiryStatus.ACTIVE)
-                + enquiryRepository.countByStatusAndArchivedFalse(EnquiryStatus.FOLLOW_UP);
-        long followUpsDue = enquiryRepository.countByFollowUpDateLessThanEqualAndArchivedFalseAndStatusNotIn(
-                clock.today(), EnquiryStatus.CLOSED);
-        long converted = enquiryRepository.countByConvertedStudentIdIsNotNull();
-        long lost = enquiryRepository.countByStatusAndArchivedFalse(EnquiryStatus.LOST);
+        Optional<AcademicYear> currentYear = academicYearRepository.findByCurrentTrue();
+        UUID yearId = currentYear.map(AcademicYear::getId).orElse(null);
+
+        long total = yearId != null ? enquiryRepository.countByArchivedFalseAndAcademicYearId(yearId)
+                : enquiryRepository.countByArchivedFalse();
+        long active = countByStatus(EnquiryStatus.ACTIVE, yearId);
+        long followUpsDue = yearId != null
+                ? enquiryRepository.countByFollowUpDateLessThanEqualAndArchivedFalseAndStatusNotInAndAcademicYearId(
+                        clock.today(), EnquiryStatus.CLOSED, yearId)
+                : enquiryRepository.countByFollowUpDateLessThanEqualAndArchivedFalseAndStatusNotIn(
+                        clock.today(), EnquiryStatus.CLOSED);
+        long converted = yearId != null ? enquiryRepository.countByConvertedStudentIdIsNotNullAndAcademicYearId(yearId)
+                : enquiryRepository.countByConvertedStudentIdIsNotNull();
+        long lost = countByStatus(EnquiryStatus.LOST, yearId);
 
         Map<UUID, String> sourceNames = sourceRepository.findAll().stream()
                 .collect(Collectors.toMap(EnquirySource::getId, EnquirySource::getName));
         Map<UUID, String> classNames = classRepository.findAll().stream()
                 .collect(Collectors.toMap(SchoolClass::getId, SchoolClass::getName));
 
-        Map<String, Long> bySource = new HashMap<>();
-        for (AdmissionEnquiryRepository.SourceCount row : enquiryRepository.countBySource()) {
-            String label = row.getSourceId() == null ? "Unspecified" : sourceNames.getOrDefault(row.getSourceId(), "Unknown");
-            bySource.merge(label, row.getTotal(), Long::sum);
+        List<AdmissionEnquiryRepository.SourceCount> sourceRows = yearId != null
+                ? enquiryRepository.countBySourceAndAcademicYearId(yearId) : enquiryRepository.countBySource();
+        Map<UUID, Long> bySourceTotals = new HashMap<>();
+        for (AdmissionEnquiryRepository.SourceCount row : sourceRows) {
+            bySourceTotals.merge(row.getSourceId(), row.getTotal(), Long::sum);
         }
-        Map<String, Long> byClass = new HashMap<>();
-        for (AdmissionEnquiryRepository.ClassCount row : enquiryRepository.countByClass()) {
-            String label = row.getClassId() == null ? "Unspecified" : classNames.getOrDefault(row.getClassId(), "Unknown");
-            byClass.merge(label, row.getTotal(), Long::sum);
-        }
-
-        List<EnquiryResponse> recent = enquiryRepository.findTop5ByArchivedFalseOrderByCreatedAtDesc().stream()
-                .map(this::toResponse)
+        List<EnquiryGroupCount> bySource = bySourceTotals.entrySet().stream()
+                .map(e -> new EnquiryGroupCount(e.getKey(),
+                        e.getKey() == null ? "Not specified" : sourceNames.getOrDefault(e.getKey(), "Unknown"),
+                        e.getValue()))
+                .sorted(Comparator.comparingLong(EnquiryGroupCount::count).reversed())
                 .toList();
 
-        return new EnquirySummaryResponse(total, active, followUpsDue, converted, lost, bySource, byClass, recent);
+        List<AdmissionEnquiryRepository.ClassCount> classRows = yearId != null
+                ? enquiryRepository.countByClassAndAcademicYearId(yearId) : enquiryRepository.countByClass();
+        Map<UUID, Long> byClassTotals = new HashMap<>();
+        for (AdmissionEnquiryRepository.ClassCount row : classRows) {
+            byClassTotals.merge(row.getClassId(), row.getTotal(), Long::sum);
+        }
+        List<EnquiryGroupCount> byClass = byClassTotals.entrySet().stream()
+                .map(e -> new EnquiryGroupCount(e.getKey(),
+                        e.getKey() == null ? "Not specified" : classNames.getOrDefault(e.getKey(), "Unknown"),
+                        e.getValue()))
+                .sorted(Comparator.comparingLong(EnquiryGroupCount::count).reversed())
+                .toList();
+
+        List<EnquiryResponse> recent = toResponses(yearId != null
+                ? enquiryRepository.findTop5ByArchivedFalseAndAcademicYearIdOrderByCreatedAtDesc(yearId)
+                : enquiryRepository.findTop5ByArchivedFalseOrderByCreatedAtDesc());
+
+        AcademicYearBadge academicYearBadge = currentYear.map(y -> new AcademicYearBadge(y.getId(), y.getName())).orElse(null);
+
+        return new EnquirySummaryResponse(total, active, followUpsDue, converted, lost, bySource, byClass,
+                academicYearBadge, recent);
+    }
+
+    private long countByStatus(String status, UUID yearId) {
+        return yearId != null ? enquiryRepository.countByStatusAndArchivedFalseAndAcademicYearId(status, yearId)
+                : enquiryRepository.countByStatusAndArchivedFalse(status);
     }
 
     // --- Response mapping / lookups -------------------------------------
 
     @Transactional(readOnly = true)
     public EnquiryResponse toResponse(AdmissionEnquiry enquiry) {
-        String sourceName = enquiry.getSourceId() == null ? null
-                : sourceRepository.findById(enquiry.getSourceId()).map(EnquirySource::getName).orElse(null);
-        String staffName = enquiry.getAssignedStaffUserId() == null ? null
-                : userRepository.findById(enquiry.getAssignedStaffUserId()).map(User::getFullName).orElse(null);
-        return EnquiryResponse.from(enquiry, sourceName, staffName);
+        return toResponses(List.of(enquiry)).get(0);
+    }
+
+    /**
+     * Maps a page of enquiries with one lookup query per referenced table (sources, references,
+     * classes, academic years, staff) rather than several per row.
+     */
+    @Transactional(readOnly = true)
+    public List<EnquiryResponse> toResponses(List<AdmissionEnquiry> enquiries) {
+        Map<UUID, String> sources = namesById(ids(enquiries, AdmissionEnquiry::getSourceId),
+                sourceRepository::findAllById, EnquirySource::getId, EnquirySource::getName);
+        Map<UUID, String> references = namesById(ids(enquiries, AdmissionEnquiry::getReferenceId),
+                referenceRepository::findAllById, EnquiryReference::getId, EnquiryReference::getName);
+        Map<UUID, String> classes = namesById(ids(enquiries, AdmissionEnquiry::getClassId),
+                classRepository::findAllById, SchoolClass::getId, SchoolClass::getName);
+        Map<UUID, String> years = namesById(ids(enquiries, AdmissionEnquiry::getAcademicYearId),
+                academicYearRepository::findAllById, AcademicYear::getId, AcademicYear::getName);
+        Map<UUID, String> staff = namesById(ids(enquiries, AdmissionEnquiry::getAssignedStaffUserId),
+                userRepository::findAllById, User::getId, User::getFullName);
+
+        return enquiries.stream()
+                .map(e -> EnquiryResponse.from(e, new EnquiryNames(
+                        nameOf(sources, e.getSourceId()), nameOf(references, e.getReferenceId()),
+                        nameOf(classes, e.getClassId()), nameOf(years, e.getAcademicYearId()),
+                        nameOf(staff, e.getAssignedStaffUserId()))))
+                .toList();
+    }
+
+    private static Set<UUID> ids(List<AdmissionEnquiry> enquiries, Function<AdmissionEnquiry, UUID> getter) {
+        return enquiries.stream().map(getter).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    private static <T> Map<UUID, String> namesById(Set<UUID> ids, Function<Collection<UUID>, List<T>> loader,
+                                                   Function<T, UUID> idOf, Function<T, String> nameOf) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return loader.apply(ids).stream().collect(Collectors.toMap(idOf, nameOf));
+    }
+
+    private static String nameOf(Map<UUID, String> names, UUID id) {
+        return id == null ? null : names.get(id);
     }
 
     @Transactional(readOnly = true)
@@ -348,15 +467,22 @@ public class EnquiryService {
                 .toList();
     }
 
-    private void requireReferencesExist(UUID classId, UUID sourceId, UUID assignedStaffUserId) {
+    private void requireReferencesExist(UUID classId, UUID sourceId, UUID referenceId, UUID assignedStaffUserId,
+                                        UUID academicYearId) {
         if (classId != null && !classRepository.existsById(classId)) {
             throw new ApiException("Class not found", HttpStatus.NOT_FOUND);
         }
         if (sourceId != null && !sourceRepository.existsById(sourceId)) {
             throw new ApiException("Enquiry source not found", HttpStatus.NOT_FOUND);
         }
+        if (referenceId != null && !referenceRepository.existsById(referenceId)) {
+            throw new ApiException("Enquiry reference not found", HttpStatus.NOT_FOUND);
+        }
         if (assignedStaffUserId != null && !userRepository.existsById(assignedStaffUserId)) {
             throw new ApiException("Assigned staff user not found", HttpStatus.NOT_FOUND);
+        }
+        if (academicYearId != null && !academicYearRepository.existsById(academicYearId)) {
+            throw new ApiException("Academic year not found", HttpStatus.NOT_FOUND);
         }
     }
 

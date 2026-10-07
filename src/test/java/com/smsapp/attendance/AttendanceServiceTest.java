@@ -132,7 +132,7 @@ class AttendanceServiceTest {
 
     @Test
     void rejectsAnUnknownStatusWith400() {
-        assertThatThrownBy(() -> service().mark(teacherId, request(LocalDate.now(), "HOLIDAY")))
+        assertThatThrownBy(() -> service().mark(teacherId, request(LocalDate.now(), "BUNK")))
                 .isInstanceOf(ApiException.class)
                 .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 
